@@ -1,0 +1,21 @@
+# Локальный reverse-proxy. В проде здесь появится домен и автоматический TLS.
+:80 {
+	handle /healthz {
+		reverse_proxy api:8080
+	}
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	redir /app /app/
+
+	handle_path /app/* {
+		reverse_proxy cabinet:80
+	}
+
+	# Всё остальное (в т.ч. /{slug}) — витрина Next.js.
+	handle {
+		reverse_proxy storefront:3000
+	}
+}

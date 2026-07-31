@@ -1,0 +1,12 @@
+.env
+.DS_Store
+*.log
+
+# Node
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+
+# Go
+backend/bin/

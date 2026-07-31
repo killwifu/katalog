@@ -1,0 +1,33 @@
+-- name: CreateShop :one
+INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetShopByID :one
+SELECT * FROM shops
+WHERE id = $1;
+
+-- Публичная витрина: только активные магазины.
+-- name: GetShopBySlug :one
+SELECT * FROM shops
+WHERE slug = $1 AND status = 'active';
+
+-- name: ListShopsByOwner :many
+SELECT * FROM shops
+WHERE owner_id = $1
+ORDER BY created_at;
+
+-- Тенант-изоляция: обновление только владельцем (owner_id из сессии).
+-- name: UpdateShop :one
+UPDATE shops
+SET name        = $3,
+    description = $4,
+    contacts    = $5,
+    settings    = $6,
+    updated_at  = now()
+WHERE id = $1 AND owner_id = $2
+RETURNING *;
+
+-- name: DeleteShop :execrows
+DELETE FROM shops
+WHERE id = $1 AND owner_id = $2;

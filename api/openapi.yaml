@@ -1,0 +1,26 @@
+openapi: 3.1.0
+info:
+  title: Katalog API
+  description: >
+    REST API сервиса Katalog. Источник правды для контрактов:
+    клиентские типы генерируются из этого файла (orval).
+  version: 0.1.0
+servers:
+  - url: /
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Сервис жив
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
