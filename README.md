@@ -10,6 +10,9 @@
 - Node.js 20+ (локальная разработка фронтендов)
 - [golangci-lint](https://golangci-lint.run/) v2 (`brew install golangci-lint`)
 - [sqlc](https://sqlc.dev/) (`brew install sqlc`) — для `make sqlc-gen`
+- libvips (`brew install vips`) — govips в воркере; нужен для сборки и тестов
+- Docker должен быть запущен для `make test`: интеграционные тесты
+  поднимают Postgres/Redis/MinIO через testcontainers
 
 ## Быстрый старт
 
@@ -34,7 +37,8 @@ make down                    # останавливает стек
 ## Команды
 
 ```sh
-make test      # go test ./... (unit; интеграционные — testcontainers, позже)
+make test      # go test ./... — unit + интеграционные (testcontainers:
+               # полный пайплайн фото, тенант-изоляция, auth, rate-limit)
 make lint      # golangci-lint + eslint + tsc --noEmit для обоих фронтендов
 make migrate   # goose up на localhost:5432 (переопределяется DATABASE_URL=...)
 make sqlc-gen  # регенерация Go-кода из internal/db/queries/*.sql

@@ -6,4 +6,11 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: '/app/',
   plugins: [react(), tailwindcss()],
+  server: {
+    // Локальная разработка: API и медиа — через Caddy стека (localhost:80).
+    proxy: {
+      '/api': 'http://localhost',
+      '/media': 'http://localhost',
+    },
+  },
 })

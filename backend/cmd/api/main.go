@@ -11,8 +11,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"katalog/backend/internal/api"
+	"katalog/backend/internal/auth"
 	"katalog/backend/internal/config"
-	"katalog/backend/internal/server"
+	"katalog/backend/internal/db"
+	"katalog/backend/internal/storage"
 )
 
 func main() {
@@ -31,9 +38,39 @@ func run(logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		return err
+	}
+
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	defer func() { _ = rdb.Close() }()
+
+	store, err := storage.New(cfg.S3Endpoint, cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+	if err != nil {
+		return err
+	}
+
+	tasksClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.RedisAddr})
+	defer tasksClient.Close()
+
+	app := &api.API{
+		Q:        db.New(pool),
+		Sessions: auth.NewSessions(rdb, cfg.SessionTTL),
+		RDB:      rdb,
+		Store:    store,
+		Tasks:    tasksClient,
+		Cfg:      cfg,
+		Log:      logger,
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewRouter(),
+		Handler:           app.Router(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

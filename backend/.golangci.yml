@@ -1,0 +1,10 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        # defer x.Close() — осознанно игнорируемые ошибки закрытия.
+        - (io.Closer).Close
+        - (*database/sql.DB).Close
+        - (*github.com/redis/go-redis/v9.Client).Close
+        - (*github.com/hibiken/asynq.Client).Close

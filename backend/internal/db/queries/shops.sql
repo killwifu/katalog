@@ -31,3 +31,13 @@ RETURNING *;
 -- name: DeleteShop :execrows
 DELETE FROM shops
 WHERE id = $1 AND owner_id = $2;
+
+-- Тенант-изоляция: доступ к магазину только владельцем.
+-- name: GetShopForOwner :one
+SELECT * FROM shops
+WHERE id = $1 AND owner_id = $2;
+
+-- name: AddShopStorageUsed :exec
+UPDATE shops
+SET storage_used = greatest(storage_used + $2, 0), updated_at = now()
+WHERE id = $1;

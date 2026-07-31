@@ -8,6 +8,13 @@
 		reverse_proxy api:8080
 	}
 
+	# Деривативы фото (только drv/, оригиналы наружу не отдаются).
+	# В проде это отдельный CDN-домен.
+	handle /media/* {
+		uri replace /media/ /katalog/drv/
+		reverse_proxy minio:9000
+	}
+
 	redir /app /app/
 
 	handle_path /app/* {

@@ -11,6 +11,22 @@ import (
 	"github.com/google/uuid"
 )
 
+const addShopStorageUsed = `-- name: AddShopStorageUsed :exec
+UPDATE shops
+SET storage_used = greatest(storage_used + $2, 0), updated_at = now()
+WHERE id = $1
+`
+
+type AddShopStorageUsedParams struct {
+	ID          uuid.UUID `json:"id"`
+	StorageUsed int64     `json:"storage_used"`
+}
+
+func (q *Queries) AddShopStorageUsed(ctx context.Context, arg AddShopStorageUsedParams) error {
+	_, err := q.db.Exec(ctx, addShopStorageUsed, arg.ID, arg.StorageUsed)
+	return err
+}
+
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -104,6 +120,37 @@ WHERE slug = $1 AND status = 'active'
 // Публичная витрина: только активные магазины.
 func (q *Queries) GetShopBySlug(ctx context.Context, slug string) (Shop, error) {
 	row := q.db.QueryRow(ctx, getShopBySlug, slug)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.Contacts,
+		&i.Settings,
+		&i.Status,
+		&i.Plan,
+		&i.StorageUsed,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getShopForOwner = `-- name: GetShopForOwner :one
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
+WHERE id = $1 AND owner_id = $2
+`
+
+type GetShopForOwnerParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+// Тенант-изоляция: доступ к магазину только владельцем.
+func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, getShopForOwner, arg.ID, arg.OwnerID)
 	var i Shop
 	err := row.Scan(
 		&i.ID,

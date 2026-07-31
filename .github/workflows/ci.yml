@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install libvips (govips)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips-dev
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
@@ -18,9 +20,9 @@ jobs:
         with:
           version: latest
           working-directory: backend
-      - name: Test
+      - name: Test (unit + integration, testcontainers)
         working-directory: backend
-        run: go test ./...
+        run: go test -timeout 15m ./...
 
   frontend:
     runs-on: ubuntu-latest

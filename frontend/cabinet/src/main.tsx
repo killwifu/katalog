@@ -1,39 +1,78 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   createRootRoute,
   createRoute,
   createRouter,
   Outlet,
+  redirect,
   RouterProvider,
 } from '@tanstack/react-router'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { api } from './api'
+import { AlbumPage } from './pages/AlbumPage'
+import { AlbumsPage } from './pages/AlbumsPage'
+import { AppLayout } from './pages/AppLayout'
+import { AuthPage } from './pages/AuthPage'
+import { CaptionsPage } from './pages/CaptionsPage'
 import './index.css'
 
-function HomePage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Katalog — кабинет продавца
-        </h1>
-        <p className="mt-2 text-gray-500">
-          Заглушка. Управление магазином появится на следующих этапах.
-        </p>
-      </div>
-    </main>
-  )
-}
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, staleTime: 5_000 } },
+})
 
 const rootRoute = createRootRoute({ component: Outlet })
 
-const indexRoute = createRoute({
+const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
+  path: '/login',
+  component: () => <AuthPage mode="login" />,
+})
+
+const registerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/register',
+  component: () => <AuthPage mode="register" />,
+})
+
+// Все приватные экраны — под guard'ом сессии.
+const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'app',
+  beforeLoad: async () => {
+    try {
+      await api.me()
+    } catch {
+      throw redirect({ to: '/login' })
+    }
+  },
+  component: AppLayout,
+})
+
+const albumsRoute = createRoute({
+  getParentRoute: () => appRoute,
   path: '/',
-  component: HomePage,
+  component: AlbumsPage,
+})
+
+const albumRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/albums/$albumId',
+  component: AlbumPage,
+})
+
+const captionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/albums/$albumId/captions',
+  component: CaptionsPage,
 })
 
 const router = createRouter({
-  routeTree: rootRoute.addChildren([indexRoute]),
+  routeTree: rootRoute.addChildren([
+    loginRoute,
+    registerRoute,
+    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute]),
+  ]),
   basepath: '/app',
 })
 
@@ -45,6 +84,8 @@ declare module '@tanstack/react-router' {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
   </StrictMode>,
 )

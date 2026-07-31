@@ -59,7 +59,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
-      mc mb --ignore-existing local/$$S3_BUCKET
+      mc mb --ignore-existing local/$$S3_BUCKET &&
+      mc anonymous set download local/$$S3_BUCKET/drv
       "
     restart: "no"
 
@@ -87,9 +88,11 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-katalog}:${POSTGRES_PASSWORD:-katalog}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
       REDIS_ADDR: redis:6379
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: ${S3_BUCKET:-katalog}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     depends_on:
       postgres:
         condition: service_healthy

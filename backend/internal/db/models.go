@@ -324,7 +324,7 @@ type Album struct {
 	CoverPhotoID uuid.NullUUID      `json:"cover_photo_id"`
 	SortOrder    int32              `json:"sort_order"`
 	IsHidden     bool               `json:"is_hidden"`
-	PasswordHash pgtype.Text        `json:"password_hash"`
+	PasswordHash *string            `json:"password_hash"`
 	PhotoCount   int32              `json:"photo_count"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
@@ -403,7 +403,7 @@ type Subscription struct {
 type User struct {
 	ID           uuid.UUID          `json:"id"`
 	Email        *string            `json:"email"`
-	PasswordHash pgtype.Text        `json:"password_hash"`
+	PasswordHash *string            `json:"password_hash"`
 	TgUserID     pgtype.Int8        `json:"tg_user_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`

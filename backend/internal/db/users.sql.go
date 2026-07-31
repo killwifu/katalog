@@ -20,7 +20,7 @@ RETURNING id, email, password_hash, tg_user_id, created_at, updated_at
 
 type CreateUserParams struct {
 	Email        *string     `json:"email"`
-	PasswordHash pgtype.Text `json:"password_hash"`
+	PasswordHash *string     `json:"password_hash"`
 	TgUserID     pgtype.Int8 `json:"tg_user_id"`
 }
 
@@ -93,8 +93,8 @@ WHERE id = $1
 `
 
 type UpdateUserPasswordParams struct {
-	ID           uuid.UUID   `json:"id"`
-	PasswordHash pgtype.Text `json:"password_hash"`
+	ID           uuid.UUID `json:"id"`
+	PasswordHash *string   `json:"password_hash"`
 }
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {

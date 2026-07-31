@@ -1,0 +1,215 @@
+// Package integration — интеграционные тесты полного стека:
+// реальные Postgres/Redis/MinIO через testcontainers, API через httptest,
+// asynq-воркер (govips) в том же процессе.
+package integration
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"log/slog"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/davidbyttow/govips/v2/vips"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/pressly/goose/v3"
+	"github.com/redis/go-redis/v9"
+	"github.com/testcontainers/testcontainers-go"
+	tcminio "github.com/testcontainers/testcontainers-go/modules/minio"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
+
+	"katalog/backend/internal/api"
+	"katalog/backend/internal/auth"
+	"katalog/backend/internal/config"
+	"katalog/backend/internal/db"
+	"katalog/backend/internal/storage"
+	"katalog/backend/internal/tasks"
+	"katalog/backend/internal/worker"
+)
+
+const testBucket = "katalog"
+
+var env struct {
+	pool  *pgxpool.Pool
+	q     *db.Queries
+	store *storage.Client
+	srv   *httptest.Server
+	mc    *minio.Client
+}
+
+func TestMain(m *testing.M) {
+	os.Exit(run(m))
+}
+
+func run(m *testing.M) int {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	vips.LoggingSettings(nil, vips.LogLevelError)
+	if err := vips.Startup(nil); err != nil {
+		log.Printf("vips startup: %v", err)
+		return 1
+	}
+	defer vips.Shutdown()
+
+	pgC, err := tcpostgres.Run(ctx, "postgres:16-alpine",
+		tcpostgres.WithDatabase("katalog"),
+		tcpostgres.WithUsername("katalog"),
+		tcpostgres.WithPassword("katalog"),
+		tcpostgres.BasicWaitStrategies(),
+	)
+	if err != nil {
+		log.Printf("start postgres container: %v", err)
+		return 1
+	}
+	defer terminate(ctx, pgC)
+
+	redisC, err := tcredis.Run(ctx, "redis:7-alpine")
+	if err != nil {
+		log.Printf("start redis container: %v", err)
+		return 1
+	}
+	defer terminate(ctx, redisC)
+
+	minioC, err := tcminio.Run(ctx, "minio/minio:latest")
+	if err != nil {
+		log.Printf("start minio container: %v", err)
+		return 1
+	}
+	defer terminate(ctx, minioC)
+
+	dsn, err := pgC.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		log.Printf("postgres dsn: %v", err)
+		return 1
+	}
+	if err := migrateUp(dsn); err != nil {
+		log.Printf("migrations: %v", err)
+		return 1
+	}
+
+	redisURL, err := redisC.ConnectionString(ctx)
+	if err != nil {
+		log.Printf("redis url: %v", err)
+		return 1
+	}
+	redisAddr := strings.TrimPrefix(redisURL, "redis://")
+
+	minioHost, err := minioC.ConnectionString(ctx)
+	if err != nil {
+		log.Printf("minio endpoint: %v", err)
+		return 1
+	}
+	s3Endpoint := "http://" + minioHost
+
+	env.mc, err = minio.New(minioHost, &minio.Options{
+		Creds: credentials.NewStaticV4(minioC.Username, minioC.Password, ""),
+	})
+	if err != nil {
+		log.Printf("minio client: %v", err)
+		return 1
+	}
+	if err := env.mc.MakeBucket(ctx, testBucket, minio.MakeBucketOptions{}); err != nil {
+		log.Printf("make bucket: %v", err)
+		return 1
+	}
+	// Как в minio-init: анонимное чтение только для деривативов (drv/).
+	policy := fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/drv/*"]}]}`, testBucket)
+	if err := env.mc.SetBucketPolicy(ctx, testBucket, policy); err != nil {
+		log.Printf("set bucket policy: %v", err)
+		return 1
+	}
+
+	env.pool, err = pgxpool.New(ctx, dsn)
+	if err != nil {
+		log.Printf("pgx pool: %v", err)
+		return 1
+	}
+	defer env.pool.Close()
+	env.q = db.New(env.pool)
+
+	env.store, err = storage.New(s3Endpoint, s3Endpoint, minioC.Username, minioC.Password, testBucket)
+	if err != nil {
+		log.Printf("storage client: %v", err)
+		return 1
+	}
+
+	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+	defer func() { _ = rdb.Close() }()
+
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr})
+	defer asynqClient.Close()
+
+	cfg := config.Config{
+		SessionTTL:    time.Hour,
+		AuthRateLimit: 30,
+	}
+	app := &api.API{
+		Q:        env.q,
+		Sessions: auth.NewSessions(rdb, cfg.SessionTTL),
+		RDB:      rdb,
+		Store:    env.store,
+		Tasks:    asynqClient,
+		Cfg:      cfg,
+		Log:      logger,
+	}
+	env.srv = httptest.NewServer(app.Router())
+	defer env.srv.Close()
+
+	// Воркер в том же процессе — полный путь presign -> put -> confirm ->
+	// asynq -> govips -> ready проверяется по-настоящему.
+	asynqSrv := asynq.NewServer(asynq.RedisClientOpt{Addr: redisAddr}, asynq.Config{
+		Concurrency: 2,
+		Logger:      quietLogger{logger},
+	})
+	mux := asynq.NewServeMux()
+	processor := &worker.Processor{Q: env.q, Store: env.store, Log: logger}
+	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
+	if err := asynqSrv.Start(mux); err != nil {
+		log.Printf("start asynq server: %v", err)
+		return 1
+	}
+	defer asynqSrv.Shutdown()
+
+	return m.Run()
+}
+
+func migrateUp(dsn string) error {
+	sqlDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer sqlDB.Close()
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
+	}
+	goose.SetLogger(goose.NopLogger())
+	if err := goose.Up(sqlDB, "../../../migrations"); err != nil {
+		return fmt.Errorf("goose up: %w", err)
+	}
+	return nil
+}
+
+func terminate(ctx context.Context, c testcontainers.Container) {
+	if err := c.Terminate(ctx); err != nil {
+		log.Printf("terminate container: %v", err)
+	}
+}
+
+type quietLogger struct{ l *slog.Logger }
+
+func (q quietLogger) Debug(args ...any) {}
+func (q quietLogger) Info(args ...any)  {}
+func (q quietLogger) Warn(args ...any)  { q.l.Warn(fmt.Sprint(args...)) }
+func (q quietLogger) Error(args ...any) { q.l.Error(fmt.Sprint(args...)) }
+func (q quietLogger) Fatal(args ...any) { q.l.Error(fmt.Sprint(args...)) }

@@ -4,9 +4,12 @@ info:
   description: >
     REST API сервиса Katalog. Источник правды для контрактов:
     клиентские типы генерируются из этого файла (orval).
-  version: 0.1.0
+    Аутентификация: сессионная httpOnly cookie `katalog_session`.
+    Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
+  version: 0.2.0
 servers:
   - url: /
+
 paths:
   /healthz:
     get:
@@ -24,3 +27,486 @@ paths:
                   status:
                     type: string
                     const: ok
+
+  /api/v1/auth/register:
+    post:
+      operationId: register
+      summary: Регистрация по email и паролю (argon2id), создаёт сессию
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "201":
+          description: Пользователь создан, cookie установлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Вход, создаёт сессию
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "200":
+          description: Сессия создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Выход (инвалидация сессии)
+      responses:
+        "204": { description: Сессия удалена }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/auth/me:
+    get:
+      operationId: me
+      summary: Текущий пользователь
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/shops:
+    post:
+      operationId: createShop
+      summary: Создать магазин (slug валидируется, системные слова запрещены)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string, minLength: 3, maxLength: 63 }
+                name: { type: string, maxLength: 200 }
+                description: { type: string }
+                contacts: { type: object }
+      responses:
+        "201":
+          description: Магазин создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shop"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    get:
+      operationId: listShops
+      summary: Магазины текущего пользователя
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shop"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/shops/{shopID}:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: getShop
+      summary: Магазин по id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shop"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateShop
+      summary: Обновить магазин (частично)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 200 }
+                description: { type: string }
+                contacts: { type: object }
+                settings: { type: object }
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shop"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteShop
+      summary: Удалить магазин
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/albums:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: createAlbum
+      summary: Создать альбом (вложенность максимум 2 уровня)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, maxLength: 200 }
+                parent_id: { type: string, format: uuid }
+                sort_order: { type: integer }
+      responses:
+        "201":
+          description: Альбом создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    get:
+      operationId: listAlbums
+      summary: Альбомы магазина
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Album"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/albums/{albumID}:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - $ref: "#/components/parameters/AlbumID"
+    get:
+      operationId: getAlbum
+      summary: Альбом по id
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateAlbum
+      summary: Обновить альбом (title, sort_order, is_hidden, cover_photo_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, maxLength: 200 }
+                sort_order: { type: integer }
+                is_hidden: { type: boolean }
+                cover_photo_id:
+                  type: [string, "null"]
+                  format: uuid
+                  description: Пустая строка сбрасывает обложку; фото должно принадлежать альбому
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteAlbum
+      summary: Удалить альбом
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/albums/{albumID}/photos:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - $ref: "#/components/parameters/AlbumID"
+    get:
+      operationId: listPhotos
+      summary: Фото альбома (со статусами обработки)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Photo"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/uploads/presign:
+    post:
+      operationId: presignUpload
+      summary: Pre-signed URL для прямой загрузки оригинала в S3
+      description: >
+        Проверяет владение альбомом и квоту тарифа. Создаёт запись фото
+        в статусе uploading. Файл загружается PUT-запросом напрямую в S3.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shop_id, album_id, size]
+              properties:
+                shop_id: { type: string, format: uuid }
+                album_id: { type: string, format: uuid }
+                size: { type: integer, minimum: 1, maximum: 52428800 }
+      responses:
+        "200":
+          description: URL выдан
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photo_id, url]
+                properties:
+                  photo_id: { type: string, format: uuid }
+                  url: { type: string, format: uri }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: Квота тарифа исчерпана (error=quota_exceeded)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/photos/confirm:
+    post:
+      operationId: confirmPhotos
+      summary: Подтвердить загрузку — постановка в очередь обработки
+      description: >
+        Для каждого фото: проверка объекта в S3, uploading -> processing,
+        задача воркеру (asynq). Ответ по каждому фото отдельно.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shop_id, photo_ids]
+              properties:
+                shop_id: { type: string, format: uuid }
+                photo_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Результаты по каждому фото
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [photo_id, status]
+                      properties:
+                        photo_id: { type: string }
+                        status: { type: string }
+                        error: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/photos/{photoID}:
+    parameters:
+      - name: photoID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      operationId: updatePhoto
+      summary: Обновить подпись фото
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                caption: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Photo"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deletePhoto
+      summary: Удалить фото (объекты S3, квота, счётчик альбома)
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  parameters:
+    ShopID:
+      name: shopID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AlbumID:
+      name: albumID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  requestBodies:
+    Credentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email, password]
+            properties:
+              email: { type: string, format: email }
+              password: { type: string, minLength: 8 }
+
+  responses:
+    BadRequest:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Нет или истекла сессия / неверные креды
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Ресурс не найден или принадлежит другому пользователю
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Конфликт (занятый email/slug)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Превышен rate-limit
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, description: Машинный код ошибки }
+        message: { type: string }
+
+    User:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: [string, "null"], format: email }
+
+    Shop:
+      type: object
+      required: [id, slug, name, description, contacts, settings, status, plan, storage_used, storage_max]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        contacts: { type: object }
+        settings: { type: object }
+        status: { type: string, enum: [active, suspended, deleted] }
+        plan: { type: string, enum: [free, pro] }
+        storage_used: { type: integer }
+        storage_max: { type: integer }
+
+    Album:
+      type: object
+      required: [id, parent_id, title, cover_photo_id, sort_order, is_hidden, photo_count]
+      properties:
+        id: { type: string, format: uuid }
+        parent_id: { type: [string, "null"], format: uuid }
+        title: { type: string }
+        cover_photo_id: { type: [string, "null"], format: uuid }
+        sort_order: { type: integer }
+        is_hidden: { type: boolean }
+        photo_count: { type: integer }
+
+    Photo:
+      type: object
+      required: [id, album_id, caption, status, width, height, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        album_id: { type: string, format: uuid }
+        caption: { type: string }
+        status: { type: string, enum: [uploading, processing, ready, failed, blocked] }
+        width: { type: integer }
+        height: { type: integer }
+        sort_order: { type: integer }
+        urls:
+          type: object
+          description: Только для status=ready; деривативы WebP (300/800/1600)
+          properties:
+            thumb: { type: string }
+            medium: { type: string }
+            large: { type: string }

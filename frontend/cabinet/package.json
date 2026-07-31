@@ -11,7 +11,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-router": "^1.121.0",
+    "@uppy/aws-s3": "^4.3.2",
+    "@uppy/core": "^4.5.3",
+    "@uppy/dashboard": "^4.4.3",
+    "@uppy/locales": "^4.8.4",
+    "@uppy/react": "^4.5.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
