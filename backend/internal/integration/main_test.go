@@ -6,9 +6,11 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -32,19 +34,28 @@ import (
 	"katalog/backend/internal/auth"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
 	"katalog/backend/internal/worker"
 )
 
-const testBucket = "katalog"
+const (
+	testBucket           = "katalog"
+	testRevalidateSecret = "test-revalidate-secret"
+)
 
 var env struct {
-	pool  *pgxpool.Pool
-	q     *db.Queries
-	store *storage.Client
-	srv   *httptest.Server
-	mc    *minio.Client
+	pool      *pgxpool.Pool
+	q         *db.Queries
+	store     *storage.Client
+	srv       *httptest.Server
+	mc        *minio.Client
+	rdb       *redis.Client
+	processor *worker.Processor
+	// revalidated — слаги магазинов, полученные фейковой витриной
+	// через вебхук ревалидации.
+	revalidated chan string
 }
 
 func TestMain(m *testing.M) {
@@ -146,22 +157,46 @@ func run(m *testing.M) int {
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer func() { _ = rdb.Close() }()
+	env.rdb = rdb
 
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr})
 	defer asynqClient.Close()
 
+	// Фейковая витрина: принимает вебхуки ревалидации от API и воркера.
+	env.revalidated = make(chan string, 100)
+	fakeNext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/revalidate" ||
+			r.Header.Get(revalidate.SecretHeader) != testRevalidateSecret {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		var body struct {
+			Slug string `json:"slug"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		select {
+		case env.revalidated <- body.Slug:
+		default:
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fakeNext.Close()
+	notifier := revalidate.New(fakeNext.URL, testRevalidateSecret, logger)
+
 	cfg := config.Config{
-		SessionTTL:    time.Hour,
-		AuthRateLimit: 30,
+		SessionTTL:      time.Hour,
+		AuthRateLimit:   30,
+		PublicRateLimit: 300,
 	}
 	app := &api.API{
-		Q:        env.q,
-		Sessions: auth.NewSessions(rdb, cfg.SessionTTL),
-		RDB:      rdb,
-		Store:    env.store,
-		Tasks:    asynqClient,
-		Cfg:      cfg,
-		Log:      logger,
+		Q:          env.q,
+		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
+		RDB:        rdb,
+		Store:      env.store,
+		Tasks:      asynqClient,
+		Revalidate: notifier,
+		Cfg:        cfg,
+		Log:        logger,
 	}
 	env.srv = httptest.NewServer(app.Router())
 	defer env.srv.Close()
@@ -173,8 +208,16 @@ func run(m *testing.M) int {
 		Logger:      quietLogger{logger},
 	})
 	mux := asynq.NewServeMux()
-	processor := &worker.Processor{Q: env.q, Store: env.store, Log: logger}
+	processor := &worker.Processor{
+		Q:          env.q,
+		Store:      env.store,
+		RDB:        rdb,
+		Revalidate: notifier,
+		Log:        logger,
+	}
+	env.processor = processor
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
+	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	if err := asynqSrv.Start(mux); err != nil {
 		log.Printf("start asynq server: %v", err)
 		return 1

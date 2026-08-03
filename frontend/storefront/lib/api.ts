@@ -1,0 +1,88 @@
+// Серверные фетчеры публичного API Go. Все запросы кешируются data cache
+// Next с тегом shop:{slug}: вебхук /api/revalidate инвалидирует мгновенно,
+// TTL 60 сек — фолбэк. Горячий путь покупателя не трогает Postgres напрямую.
+
+const API_URL = process.env.API_URL ?? 'http://localhost:8080'
+
+export type ShopPublic = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  contacts: Record<string, string>
+  msg_template: string
+}
+
+export type AlbumPublic = {
+  id: string
+  parent_id: string | null
+  title: string
+  photo_count: number
+  cover_urls?: PhotoUrls
+}
+
+export type PhotoUrls = { thumb: string; medium: string; large: string }
+
+export type PhotoPublic = {
+  id: string
+  album_id: string
+  caption: string
+  width: number
+  height: number
+  urls: PhotoUrls
+}
+
+export type ShopPage = { shop: ShopPublic; albums: AlbumPublic[] }
+
+export type AlbumPage = {
+  shop: ShopPublic
+  album: AlbumPublic
+  photos: PhotoPublic[]
+  page: number
+  per_page: number
+  total: number
+}
+
+async function getJSON<T>(path: string, slug: string): Promise<T | null> {
+  const res = await fetch(`${API_URL}${path}`, {
+    next: { revalidate: 60, tags: [`shop:${slug}`] },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`API ${path}: ${res.status}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export function getShopPage(slug: string): Promise<ShopPage | null> {
+  return getJSON<ShopPage>(`/api/v1/public/shops/${encodeURIComponent(slug)}`, slug)
+}
+
+export function getAlbumPage(slug: string, albumId: string, page: number): Promise<AlbumPage | null> {
+  const params = page > 1 ? `?page=${page}` : ''
+  return getJSON<AlbumPage>(
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/albums/${encodeURIComponent(albumId)}${params}`,
+    slug,
+  )
+}
+
+export function searchPhotos(slug: string, q: string): Promise<{ photos: PhotoPublic[] } | null> {
+  return getJSON<{ photos: PhotoPublic[] }>(
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/search?q=${encodeURIComponent(q)}`,
+    slug,
+  )
+}
+
+export async function getSitemapShops(): Promise<{ slug: string; updated_at: string }[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/public/sitemap`, {
+      next: { revalidate: 3600 },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as { shops: { slug: string; updated_at: string }[] }
+    return data.shops ?? []
+  } catch {
+    // API недоступен (например, во время next build) — пустой sitemap.
+    return []
+  }
+}

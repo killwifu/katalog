@@ -119,6 +119,7 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "create album", err)
 		return
 	}
+	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusCreated, toAlbumResponse(album))
 }
 
@@ -215,6 +216,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update album", err)
 		return
 	}
+	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusOK, toAlbumResponse(updated))
 }
 
@@ -235,5 +237,6 @@ func (a *API) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "album not found")
 		return
 	}
+	a.Revalidate.Shop(shopFromCtx(r).Slug)
 	w.WriteHeader(http.StatusNoContent)
 }

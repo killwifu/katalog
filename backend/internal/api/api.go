@@ -16,17 +16,19 @@ import (
 	"katalog/backend/internal/auth"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 )
 
 type API struct {
-	Q        *db.Queries
-	Sessions *auth.Sessions
-	RDB      *redis.Client
-	Store    *storage.Client
-	Tasks    *asynq.Client
-	Cfg      config.Config
-	Log      *slog.Logger
+	Q          *db.Queries
+	Sessions   *auth.Sessions
+	RDB        *redis.Client
+	Store      *storage.Client
+	Tasks      *asynq.Client
+	Revalidate *revalidate.Notifier
+	Cfg        config.Config
+	Log        *slog.Logger
 }
 
 func (a *API) Router() http.Handler {
@@ -39,6 +41,17 @@ func (a *API) Router() http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Публичные эндпоинты витрины: отдельный неймспейс, без сессии,
+		// отдельные response-типы (никаких приватных полей наружу).
+		r.Route("/public", func(r chi.Router) {
+			r.Use(a.rateLimit("public", a.Cfg.PublicRateLimit))
+			r.Get("/shops/{slug}", a.handlePublicShop)
+			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
+			r.Get("/shops/{slug}/search", a.handlePublicSearch)
+			r.Post("/lead-click", a.handleLeadClick)
+			r.Get("/sitemap", a.handlePublicSitemap)
+		})
+
 		// Auth: с rate-limit (Redis) по IP.
 		r.Group(func(r chi.Router) {
 			r.Use(a.rateLimit("auth", a.Cfg.AuthRateLimit))

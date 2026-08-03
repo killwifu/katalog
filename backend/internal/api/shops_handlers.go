@@ -176,6 +176,7 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update shop", err)
 		return
 	}
+	a.Revalidate.Shop(updated.Slug)
 	writeJSON(w, http.StatusOK, toShopResponse(updated))
 }
 
@@ -192,5 +193,6 @@ func (a *API) handleDeleteShop(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "shop not found")
 		return
 	}
+	a.Revalidate.Shop(shopFromCtx(r).Slug)
 	w.WriteHeader(http.StatusNoContent)
 }

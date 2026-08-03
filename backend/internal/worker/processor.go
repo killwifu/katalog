@@ -11,17 +11,21 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/redis/go-redis/v9"
 
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
+	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
 )
 
 type Processor struct {
-	Q     *db.Queries
-	Store *storage.Client
-	Log   *slog.Logger
+	Q          *db.Queries
+	Store      *storage.Client
+	RDB        *redis.Client
+	Revalidate *revalidate.Notifier
+	Log        *slog.Logger
 }
 
 // HandlePhotoProcess — пайплайн обработки фото (см. инвариант в CLAUDE.md):
@@ -98,6 +102,13 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		PhotoCount: 1,
 	}); err != nil {
 		return fmt.Errorf("increment album photo count: %w", err)
+	}
+
+	// Фото стало видимым на витрине — инвалидируем ISR-кеш магазина.
+	if shop, err := p.Q.GetShopByID(ctx, photo.ShopID); err != nil {
+		log.Warn("load shop for revalidate failed", "error", err)
+	} else {
+		p.Revalidate.Shop(shop.Slug)
 	}
 
 	log.Info("photo processed", "width", res.Width, "height", res.Height, "derivative_bytes", drvBytes)

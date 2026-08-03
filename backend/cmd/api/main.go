@@ -19,6 +19,7 @@ import (
 	"katalog/backend/internal/auth"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 )
 
@@ -59,13 +60,14 @@ func run(logger *slog.Logger) error {
 	defer tasksClient.Close()
 
 	app := &api.API{
-		Q:        db.New(pool),
-		Sessions: auth.NewSessions(rdb, cfg.SessionTTL),
-		RDB:      rdb,
-		Store:    store,
-		Tasks:    tasksClient,
-		Cfg:      cfg,
-		Log:      logger,
+		Q:          db.New(pool),
+		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
+		RDB:        rdb,
+		Store:      store,
+		Tasks:      tasksClient,
+		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
+		Cfg:        cfg,
+		Log:        logger,
 	}
 
 	srv := &http.Server{

@@ -260,7 +260,7 @@ type updatePhotoRequest struct {
 }
 
 func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
-	photo, ok := a.ownedPhoto(w, r)
+	photo, shop, ok := a.ownedPhoto(w, r)
 	if !ok {
 		return
 	}
@@ -285,11 +285,12 @@ func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update photo", err)
 		return
 	}
+	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusOK, toPhotoResponse(updated))
 }
 
 func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
-	photo, ok := a.ownedPhoto(w, r)
+	photo, shop, ok := a.ownedPhoto(w, r)
 	if !ok {
 		return
 	}
@@ -323,6 +324,7 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.RemovePhoto(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes); err != nil {
 		a.Log.Error("delete: remove s3 objects failed", "error", err)
 	}
+	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -349,31 +351,32 @@ func (a *API) ownedShop(w http.ResponseWriter, r *http.Request, rawID string) (d
 }
 
 // ownedPhoto: фото по id из URL + проверка владения через магазин (404 чужому).
-func (a *API) ownedPhoto(w http.ResponseWriter, r *http.Request) (db.Photo, bool) {
+func (a *API) ownedPhoto(w http.ResponseWriter, r *http.Request) (db.Photo, db.Shop, bool) {
 	photoID, err := uuid.Parse(chi.URLParam(r, "photoID"))
 	if err != nil {
 		apiError(w, http.StatusNotFound, "not_found", "photo not found")
-		return db.Photo{}, false
+		return db.Photo{}, db.Shop{}, false
 	}
 	photo, err := a.Q.GetPhoto(r.Context(), photoID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusNotFound, "not_found", "photo not found")
-		return db.Photo{}, false
+		return db.Photo{}, db.Shop{}, false
 	}
 	if err != nil {
 		a.internalError(w, "load photo", err)
-		return db.Photo{}, false
+		return db.Photo{}, db.Shop{}, false
 	}
-	if _, err := a.Q.GetShopForOwner(r.Context(), db.GetShopForOwnerParams{
+	shop, err := a.Q.GetShopForOwner(r.Context(), db.GetShopForOwnerParams{
 		ID:      photo.ShopID,
 		OwnerID: userID(r),
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			apiError(w, http.StatusNotFound, "not_found", "photo not found")
-			return db.Photo{}, false
+			return db.Photo{}, db.Shop{}, false
 		}
 		a.internalError(w, "check photo ownership", err)
-		return db.Photo{}, false
+		return db.Photo{}, db.Shop{}, false
 	}
-	return photo, true
+	return photo, shop, true
 }

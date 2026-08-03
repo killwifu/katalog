@@ -7,17 +7,19 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check-bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
-    "next": "^15.3.2",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "ioredis": "^6.0.0",
+    "next": "^14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "eslint": "^9.27.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.32.0"

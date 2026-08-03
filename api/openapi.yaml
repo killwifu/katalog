@@ -6,7 +6,7 @@ info:
     клиентские типы генерируются из этого файла (orval).
     Аутентификация: сессионная httpOnly cookie `katalog_session`.
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: /
 
@@ -398,8 +398,144 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  # ---- Публичный неймспейс витрины (без сессии, отдельные схемы ответов:
+  # ---- приватные поля наружу не отдаются никогда) ----
+
+  /api/v1/public/shops/{slug}:
+    get:
+      operationId: getPublicShop
+      summary: Шапка магазина и сетка не скрытых альбомов
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shop, albums]
+                properties:
+                  shop: { $ref: "#/components/schemas/PublicShop" }
+                  albums:
+                    type: array
+                    items: { $ref: "#/components/schemas/PublicAlbum" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/shops/{slug}/albums/{albumID}:
+    get:
+      operationId: getPublicAlbum
+      summary: Фото альбома (только ready) с пагинацией
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - $ref: "#/components/parameters/AlbumID"
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 60 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shop, album, photos, page, per_page, total]
+                properties:
+                  shop: { $ref: "#/components/schemas/PublicShop" }
+                  album: { $ref: "#/components/schemas/PublicAlbum" }
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/PublicPhoto" }
+                  page: { type: integer }
+                  per_page: { type: integer }
+                  total: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/shops/{slug}/search:
+    get:
+      operationId: searchPublicPhotos
+      summary: Поиск по подписям в рамках магазина (FTS russian + pg_trgm fallback)
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: OK (максимум 50 результатов)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, photos]
+                properties:
+                  query: { type: string }
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/PublicPhoto" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/lead-click:
+    post:
+      operationId: createLeadClick
+      summary: >
+        Фиксация клика «написать по товару». visitor_hash строится из
+        анонимной cookie kv (устанавливается сервером) и IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shop_id, channel]
+              properties:
+                shop_id: { type: string, format: uuid }
+                photo_id: { type: string, format: uuid }
+                channel: { type: string, enum: [telegram, whatsapp, max, vk] }
+      responses:
+        "204": { description: Лид зафиксирован }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/sitemap:
+    get:
+      operationId: getPublicSitemap
+      summary: Активные магазины для sitemap витрины
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shops]
+                properties:
+                  shops:
+                    type: array
+                    items:
+                      type: object
+                      required: [slug, updated_at]
+                      properties:
+                        slug: { type: string }
+                        updated_at: { type: string, format: date-time }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
 components:
   parameters:
+    ShopSlug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string }
     ShopID:
       name: shopID
       in: path
@@ -491,6 +627,51 @@ components:
         sort_order: { type: integer }
         is_hidden: { type: boolean }
         photo_count: { type: integer }
+
+    PublicShop:
+      type: object
+      description: Публичная витрина — без email, storage_used, plan, status
+      required: [id, slug, name, description, contacts, msg_template]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        contacts:
+          type: object
+          description: "Каналы связи: telegram/whatsapp/vk/max -> handle"
+        msg_template:
+          type: string
+          description: Шаблон сообщения покупателя, плейсхолдер {caption}
+
+    PublicAlbum:
+      type: object
+      required: [id, parent_id, title, photo_count]
+      properties:
+        id: { type: string, format: uuid }
+        parent_id: { type: [string, "null"], format: uuid }
+        title: { type: string }
+        photo_count: { type: integer }
+        cover_urls: { $ref: "#/components/schemas/PhotoUrls" }
+
+    PublicPhoto:
+      type: object
+      required: [id, album_id, caption, width, height, urls]
+      properties:
+        id: { type: string, format: uuid }
+        album_id: { type: string, format: uuid }
+        caption: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        urls: { $ref: "#/components/schemas/PhotoUrls" }
+
+    PhotoUrls:
+      type: object
+      description: Деривативы WebP (300/800/1600), отдаются с CDN-пути /media
+      properties:
+        thumb: { type: string }
+        medium: { type: string }
+        large: { type: string }
 
     Photo:
       type: object

@@ -9,10 +9,13 @@
 	}
 
 	# Деривативы фото (только drv/, оригиналы наружу не отдаются).
-	# В проде это отдельный CDN-домен.
+	# В проде это отдельный CDN-домен. Ключ дериватива иммутабелен
+	# (photo_id + размер) — кешируем навсегда.
 	handle /media/* {
 		uri replace /media/ /katalog/drv/
-		reverse_proxy minio:9000
+		reverse_proxy minio:9000 {
+			header_down Cache-Control "public, max-age=31536000, immutable"
+		}
 	}
 
 	redir /app /app/

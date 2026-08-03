@@ -1,0 +1,290 @@
+/* Минимальные стили витрины: мобильный-first, без фреймворков
+   (бюджет: JS ≤ 100 КБ gzip, LCP < 2.5s на mid-range Android). */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #1a1a1a;
+  background: #fafafa;
+  line-height: 1.45;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: #0a5bd3;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Шапка магазина */
+.shop-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.6rem;
+}
+
+.shop-header h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.shop-description {
+  margin: 0 0 12px;
+  color: #555;
+}
+
+/* Кнопки мессенджеров */
+.lead-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-telegram { background: #2aabee; }
+.btn-whatsapp { background: #25d366; }
+.btn-vk       { background: #0077ff; }
+.btn-max      { background: #7b3ff2; }
+
+/* Поиск */
+.search-form {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.search-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.search-form button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+/* Сетка альбомов */
+.album-grid {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.album-card > a {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+.album-card img,
+.album-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #e8e8e8;
+}
+
+.album-placeholder {
+  display: block;
+}
+
+.album-title {
+  display: block;
+  padding: 8px 10px 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.album-count {
+  display: block;
+  padding: 0 10px 10px;
+  color: #777;
+  font-size: 0.85rem;
+}
+
+.album-children {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 4px;
+  font-size: 0.85rem;
+}
+
+/* Хлебные крошки и заголовок альбома */
+.breadcrumbs {
+  font-size: 0.9rem;
+  color: #777;
+  margin-bottom: 4px;
+}
+
+.album-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.album-header .album-count {
+  padding: 0;
+  margin: 2px 0 8px;
+}
+
+/* Сетка фото */
+.photo-grid {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.photo-card {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+.photo-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.photo-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #e8e8e8;
+}
+
+.caption {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: #333;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  color: #777;
+  margin: 32px 0;
+  text-align: center;
+}
+
+/* Пагинация */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+/* Лайтбокс */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.85);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-body {
+  position: relative;
+  max-width: min(1600px, 96vw);
+  max-height: 96vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.lightbox-body img {
+  max-height: 76vh;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.lb-info {
+  text-align: center;
+  padding: 8px;
+}
+
+.lb-info .caption {
+  color: #eee;
+}
+
+.lb-info .lead-buttons {
+  justify-content: center;
+}
+
+.lb-close,
+.lb-nav {
+  position: absolute;
+  z-index: 2;
+  border: 0;
+  background: rgb(0 0 0 / 0.4);
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+
+.lb-close {
+  top: 8px;
+  right: 8px;
+}
+
+.lb-nav {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.lb-prev { left: 8px; }
+.lb-next { right: 8px; }

@@ -12,9 +12,11 @@ import (
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
 	"katalog/backend/internal/worker"
@@ -50,11 +52,16 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	defer func() { _ = rdb.Close() }()
+
 	redisOpt := asynq.RedisClientOpt{Addr: cfg.RedisAddr}
 	processor := &worker.Processor{
-		Q:     db.New(pool),
-		Store: store,
-		Log:   logger,
+		Q:          db.New(pool),
+		Store:      store,
+		RDB:        rdb,
+		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
+		Log:        logger,
 	}
 
 	// Health + метрика глубины очереди для docker healthcheck / мониторинга.
@@ -72,6 +79,21 @@ func run(logger *slog.Logger) error {
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
+	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
+
+	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
+	scheduler := asynq.NewScheduler(redisOpt, &asynq.SchedulerOpts{Logger: asynqLogger{logger}})
+	statsTask, err := tasks.NewStatsAggregate("")
+	if err != nil {
+		return err
+	}
+	if _, err := scheduler.Register("30 0 * * *", statsTask); err != nil {
+		return fmt.Errorf("register stats cron: %w", err)
+	}
+	if err := scheduler.Start(); err != nil {
+		return fmt.Errorf("start scheduler: %w", err)
+	}
+	defer scheduler.Shutdown()
 
 	logger.Info("worker starting", "redis_addr", cfg.RedisAddr)
 	// Run блокируется и сам обрабатывает SIGINT/SIGTERM (graceful shutdown).

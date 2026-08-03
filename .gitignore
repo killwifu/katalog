@@ -10,3 +10,7 @@ dist/
 
 # Go
 backend/bin/
+
+# Артефакты e2e/CI
+seed.json
+frontend/storefront/.lighthouseci/

@@ -1,0 +1,74 @@
+import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+import { getAlbumPage } from '@/lib/api'
+import { PhotoGrid } from '@/components/PhotoGrid'
+import { SearchForm } from '@/components/SearchForm'
+import { TrackView } from '@/components/TrackView'
+
+// Страница альбома: чтение searchParams делает рендер динамическим,
+// но данные идут через data cache Next (тег shop:{slug}, TTL 60с) —
+// Postgres на горячем пути не трогаем.
+
+type Props = {
+  params: { slug: string; albumId: string }
+  searchParams: { page?: string }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug, albumId } = params
+  const data = await getAlbumPage(slug, albumId, 1)
+  if (!data) return { title: 'Альбом не найден' }
+  const cover = data.photos[0]?.urls
+  return {
+    title: `${data.album.title} — ${data.shop.name}`,
+    description: `${data.album.title}: ${data.album.photo_count} фото в каталоге ${data.shop.name}`,
+    openGraph: {
+      title: `${data.album.title} — ${data.shop.name}`,
+      type: 'website',
+      images: cover ? [{ url: cover.medium }] : undefined,
+    },
+  }
+}
+
+export default async function AlbumPage({ params, searchParams }: Props) {
+  const { slug, albumId } = params
+  const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1)
+
+  const data = await getAlbumPage(slug, albumId, page)
+  if (!data) notFound()
+  const { shop, album, photos, per_page: perPage, total } = data
+  const totalPages = Math.max(1, Math.ceil(total / perPage))
+  const base = `/${encodeURIComponent(slug)}/a/${album.id}`
+
+  return (
+    <main className="page">
+      <TrackView shopId={shop.id} albumId={album.id} />
+      <header className="album-header">
+        <nav className="breadcrumbs">
+          <a href={`/${encodeURIComponent(slug)}`}>{shop.name}</a> / <span>{album.title}</span>
+        </nav>
+        <h1>{album.title}</h1>
+        <p className="album-count">{album.photo_count} фото</p>
+        <SearchForm slug={slug} />
+      </header>
+      <PhotoGrid photos={photos} shop={shop} />
+      {totalPages > 1 && (
+        <nav className="pagination" aria-label="Страницы альбома">
+          {page > 1 && (
+            <a href={page === 2 ? base : `${base}?page=${page - 1}`} rel="prev">
+              ← Назад
+            </a>
+          )}
+          <span>
+            {page} / {totalPages}
+          </span>
+          {page < totalPages && (
+            <a href={`${base}?page=${page + 1}`} rel="next">
+              Вперёд →
+            </a>
+          )}
+        </nav>
+      )}
+    </main>
+  )
+}

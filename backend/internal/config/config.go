@@ -25,6 +25,12 @@ type Config struct {
 	SessionTTL   time.Duration
 	// AuthRateLimit — запросов в минуту с одного IP на auth-эндпоинты.
 	AuthRateLimit int64
+	// PublicRateLimit — запросов в минуту с одного IP на публичные эндпоинты.
+	PublicRateLimit int64
+	// StorefrontURL — внутренний адрес витрины Next.js для вебхука ревалидации.
+	StorefrontURL string
+	// RevalidateSecret — shared secret вебхука Go -> Next (пустой = вебхук выключен).
+	RevalidateSecret string
 }
 
 func Load() Config {
@@ -41,6 +47,9 @@ func Load() Config {
 		CookieSecure:     os.Getenv("COOKIE_SECURE") == "true",
 		SessionTTL:       30 * 24 * time.Hour,
 		AuthRateLimit:    getenvInt64("AUTH_RATE_LIMIT", 20),
+		PublicRateLimit:  getenvInt64("PUBLIC_RATE_LIMIT", 300),
+		StorefrontURL:    getenv("STOREFRONT_URL", "http://localhost:3000"),
+		RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
 	}
 }
 
