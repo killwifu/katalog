@@ -22,6 +22,25 @@ curl localhost/healthz       # -> {"status":"ok"}
 make down                    # останавливает стек
 ```
 
+## Демо в облаке без локальной установки (GitHub Codespaces)
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/killwifu/katalog)
+
+1. Нажмите бейдж (или Code → Codespaces → Create) — codespace сам соберёт
+   и поднимет весь стек (`make up` в postCreate, первая сборка ~5–10 минут;
+   прогресс — в логе создания).
+2. В терминале codespace откройте порты наружу:
+   ```sh
+   gh codespace ports visibility 80:public 9000:public -c "$CODESPACE_NAME"
+   ```
+   (9000 — MinIO, нужен для загрузки фото из браузера; для просмотра
+   витрины достаточно 80).
+3. Ссылка для друга — вкладка Ports, порт 80: `https://<codespace>-80.app.github.dev`.
+   Демо-данные: `make seed`.
+
+Ссылка живёт, пока codespace запущен (останавливается после ~30 минут
+простоя; перезапуск — той же кнопкой в github.com/codespaces).
+
 После `make up` доступно:
 
 | URL | Что |

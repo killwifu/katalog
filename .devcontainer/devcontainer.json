@@ -1,0 +1,14 @@
+{
+  "name": "katalog",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "forwardPorts": [80, 9000],
+  "portsAttributes": {
+    "80": { "label": "katalog (Caddy)" },
+    "9000": { "label": "MinIO S3 (presigned-загрузки)" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh && docker compose --env-file .env -f deploy/docker-compose.yml up -d --build"
+}
