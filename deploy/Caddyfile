@@ -11,8 +11,12 @@
 	# S3 API MinIO через основной порт (путь = имя бакета): pre-signed
 	# загрузки работают там, где наружу проброшен только 80 (Codespaces).
 	# Анонимно читается только drv/* (bucket policy), PUT — только по подписи.
+	# Host восстанавливается в тот, для которого API подписывал URL:
+	# внешние прокси (Codespaces) переписывают Host, ломая SigV4-подпись.
 	handle /katalog/* {
-		reverse_proxy minio:9000
+		reverse_proxy minio:9000 {
+			header_up Host {$S3_SIGNING_HOST}
+		}
 	}
 
 	# Деривативы фото (только drv/, оригиналы наружу не отдаются).

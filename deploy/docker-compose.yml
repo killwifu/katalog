@@ -183,6 +183,9 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    environment:
+      # Host для SigV4-подписи при проксировании /katalog/* в MinIO.
+      S3_SIGNING_HOST: ${S3_SIGNING_HOST:-localhost}
     ports:
       - "80:80"
     volumes:

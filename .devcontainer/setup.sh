@@ -20,6 +20,7 @@ cat >> .env <<EOF
 # Дубликаты ключей ниже переопределяют значения выше (последний выигрывает).
 # S3 — через Caddy на 80-м порту (/katalog/*): наружу нужен один порт.
 S3_PUBLIC_ENDPOINT=https://${CODESPACE_NAME}-80.${domain}
+S3_SIGNING_HOST=${CODESPACE_NAME}-80.${domain}
 SITE_URL=https://${CODESPACE_NAME}-80.${domain}
 COOKIE_SECURE=true
 EOF
