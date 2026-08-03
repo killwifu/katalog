@@ -51,16 +51,39 @@ export function AppLayout() {
               <span className="hidden sm:inline">
                 {usedMB} / {maxMB} МБ
               </span>
+              <Link to="/billing" className="text-gray-500 hover:text-gray-900">
+                Тариф
+              </Link>
               <button onClick={() => void logout()} className="text-gray-500 hover:text-gray-900">
                 Выйти
               </button>
             </div>
           </div>
         </header>
+        <BillingBanner state={shop.billing_state} />
         <main className="mx-auto max-w-4xl px-4 py-6">
           <Outlet />
         </main>
       </div>
     </ShopContext.Provider>
+  )
+}
+
+// BillingBanner — статус подписки во всех экранах кабинета.
+function BillingBanner({ state }: { state: Shop['billing_state'] }) {
+  if (state === 'ok') return null
+  const message =
+    state === 'grace'
+      ? 'Подписка не оплачена: загрузка фото заблокирована. Витрина будет скрыта после окончания льготного периода.'
+      : 'Подписка не оплачена: витрина скрыта. Фото сохранены и вернутся после оплаты.'
+  return (
+    <div className="border-b border-red-200 bg-red-50">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-2 text-sm text-red-800">
+        <span>{message}</span>
+        <Link to="/billing" className="shrink-0 font-medium text-red-800 underline hover:text-red-900">
+          Оплатить
+        </Link>
+      </div>
+    </div>
   )
 }

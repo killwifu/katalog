@@ -30,7 +30,7 @@ func (q *Queries) AddShopStorageUsed(ctx context.Context, arg AddShopStorageUsed
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until
 `
 
 type CreateShopParams struct {
@@ -65,6 +65,8 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }
@@ -88,7 +90,7 @@ func (q *Queries) DeleteShop(ctx context.Context, arg DeleteShopParams) (int64, 
 }
 
 const getShopByID = `-- name: GetShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
 WHERE id = $1
 `
 
@@ -108,16 +110,18 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }
 
 const getShopBySlug = `-- name: GetShopBySlug :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
-WHERE slug = $1 AND status = 'active'
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+WHERE slug = $1 AND status = 'active' AND billing_state != 'suspended'
 `
 
-// Публичная витрина: только активные магазины.
+// Публичная витрина: только активные магазины; suspended по биллингу — скрыты.
 func (q *Queries) GetShopBySlug(ctx context.Context, slug string) (Shop, error) {
 	row := q.db.QueryRow(ctx, getShopBySlug, slug)
 	var i Shop
@@ -134,12 +138,14 @@ func (q *Queries) GetShopBySlug(ctx context.Context, slug string) (Shop, error) 
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }
 
 const getShopForOwner = `-- name: GetShopForOwner :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -165,12 +171,14 @@ func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }
 
 const listShopsByOwner = `-- name: ListShopsByOwner :many
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
 WHERE owner_id = $1
 ORDER BY created_at
 `
@@ -197,6 +205,8 @@ func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sh
 			&i.StorageUsed,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BillingState,
+			&i.PaidUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +226,7 @@ SET name        = $3,
     settings    = $6,
     updated_at  = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until
 `
 
 type UpdateShopParams struct {
@@ -252,6 +262,8 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }

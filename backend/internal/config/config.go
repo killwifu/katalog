@@ -31,6 +31,36 @@ type Config struct {
 	StorefrontURL string
 	// RevalidateSecret — shared secret вебхука Go -> Next (пустой = вебхук выключен).
 	RevalidateSecret string
+	Billing          BillingConfig
+}
+
+// PlanLimits — лимиты и цена тарифа. PriceKopecks 0 = бесплатный тариф.
+type PlanLimits struct {
+	MaxPhotos    int64
+	MaxStorage   int64 // байты
+	PriceKopecks int64 // цена оплаченного периода
+}
+
+type BillingConfig struct {
+	// Plans — лимиты по имени тарифа (free/basic/pro).
+	Plans map[string]PlanLimits
+	// GraceDays — длительность grace-периода после окончания оплаты
+	// (загрузка заблокирована, витрина работает; затем витрина скрывается).
+	GraceDays int
+	// PeriodDays — длительность оплаченного периода подписки.
+	PeriodDays int
+	// ЮKassa. Пустой YooKassaShopID = платежи выключены (subscribe вернёт 503).
+	YooKassaShopID    string
+	YooKassaSecretKey string
+	YooKassaAPIURL    string
+	// ReturnURL — куда ЮKassa возвращает пользователя после оплаты.
+	ReturnURL string
+}
+
+// Limits — лимиты тарифа; для неизвестного тарифа возвращает нулевые лимиты
+// (safe default: загрузка будет запрещена).
+func (b BillingConfig) Limits(plan string) PlanLimits {
+	return b.Plans[plan]
 }
 
 func Load() Config {
@@ -50,6 +80,30 @@ func Load() Config {
 		PublicRateLimit:  getenvInt64("PUBLIC_RATE_LIMIT", 300),
 		StorefrontURL:    getenv("STOREFRONT_URL", "http://localhost:3000"),
 		RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
+		Billing: BillingConfig{
+			Plans: map[string]PlanLimits{
+				"free": {
+					MaxPhotos:  getenvInt64("PLAN_FREE_MAX_PHOTOS", 500),
+					MaxStorage: getenvInt64("PLAN_FREE_MAX_STORAGE_MB", 1024) << 20,
+				},
+				"basic": {
+					MaxPhotos:    getenvInt64("PLAN_BASIC_MAX_PHOTOS", 5000),
+					MaxStorage:   getenvInt64("PLAN_BASIC_MAX_STORAGE_MB", 10*1024) << 20,
+					PriceKopecks: getenvInt64("PLAN_BASIC_PRICE_RUB", 490) * 100,
+				},
+				"pro": {
+					MaxPhotos:    getenvInt64("PLAN_PRO_MAX_PHOTOS", 20000),
+					MaxStorage:   getenvInt64("PLAN_PRO_MAX_STORAGE_MB", 20*1024) << 20,
+					PriceKopecks: getenvInt64("PLAN_PRO_PRICE_RUB", 990) * 100,
+				},
+			},
+			GraceDays:         int(getenvInt64("BILLING_GRACE_DAYS", 14)),
+			PeriodDays:        int(getenvInt64("BILLING_PERIOD_DAYS", 30)),
+			YooKassaShopID:    os.Getenv("YOOKASSA_SHOP_ID"),
+			YooKassaSecretKey: os.Getenv("YOOKASSA_SECRET_KEY"),
+			YooKassaAPIURL:    getenv("YOOKASSA_API_URL", "https://api.yookassa.ru/v3"),
+			ReturnURL:         getenv("BILLING_RETURN_URL", "http://localhost/app/billing"),
+		},
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/revalidate"
@@ -61,6 +62,8 @@ func run(logger *slog.Logger) error {
 		Store:      store,
 		RDB:        rdb,
 		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
+		Billing:    billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
+		BillingCfg: cfg.Billing,
 		Log:        logger,
 	}
 
@@ -80,6 +83,8 @@ func run(logger *slog.Logger) error {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
+	mux.HandleFunc(tasks.TypeBillingLifecycle, processor.HandleBillingLifecycle)
+	mux.HandleFunc(tasks.TypeBillingRenew, processor.HandleBillingRenew)
 
 	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
 	scheduler := asynq.NewScheduler(redisOpt, &asynq.SchedulerOpts{Logger: asynqLogger{logger}})
@@ -89,6 +94,14 @@ func run(logger *slog.Logger) error {
 	}
 	if _, err := scheduler.Register("30 0 * * *", statsTask); err != nil {
 		return fmt.Errorf("register stats cron: %w", err)
+	}
+	// Биллинг: переходы состояний (00:45 UTC), затем рекуррентные списания
+	// по истекающим подпискам (01:00 UTC).
+	if _, err := scheduler.Register("45 0 * * *", tasks.NewBillingLifecycle()); err != nil {
+		return fmt.Errorf("register billing lifecycle cron: %w", err)
+	}
+	if _, err := scheduler.Register("0 1 * * *", tasks.NewBillingRenew()); err != nil {
+		return fmt.Errorf("register billing renew cron: %w", err)
 	}
 	if err := scheduler.Start(); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)

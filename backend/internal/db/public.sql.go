@@ -47,8 +47,8 @@ func (q *Queries) CreateLeadClick(ctx context.Context, arg CreateLeadClickParams
 }
 
 const getActiveShopByID = `-- name: GetActiveShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at FROM shops
-WHERE id = $1 AND status = 'active'
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+WHERE id = $1 AND status = 'active' AND billing_state != 'suspended'
 `
 
 func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
@@ -67,6 +67,8 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 		&i.StorageUsed,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
 	)
 	return i, err
 }
@@ -102,7 +104,7 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 
 const listActiveShopSlugs = `-- name: ListActiveShopSlugs :many
 SELECT slug, updated_at FROM shops
-WHERE status = 'active'
+WHERE status = 'active' AND billing_state != 'suspended'
 ORDER BY created_at
 LIMIT 50000
 `

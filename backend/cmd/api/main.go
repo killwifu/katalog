@@ -17,6 +17,7 @@ import (
 
 	"katalog/backend/internal/api"
 	"katalog/backend/internal/auth"
+	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/revalidate"
@@ -61,11 +62,13 @@ func run(logger *slog.Logger) error {
 
 	app := &api.API{
 		Q:          db.New(pool),
+		Pool:       pool,
 		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
 		RDB:        rdb,
 		Store:      store,
 		Tasks:      tasksClient,
 		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
+		Billing:    billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
 		Cfg:        cfg,
 		Log:        logger,
 	}

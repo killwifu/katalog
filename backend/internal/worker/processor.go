@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 
+	"katalog/backend/internal/billing"
+	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
 	"katalog/backend/internal/revalidate"
@@ -25,6 +27,8 @@ type Processor struct {
 	Store      *storage.Client
 	RDB        *redis.Client
 	Revalidate *revalidate.Notifier
+	Billing    *billing.Client
+	BillingCfg config.BillingConfig
 	Log        *slog.Logger
 }
 
@@ -92,8 +96,8 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("mark photo ready: %w", err)
 	}
 	if err := p.Q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{
-		ID:           photo.ShopID,
-		StorageUsed:  drvBytes,
+		ID:          photo.ShopID,
+		StorageUsed: drvBytes,
 	}); err != nil {
 		return fmt.Errorf("account derivative bytes: %w", err)
 	}

@@ -7,10 +7,10 @@ RETURNING *;
 SELECT * FROM shops
 WHERE id = $1;
 
--- Публичная витрина: только активные магазины.
+-- Публичная витрина: только активные магазины; suspended по биллингу — скрыты.
 -- name: GetShopBySlug :one
 SELECT * FROM shops
-WHERE slug = $1 AND status = 'active';
+WHERE slug = $1 AND status = 'active' AND billing_state != 'suspended';
 
 -- name: ListShopsByOwner :many
 SELECT * FROM shops

@@ -16,20 +16,10 @@ import (
 	"katalog/backend/internal/tasks"
 )
 
-// Лимиты хранилища по тарифам.
 const (
-	freeStorageLimit = 1 << 30  // 1 GiB
-	proStorageLimit  = 20 << 30 // 20 GiB
-	maxFileSize      = 50 << 20 // 50 MiB на файл
-	presignTTL       = 15 * time.Minute
+	maxFileSize = 50 << 20 // 50 MiB на файл
+	presignTTL  = 15 * time.Minute
 )
-
-func planStorageLimit(plan db.ShopPlan) int64 {
-	if plan == db.ShopPlanPro {
-		return proStorageLimit
-	}
-	return freeStorageLimit
-}
 
 type photoResponse struct {
 	ID        string            `json:"id"`
@@ -104,10 +94,29 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, "invalid_size", fmt.Sprintf("size must be 1..%d bytes", maxFileSize))
 		return
 	}
-	// Проверка квоты тарифа. При параллельных загрузках возможен небольшой
-	// перебор (квота фиксируется фактическими байтами на confirm).
-	if shop.StorageUsed+req.Size > planStorageLimit(shop.Plan) {
-		apiError(w, http.StatusForbidden, "quota_exceeded", "storage quota exceeded for current plan")
+	// Мягкий отказ по подписке: в grace/suspended загрузка заблокирована,
+	// контент и витрина (в grace) продолжают работать.
+	if shop.BillingState != db.BillingStateOk {
+		apiError(w, http.StatusForbidden, "subscription_inactive",
+			"subscription is inactive: uploads are disabled until the plan is renewed")
+		return
+	}
+	// Квоты тарифа. При параллельных загрузках возможен небольшой перебор
+	// (счётчики фиксируются на confirm), это осознанный компромисс.
+	limits := a.Cfg.Billing.Limits(string(shop.Plan))
+	photoCount, err := a.Q.CountShopPhotos(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "count shop photos", err)
+		return
+	}
+	if photoCount >= limits.MaxPhotos {
+		apiError(w, http.StatusForbidden, "photo_quota_exceeded",
+			fmt.Sprintf("plan photo limit reached (%d photos), upgrade your plan", limits.MaxPhotos))
+		return
+	}
+	if shop.StorageUsed+req.Size > limits.MaxStorage {
+		apiError(w, http.StatusForbidden, "quota_exceeded",
+			"storage quota exceeded for current plan, upgrade your plan")
 		return
 	}
 

@@ -32,6 +32,7 @@ import (
 
 	"katalog/backend/internal/api"
 	"katalog/backend/internal/auth"
+	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/revalidate"
@@ -53,6 +54,8 @@ var env struct {
 	mc        *minio.Client
 	rdb       *redis.Client
 	processor *worker.Processor
+	// yk — фейковый сервер API ЮKassa (создание платежей, статусы).
+	yk *fakeYooKassa
 	// revalidated — слаги магазинов, полученные фейковой витриной
 	// через вебхук ревалидации.
 	revalidated chan string
@@ -183,18 +186,36 @@ func run(m *testing.M) int {
 	defer fakeNext.Close()
 	notifier := revalidate.New(fakeNext.URL, testRevalidateSecret, logger)
 
+	// Фейковая ЮKassa: платежи создаются и подтверждаются локально.
+	env.yk = newFakeYooKassa()
+	defer env.yk.srv.Close()
+	ykClient := billing.New(env.yk.srv.URL, "test-yk-shop", "test-yk-key")
+
 	cfg := config.Config{
 		SessionTTL:      time.Hour,
 		AuthRateLimit:   30,
 		PublicRateLimit: 300,
+		Billing: config.BillingConfig{
+			// Маленький лимит фото на free — для теста квоты.
+			Plans: map[string]config.PlanLimits{
+				"free":  {MaxPhotos: 8, MaxStorage: 1 << 30},
+				"basic": {MaxPhotos: 100, MaxStorage: 10 << 30, PriceKopecks: 49000},
+				"pro":   {MaxPhotos: 200, MaxStorage: 20 << 30, PriceKopecks: 99000},
+			},
+			GraceDays:  14,
+			PeriodDays: 30,
+			ReturnURL:  "http://localhost/app/billing",
+		},
 	}
 	app := &api.API{
 		Q:          env.q,
+		Pool:       env.pool,
 		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
 		RDB:        rdb,
 		Store:      env.store,
 		Tasks:      asynqClient,
 		Revalidate: notifier,
+		Billing:    ykClient,
 		Cfg:        cfg,
 		Log:        logger,
 	}
@@ -213,6 +234,8 @@ func run(m *testing.M) int {
 		Store:      env.store,
 		RDB:        rdb,
 		Revalidate: notifier,
+		Billing:    ykClient,
+		BillingCfg: cfg.Billing,
 		Log:        logger,
 	}
 	env.processor = processor

@@ -60,7 +60,7 @@ LIMIT $3;
 
 -- name: GetActiveShopByID :one
 SELECT * FROM shops
-WHERE id = $1 AND status = 'active';
+WHERE id = $1 AND status = 'active' AND billing_state != 'suspended';
 
 -- name: CreateLeadClick :exec
 INSERT INTO lead_clicks (shop_id, photo_id, channel, visitor_hash)
@@ -69,6 +69,6 @@ VALUES ($1, $2, $3, $4);
 -- Для sitemap: slug и дата обновления активных магазинов.
 -- name: ListActiveShopSlugs :many
 SELECT slug, updated_at FROM shops
-WHERE status = 'active'
+WHERE status = 'active' AND billing_state != 'suspended'
 ORDER BY created_at
 LIMIT 50000;

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -37,31 +38,41 @@ func validateSlug(slug string) string {
 }
 
 type shopResponse struct {
-	ID          string          `json:"id"`
-	Slug        string          `json:"slug"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Contacts    json.RawMessage `json:"contacts"`
-	Settings    json.RawMessage `json:"settings"`
-	Status      string          `json:"status"`
-	Plan        string          `json:"plan"`
-	StorageUsed int64           `json:"storage_used"`
-	StorageMax  int64           `json:"storage_max"`
+	ID           string          `json:"id"`
+	Slug         string          `json:"slug"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Contacts     json.RawMessage `json:"contacts"`
+	Settings     json.RawMessage `json:"settings"`
+	Status       string          `json:"status"`
+	Plan         string          `json:"plan"`
+	BillingState string          `json:"billing_state"`
+	PaidUntil    *time.Time      `json:"paid_until"`
+	StorageUsed  int64           `json:"storage_used"`
+	StorageMax   int64           `json:"storage_max"`
+	MaxPhotos    int64           `json:"max_photos"`
 }
 
-func toShopResponse(s db.Shop) shopResponse {
-	return shopResponse{
-		ID:          s.ID.String(),
-		Slug:        s.Slug,
-		Name:        s.Name,
-		Description: s.Description,
-		Contacts:    json.RawMessage(s.Contacts),
-		Settings:    json.RawMessage(s.Settings),
-		Status:      string(s.Status),
-		Plan:        string(s.Plan),
-		StorageUsed: s.StorageUsed,
-		StorageMax:  planStorageLimit(s.Plan),
+func (a *API) toShopResponse(s db.Shop) shopResponse {
+	limits := a.Cfg.Billing.Limits(string(s.Plan))
+	resp := shopResponse{
+		ID:           s.ID.String(),
+		Slug:         s.Slug,
+		Name:         s.Name,
+		Description:  s.Description,
+		Contacts:     json.RawMessage(s.Contacts),
+		Settings:     json.RawMessage(s.Settings),
+		Status:       string(s.Status),
+		Plan:         string(s.Plan),
+		BillingState: string(s.BillingState),
+		StorageUsed:  s.StorageUsed,
+		StorageMax:   limits.MaxStorage,
+		MaxPhotos:    limits.MaxPhotos,
 	}
+	if s.PaidUntil.Valid {
+		resp.PaidUntil = &s.PaidUntil.Time
+	}
+	return resp
 }
 
 type createShopRequest struct {
@@ -108,7 +119,7 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "create shop", err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toShopResponse(shop))
+	writeJSON(w, http.StatusCreated, a.toShopResponse(shop))
 }
 
 func (a *API) handleListShops(w http.ResponseWriter, r *http.Request) {
@@ -119,13 +130,13 @@ func (a *API) handleListShops(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]shopResponse, 0, len(shops))
 	for _, s := range shops {
-		out = append(out, toShopResponse(s))
+		out = append(out, a.toShopResponse(s))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *API) handleGetShop(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, toShopResponse(shopFromCtx(r)))
+	writeJSON(w, http.StatusOK, a.toShopResponse(shopFromCtx(r)))
 }
 
 type updateShopRequest struct {
@@ -177,7 +188,7 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Revalidate.Shop(updated.Slug)
-	writeJSON(w, http.StatusOK, toShopResponse(updated))
+	writeJSON(w, http.StatusOK, a.toShopResponse(updated))
 }
 
 func (a *API) handleDeleteShop(w http.ResponseWriter, r *http.Request) {

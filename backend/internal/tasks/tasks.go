@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	TypePhotoProcess   = "photo:process"
-	TypeStatsAggregate = "stats:aggregate"
+	TypePhotoProcess     = "photo:process"
+	TypeStatsAggregate   = "stats:aggregate"
+	TypeBillingLifecycle = "billing:lifecycle"
+	TypeBillingRenew     = "billing:renew"
 )
 
 type PhotoProcessPayload struct {
@@ -34,6 +36,23 @@ func NewStatsAggregate(date string) (*asynq.Task, error) {
 		asynq.MaxRetry(3),
 		asynq.Timeout(10*time.Minute),
 	), nil
+}
+
+// NewBillingLifecycle — ежедневные переходы биллинговых состояний магазинов
+// (ok -> grace -> suspended). Без payload, идемпотентна.
+func NewBillingLifecycle() *asynq.Task {
+	return asynq.NewTask(TypeBillingLifecycle, nil,
+		asynq.MaxRetry(3),
+		asynq.Timeout(10*time.Minute),
+	)
+}
+
+// NewBillingRenew — ежедневные рекуррентные списания по истекающим подпискам.
+func NewBillingRenew() *asynq.Task {
+	return asynq.NewTask(TypeBillingRenew, nil,
+		asynq.MaxRetry(3),
+		asynq.Timeout(10*time.Minute),
+	)
 }
 
 func NewPhotoProcess(photoID uuid.UUID) (*asynq.Task, error) {

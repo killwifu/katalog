@@ -14,6 +14,7 @@ import { AlbumPage } from './pages/AlbumPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { BillingPage } from './pages/BillingPage'
 import { CaptionsPage } from './pages/CaptionsPage'
 import './index.css'
 
@@ -67,11 +68,17 @@ const captionsRoute = createRoute({
   component: CaptionsPage,
 })
 
+const billingRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/billing',
+  component: BillingPage,
+})
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
     registerRoute,
-    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute]),
+    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute]),
   ]),
   basepath: '/app',
 })

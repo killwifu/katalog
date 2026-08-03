@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BillingState string
+
+const (
+	BillingStateOk        BillingState = "ok"
+	BillingStateGrace     BillingState = "grace"
+	BillingStateSuspended BillingState = "suspended"
+)
+
+func (e *BillingState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BillingState(s)
+	case string:
+		*e = BillingState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BillingState: %T", src)
+	}
+	return nil
+}
+
+type NullBillingState struct {
+	BillingState BillingState `json:"billing_state"`
+	Valid        bool         `json:"valid"` // Valid is true if BillingState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBillingState) Scan(value interface{}) error {
+	if value == nil {
+		ns.BillingState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BillingState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBillingState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BillingState), nil
+}
+
 type ComplaintStatus string
 
 const (
@@ -98,6 +141,49 @@ func (ns NullLeadChannel) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.LeadChannel), nil
+}
+
+type PaymentStatus string
+
+const (
+	PaymentStatusPending   PaymentStatus = "pending"
+	PaymentStatusSucceeded PaymentStatus = "succeeded"
+	PaymentStatusCanceled  PaymentStatus = "canceled"
+)
+
+func (e *PaymentStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PaymentStatus(s)
+	case string:
+		*e = PaymentStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PaymentStatus: %T", src)
+	}
+	return nil
+}
+
+type NullPaymentStatus struct {
+	PaymentStatus PaymentStatus `json:"payment_status"`
+	Valid         bool          `json:"valid"` // Valid is true if PaymentStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPaymentStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.PaymentStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PaymentStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPaymentStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PaymentStatus), nil
 }
 
 type PhotoSource string
@@ -190,8 +276,9 @@ func (ns NullPhotoStatus) Value() (driver.Value, error) {
 type ShopPlan string
 
 const (
-	ShopPlanFree ShopPlan = "free"
-	ShopPlanPro  ShopPlan = "pro"
+	ShopPlanFree  ShopPlan = "free"
+	ShopPlanBasic ShopPlan = "basic"
+	ShopPlanPro   ShopPlan = "pro"
 )
 
 func (e *ShopPlan) Scan(src interface{}) error {
@@ -358,6 +445,19 @@ type LeadClick struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Payment struct {
+	ID                uuid.UUID          `json:"id"`
+	ShopID            uuid.UUID          `json:"shop_id"`
+	Plan              ShopPlan           `json:"plan"`
+	Amount            int64              `json:"amount"`
+	Currency          string             `json:"currency"`
+	ProviderPaymentID *string            `json:"provider_payment_id"`
+	Status            PaymentStatus      `json:"status"`
+	Recurring         bool               `json:"recurring"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Photo struct {
 	ID         uuid.UUID          `json:"id"`
 	AlbumID    uuid.UUID          `json:"album_id"`
@@ -376,28 +476,32 @@ type Photo struct {
 }
 
 type Shop struct {
-	ID          uuid.UUID          `json:"id"`
-	OwnerID     uuid.UUID          `json:"owner_id"`
-	Slug        string             `json:"slug"`
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Contacts    []byte             `json:"contacts"`
-	Settings    []byte             `json:"settings"`
-	Status      ShopStatus         `json:"status"`
-	Plan        ShopPlan           `json:"plan"`
-	StorageUsed int64              `json:"storage_used"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	ID           uuid.UUID          `json:"id"`
+	OwnerID      uuid.UUID          `json:"owner_id"`
+	Slug         string             `json:"slug"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	Contacts     []byte             `json:"contacts"`
+	Settings     []byte             `json:"settings"`
+	Status       ShopStatus         `json:"status"`
+	Plan         ShopPlan           `json:"plan"`
+	StorageUsed  int64              `json:"storage_used"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	BillingState BillingState       `json:"billing_state"`
+	PaidUntil    pgtype.Timestamptz `json:"paid_until"`
 }
 
 type Subscription struct {
-	ID          uuid.UUID          `json:"id"`
-	ShopID      uuid.UUID          `json:"shop_id"`
-	Plan        ShopPlan           `json:"plan"`
-	Status      SubscriptionStatus `json:"status"`
-	PeriodStart pgtype.Timestamptz `json:"period_start"`
-	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID              uuid.UUID          `json:"id"`
+	ShopID          uuid.UUID          `json:"shop_id"`
+	Plan            ShopPlan           `json:"plan"`
+	Status          SubscriptionStatus `json:"status"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	PaymentMethodID *string            `json:"payment_method_id"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

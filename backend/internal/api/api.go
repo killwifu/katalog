@@ -11,9 +11,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"katalog/backend/internal/auth"
+	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/revalidate"
@@ -21,12 +23,15 @@ import (
 )
 
 type API struct {
-	Q          *db.Queries
+	Q *db.Queries
+	// Pool — для транзакций (обработка платёжных вебхуков).
+	Pool       *pgxpool.Pool
 	Sessions   *auth.Sessions
 	RDB        *redis.Client
 	Store      *storage.Client
 	Tasks      *asynq.Client
 	Revalidate *revalidate.Notifier
+	Billing    *billing.Client
 	Cfg        config.Config
 	Log        *slog.Logger
 }
@@ -52,6 +57,10 @@ func (a *API) Router() http.Handler {
 			r.Get("/sitemap", a.handlePublicSitemap)
 		})
 
+		// Вебхук ЮKassa: без сессии; подлинность проверяется запросом
+		// статуса платежа к самой ЮKassa (см. handleYooKassaWebhook).
+		r.Post("/billing/webhooks/yookassa", a.handleYooKassaWebhook)
+
 		// Auth: с rate-limit (Redis) по IP.
 		r.Group(func(r chi.Router) {
 			r.Use(a.rateLimit("auth", a.Cfg.AuthRateLimit))
@@ -71,6 +80,10 @@ func (a *API) Router() http.Handler {
 					r.Get("/", a.handleGetShop)
 					r.Patch("/", a.handleUpdateShop)
 					r.Delete("/", a.handleDeleteShop)
+
+					r.Get("/billing", a.handleGetBilling)
+					r.Post("/billing/subscribe", a.handleSubscribe)
+					r.Post("/billing/cancel", a.handleCancelSubscription)
 
 					r.Route("/albums", func(r chi.Router) {
 						r.Post("/", a.handleCreateAlbum)

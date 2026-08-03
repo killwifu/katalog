@@ -6,7 +6,7 @@ info:
     клиентские типы генерируются из этого файла (orval).
     Аутентификация: сессионная httpOnly cookie `katalog_session`.
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
-  version: 0.3.0
+  version: 0.4.0
 servers:
   - url: /
 
@@ -169,6 +169,124 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/shops/{shopID}/billing:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: getBilling
+      summary: Тариф, лимиты, использование и подписка магазина
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Billing"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/billing/subscribe:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: subscribe
+      summary: Начать оплату платного тарифа через ЮKassa
+      description: >
+        Создаёт платёж ЮKassa (с сохранением способа оплаты для рекуррентных
+        списаний) и возвращает confirmation_url для redirect. Тариф
+        активируется только после вебхука payment.succeeded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              properties:
+                plan: { type: string, enum: [basic, pro] }
+      responses:
+        "200":
+          description: Платёж создан
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payment_id, confirmation_url]
+                properties:
+                  payment_id: { type: string, format: uuid }
+                  confirmation_url: { type: string, format: uri }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502":
+          description: ЮKassa недоступна (error=payment_provider_error)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Платежи не сконфигурированы (error=billing_unavailable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/shops/{shopID}/billing/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: cancelSubscription
+      summary: Отключить автопродление подписки
+      description: >
+        Тариф действует до конца оплаченного периода, затем магазин проходит
+        grace period и скрытие витрины. Идемпотентен.
+      responses:
+        "204": { description: Автопродление отключено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/billing/webhooks/yookassa:
+    post:
+      operationId: yooKassaWebhook
+      summary: Вебхук ЮKassa о статусах платежей
+      description: >
+        Без сессии. Уведомления ЮKassa не подписаны, поэтому статус платежа
+        перепроверяется прямым запросом к API ЮKassa. Обработка идемпотентна:
+        повторная доставка события — no-op с 200. Не-2xx ответ означает,
+        что ЮKassa должна доставить уведомление повторно.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, event, object]
+              properties:
+                type: { type: string, const: notification }
+                event:
+                  type: string
+                  enum: [payment.succeeded, payment.canceled, payment.waiting_for_capture]
+                object:
+                  type: object
+                  description: Объект платежа ЮKassa
+      responses:
+        "200":
+          description: Уведомление обработано (или уже было обработано)
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404":
+          description: Платёж не зарегистрирован (error=unknown_payment), нужен ретрай
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Не удалось перепроверить платёж в ЮKassa, нужен ретрай
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Платежи не сконфигурированы
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /api/v1/shops/{shopID}/albums:
     parameters:
       - $ref: "#/components/parameters/ShopID"
@@ -313,7 +431,10 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403":
-          description: Квота тарифа исчерпана (error=quota_exceeded)
+          description: >
+            Мягкий отказ: квота тарифа исчерпана (error=quota_exceeded —
+            хранилище, error=photo_quota_exceeded — число фото) или подписка
+            неактивна (error=subscription_inactive, состояние grace/suspended).
           content:
             application/json:
               schema:
@@ -603,7 +724,8 @@ components:
 
     Shop:
       type: object
-      required: [id, slug, name, description, contacts, settings, status, plan, storage_used, storage_max]
+      required: [id, slug, name, description, contacts, settings, status, plan,
+                 billing_state, paid_until, storage_used, storage_max, max_photos]
       properties:
         id: { type: string, format: uuid }
         slug: { type: string }
@@ -612,9 +734,59 @@ components:
         contacts: { type: object }
         settings: { type: object }
         status: { type: string, enum: [active, suspended, deleted] }
-        plan: { type: string, enum: [free, pro] }
+        plan: { $ref: "#/components/schemas/PlanID" }
+        billing_state: { $ref: "#/components/schemas/BillingState" }
+        paid_until: { type: [string, "null"], format: date-time }
         storage_used: { type: integer }
         storage_max: { type: integer }
+        max_photos: { type: integer }
+
+    PlanID:
+      type: string
+      enum: [free, basic, pro]
+
+    BillingState:
+      type: string
+      description: >
+        Биллинговое состояние: ok — всё работает; grace — оплата просрочена,
+        загрузка заблокирована, витрина работает; suspended — витрина скрыта,
+        контент сохраняется.
+      enum: [ok, grace, suspended]
+
+    PlanInfo:
+      type: object
+      required: [id, max_photos, max_storage, price_rub]
+      properties:
+        id: { $ref: "#/components/schemas/PlanID" }
+        max_photos: { type: integer }
+        max_storage: { type: integer, description: Байты }
+        price_rub: { type: integer, description: Цена за период, рубли (0 = бесплатно) }
+
+    Billing:
+      type: object
+      required: [plan, billing_state, paid_until, usage, limits, subscription, plans]
+      properties:
+        plan: { $ref: "#/components/schemas/PlanID" }
+        billing_state: { $ref: "#/components/schemas/BillingState" }
+        paid_until: { type: [string, "null"], format: date-time }
+        usage:
+          type: object
+          required: [photos, storage_used]
+          properties:
+            photos: { type: integer }
+            storage_used: { type: integer }
+        limits: { $ref: "#/components/schemas/PlanInfo" }
+        subscription:
+          type: [object, "null"]
+          required: [plan, status, period_end, auto_renew]
+          properties:
+            plan: { $ref: "#/components/schemas/PlanID" }
+            status: { type: string, enum: [active, past_due, canceled, expired] }
+            period_end: { type: string, format: date-time }
+            auto_renew: { type: boolean }
+        plans:
+          type: array
+          items: { $ref: "#/components/schemas/PlanInfo" }
 
     Album:
       type: object

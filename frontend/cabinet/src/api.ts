@@ -29,13 +29,42 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export type User = { id: string; email: string | null }
 
+export type Plan = 'free' | 'basic' | 'pro'
+export type BillingState = 'ok' | 'grace' | 'suspended'
+
 export type Shop = {
   id: string
   slug: string
   name: string
   description: string
+  plan: Plan
+  billing_state: BillingState
+  paid_until: string | null
   storage_used: number
   storage_max: number
+  max_photos: number
+}
+
+export type PlanInfo = {
+  id: Plan
+  max_photos: number
+  max_storage: number
+  price_rub: number
+}
+
+export type Billing = {
+  plan: Plan
+  billing_state: BillingState
+  paid_until: string | null
+  usage: { photos: number; storage_used: number }
+  limits: PlanInfo
+  subscription: {
+    plan: Plan
+    status: 'active' | 'past_due' | 'canceled' | 'expired'
+    period_end: string
+    auto_renew: boolean
+  } | null
+  plans: PlanInfo[]
 }
 
 export type Album = {
@@ -98,4 +127,14 @@ export const api = {
   updateCaption: (photoId: string, caption: string) =>
     request<Photo>('PATCH', `/photos/${photoId}`, { caption }),
   deletePhoto: (photoId: string) => request<void>('DELETE', `/photos/${photoId}`),
+
+  getBilling: (shopId: string) => request<Billing>('GET', `/shops/${shopId}/billing`),
+  subscribe: (shopId: string, plan: Plan) =>
+    request<{ payment_id: string; confirmation_url: string }>(
+      'POST',
+      `/shops/${shopId}/billing/subscribe`,
+      { plan },
+    ),
+  cancelSubscription: (shopId: string) =>
+    request<void>('POST', `/shops/${shopId}/billing/cancel`),
 }
