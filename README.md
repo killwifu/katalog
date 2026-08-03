@@ -29,12 +29,11 @@ make down                    # останавливает стек
 1. Нажмите бейдж (или Code → Codespaces → Create) — codespace сам соберёт
    и поднимет весь стек (`make up` в postCreate, первая сборка ~5–10 минут;
    прогресс — в логе создания).
-2. В терминале codespace откройте порты наружу:
+2. В терминале codespace откройте порт наружу:
    ```sh
-   gh codespace ports visibility 80:public 9000:public -c "$CODESPACE_NAME"
+   gh codespace ports visibility 80:public -c "$CODESPACE_NAME"
    ```
-   (9000 — MinIO, нужен для загрузки фото из браузера; для просмотра
-   витрины достаточно 80).
+   (S3-загрузки тоже идут через 80-й порт — маршрут `/katalog/*` в Caddy).
 3. Публичная ссылка на демо — вкладка Ports, порт 80:
    `https://<codespace>-80.app.github.dev`. Демо-данные: `make seed`.
 
