@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -294,6 +295,15 @@ func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update photo", err)
 		return
 	}
+	// Стоп-слова: флаг на ручную проверку модератором, НЕ автоблок.
+	if req.Caption != nil && hasStopWord(a.Cfg.StopWords, caption) {
+		if err := a.Q.SetPhotoFlagged(r.Context(), db.SetPhotoFlaggedParams{
+			ID:      photo.ID,
+			Flagged: true,
+		}); err != nil {
+			a.Log.Error("flag photo failed", "photo_id", photo.ID, "error", err)
+		}
+	}
 	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusOK, toPhotoResponse(updated))
 }
@@ -335,6 +345,21 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// hasStopWord — регистронезависимое вхождение стоп-слова в подпись
+// (подстрока: работает и для кириллицы, и для словоформ).
+func hasStopWord(words []string, caption string) bool {
+	if len(words) == 0 || caption == "" {
+		return false
+	}
+	lc := strings.ToLower(caption)
+	for _, word := range words {
+		if strings.Contains(lc, strings.ToLower(word)) {
+			return true
+		}
+	}
+	return false
 }
 
 // ownedShop: магазин по id из тела запроса, с проверкой владения (404 чужому).

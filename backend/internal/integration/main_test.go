@@ -56,6 +56,8 @@ var env struct {
 	processor *worker.Processor
 	// yk — фейковый сервер API ЮKassa (создание платежей, статусы).
 	yk *fakeYooKassa
+	// mail — перехватчик писем (вместо SMTP), наполняется воркером.
+	mail *captureMail
 	// revalidated — слаги магазинов, полученные фейковой витриной
 	// через вебхук ревалидации.
 	revalidated chan string
@@ -191,10 +193,15 @@ func run(m *testing.M) int {
 	defer env.yk.srv.Close()
 	ykClient := billing.New(env.yk.srv.URL, "test-yk-shop", "test-yk-key")
 
+	env.mail = newCaptureMail()
+
 	cfg := config.Config{
 		SessionTTL:      time.Hour,
 		AuthRateLimit:   30,
 		PublicRateLimit: 300,
+		SiteURL:         "http://katalog.test",
+		StopWords:       []string{"контрафакт", "запрещёнка"},
+		Mail:            config.MailConfig{AdminEmail: "moderator@test.local"},
 		Billing: config.BillingConfig{
 			// Маленький лимит фото на free — для теста квоты.
 			Plans: map[string]config.PlanLimits{
@@ -211,6 +218,7 @@ func run(m *testing.M) int {
 		Q:          env.q,
 		Pool:       env.pool,
 		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
+		Tokens:     auth.NewTokens(rdb),
 		RDB:        rdb,
 		Store:      env.store,
 		Tasks:      asynqClient,
@@ -236,11 +244,13 @@ func run(m *testing.M) int {
 		Revalidate: notifier,
 		Billing:    ykClient,
 		BillingCfg: cfg.Billing,
+		Mail:       env.mail,
 		Log:        logger,
 	}
 	env.processor = processor
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
+	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
 	if err := asynqSrv.Start(mux); err != nil {
 		log.Printf("start asynq server: %v", err)
 		return 1

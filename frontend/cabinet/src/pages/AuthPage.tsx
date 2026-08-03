@@ -89,6 +89,10 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
               <Link to="/register" className="text-blue-600 hover:underline">
                 Зарегистрироваться
               </Link>
+              {' · '}
+              <Link to="/forgot-password" className="text-blue-600 hover:underline">
+                Забыли пароль?
+              </Link>
             </>
           )}
         </p>

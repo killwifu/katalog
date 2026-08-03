@@ -116,6 +116,23 @@ func (c *Client) Upload(ctx context.Context, key string, data []byte, contentTyp
 	return nil
 }
 
+// RemoveDerivatives удаляет только деривативы (drv/), оригинал остаётся.
+// Используется при модераторской блокировке: CDN перестаёт отдавать контент,
+// но оригинал сохраняется как доказательство/для разблокировки.
+func (c *Client) RemoveDerivatives(ctx context.Context, shopID, photoID uuid.UUID, sizes []int) error {
+	var errs []string
+	for _, s := range sizes {
+		key := DerivativeKey(shopID, photoID, s)
+		if err := c.ops.RemoveObject(ctx, c.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", key, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("remove derivatives: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 // RemovePhoto удаляет оригинал и все деривативы фото.
 func (c *Client) RemovePhoto(ctx context.Context, shopID, photoID uuid.UUID, sizes []int) error {
 	keys := []string{OrigKey(shopID, photoID)}

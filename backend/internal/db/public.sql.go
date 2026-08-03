@@ -218,7 +218,7 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 }
 
 const listPublicPhotos = `-- name: ListPublicPhotos :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE album_id = $1 AND status = 'ready'
 ORDER BY sort_order, created_at, id
 LIMIT $2 OFFSET $3
@@ -254,6 +254,7 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Flagged,
 		); err != nil {
 			return nil, err
 		}
@@ -266,7 +267,7 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 }
 
 const searchPhotosFTS = `-- name: SearchPhotosFTS :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged,
        ts_rank(p.caption_tsv, websearch_to_tsquery('russian', $2)) AS rank
 FROM photos p
 JOIN albums a ON a.id = p.album_id
@@ -299,6 +300,7 @@ type SearchPhotosFTSRow struct {
 	SortOrder  int32              `json:"sort_order"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	Flagged    bool               `json:"flagged"`
 	Rank       float32            `json:"rank"`
 }
 
@@ -327,6 +329,7 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Flagged,
 			&i.Rank,
 		); err != nil {
 			return nil, err
@@ -340,7 +343,7 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 }
 
 const searchPhotosTrgm = `-- name: SearchPhotosTrgm :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged,
        word_similarity($2, p.caption) AS sim
 FROM photos p
 JOIN albums a ON a.id = p.album_id
@@ -373,6 +376,7 @@ type SearchPhotosTrgmRow struct {
 	SortOrder  int32              `json:"sort_order"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	Flagged    bool               `json:"flagged"`
 	Sim        float32            `json:"sim"`
 }
 
@@ -402,6 +406,7 @@ func (q *Queries) SearchPhotosTrgm(ctx context.Context, arg SearchPhotosTrgmPara
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Flagged,
 			&i.Sim,
 		); err != nil {
 			return nil, err

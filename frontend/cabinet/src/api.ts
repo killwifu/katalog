@@ -27,7 +27,36 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T
 }
 
-export type User = { id: string; email: string | null }
+export type User = {
+  id: string
+  email: string | null
+  role: 'user' | 'admin'
+  email_verified: boolean
+}
+
+export type AdminComplaint = {
+  id: string
+  shop_id: string | null
+  shop_slug: string | null
+  photo_id: string | null
+  photo_album_id: string | null
+  reason: string
+  reporter_name: string
+  reporter_email: string
+  content_url: string
+  status: 'open' | 'in_review' | 'resolved' | 'rejected'
+  created_at: string
+  resolved_at: string | null
+}
+
+export type FlaggedPhoto = {
+  id: string
+  shop_id: string
+  shop_slug: string
+  album_id: string
+  caption: string
+  status: PhotoStatus
+}
 
 export type Plan = 'free' | 'basic' | 'pro'
 export type BillingState = 'ok' | 'grace' | 'suspended'
@@ -99,6 +128,11 @@ export const api = {
     request<User>('POST', '/auth/login', { email, password }),
   logout: () => request<void>('POST', '/auth/logout'),
   me: () => request<User>('GET', '/auth/me'),
+  forgotPassword: (email: string) =>
+    request<void>('POST', '/auth/password/forgot', { email }),
+  resetPassword: (token: string, password: string) =>
+    request<void>('POST', '/auth/password/reset', { token, password }),
+  verifyEmail: (token: string) => request<void>('POST', '/auth/verify-email', { token }),
 
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),
@@ -137,4 +171,28 @@ export const api = {
     ),
   cancelSubscription: (shopId: string) =>
     request<void>('POST', `/shops/${shopId}/billing/cancel`),
+
+  // Админ-зона (role=admin).
+  adminListComplaints: (status?: string) =>
+    request<AdminComplaint[]>('GET', `/admin/complaints${status ? `?status=${status}` : ''}`),
+  adminSetComplaintStatus: (id: string, status: string) =>
+    request<{ id: string; status: string }>('PATCH', `/admin/complaints/${id}`, { status }),
+  adminBlockPhoto: (photoId: string, complaintId?: string) =>
+    request<{ id: string; status: string }>('POST', `/admin/photos/${photoId}/block`, {
+      complaint_id: complaintId ?? '',
+      note: '',
+    }),
+  adminHideAlbum: (albumId: string, complaintId?: string) =>
+    request<void>('POST', `/admin/albums/${albumId}/hide`, {
+      complaint_id: complaintId ?? '',
+      note: '',
+    }),
+  adminSuspendShop: (shopId: string, complaintId?: string) =>
+    request<void>('POST', `/admin/shops/${shopId}/suspend`, {
+      complaint_id: complaintId ?? '',
+      note: '',
+    }),
+  adminListFlagged: () => request<FlaggedPhoto[]>('GET', '/admin/photos/flagged'),
+  adminUnflagPhoto: (photoId: string) =>
+    request<void>('POST', `/admin/photos/${photoId}/unflag`),
 }

@@ -14,7 +14,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body>
+        {children}
+        <footer className="site-footer">
+          <nav>
+            <a href="/terms">Оферта</a>
+            <a href="/content-policy">Политика контента</a>
+            <a href="/privacy">Персональные данные</a>
+            <a href="/abuse">Пожаловаться на контент</a>
+          </nav>
+        </footer>
+      </body>
     </html>
   )
 }

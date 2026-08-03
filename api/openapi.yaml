@@ -6,7 +6,7 @@ info:
     клиентские типы генерируются из этого файла (orval).
     Аутентификация: сессионная httpOnly cookie `katalog_session`.
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
-  version: 0.4.0
+  version: 0.5.0
 servers:
   - url: /
 
@@ -81,6 +81,72 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
         "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      summary: Запросить сброс пароля (письмо со ссылкой)
+      description: >
+        Всегда 204 — существование email не раскрывается. Если email
+        зарегистрирован, на него уходит одноразовая ссылка (TTL 1 час).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "204": { description: Принято }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/password/reset:
+    post:
+      operationId: resetPassword
+      summary: Установить новый пароль по токену из письма
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        "204": { description: Пароль обновлён }
+        "400":
+          description: Токен недействителен/использован (error=invalid_token) или слабый пароль
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/verify-email:
+    post:
+      operationId: verifyEmail
+      summary: Подтвердить email по токену из письма регистрации
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "204": { description: Email подтверждён }
+        "400":
+          description: Токен недействителен или использован (error=invalid_token)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/shops:
     post:
@@ -650,6 +716,198 @@ paths:
                         updated_at: { type: string, format: date-time }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/public/complaints:
+    post:
+      operationId: createComplaint
+      summary: Жалоба правообладателя на контент (notice-and-takedown), без auth
+      description: >
+        Жалоба привязывается к магазину/фото, если ссылку удалось распознать
+        (/{slug} или /media/{shop_id}/{photo_id}/...); нераспознанный URL
+        не мешает подать жалобу. Модератор получает email-уведомление.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, reporter_name, reporter_email, reason]
+              properties:
+                url: { type: string, maxLength: 1000 }
+                reporter_name: { type: string, maxLength: 200 }
+                reporter_email: { type: string, format: email }
+                reason: { type: string, minLength: 10, maxLength: 5000 }
+      responses:
+        "201":
+          description: Жалоба зарегистрирована
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, const: open }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/admin/complaints:
+    get:
+      operationId: adminListComplaints
+      summary: "[admin] Список жалоб (фильтр по статусу)"
+      description: Все /api/v1/admin/* доступны только role=admin; остальным — 404.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [open, in_review, resolved, rejected] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminComplaint" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/complaints/{complaintID}:
+    patch:
+      operationId: adminUpdateComplaint
+      summary: "[admin] Сменить статус жалобы (с записью в аудит-лог)"
+      parameters:
+        - name: complaintID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, in_review, resolved, rejected] }
+      responses:
+        "200":
+          description: Статус обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/photos/flagged:
+    get:
+      operationId: adminListFlaggedPhotos
+      summary: "[admin] Фото, помеченные стоп-словами на ручную проверку"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, shop_id, shop_slug, album_id, caption, status]
+                  properties:
+                    id: { type: string, format: uuid }
+                    shop_id: { type: string, format: uuid }
+                    shop_slug: { type: string }
+                    album_id: { type: string, format: uuid }
+                    caption: { type: string }
+                    status: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/photos/{photoID}/block:
+    post:
+      operationId: adminBlockPhoto
+      summary: "[admin] Скрыть фото (status=blocked, деривативы удаляются из CDN)"
+      description: >
+        Оригинал в S3 сохраняется. Владелец магазина получает email.
+        Действие идемпотентно и пишется в аудит-лог.
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "200":
+          description: Фото заблокировано
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, const: blocked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/photos/{photoID}/unflag:
+    post:
+      operationId: adminUnflagPhoto
+      summary: "[admin] Снять флаг ручной проверки (ложное срабатывание стоп-слова)"
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Флаг снят }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/albums/{albumID}/hide:
+    post:
+      operationId: adminHideAlbum
+      summary: "[admin] Скрыть альбом с витрины (is_hidden), email владельцу"
+      parameters:
+        - name: albumID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "204": { description: Альбом скрыт }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/admin/shops/{shopID}/suspend:
+    post:
+      operationId: adminSuspendShop
+      summary: "[admin] Снять магазин с публикации (status=suspended), email владельцу"
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "204": { description: Магазин снят с публикации }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   parameters:
     ShopSlug:
@@ -717,10 +975,37 @@ components:
 
     User:
       type: object
-      required: [id]
+      required: [id, role, email_verified]
       properties:
         id: { type: string, format: uuid }
         email: { type: [string, "null"], format: email }
+        role: { type: string, enum: [user, admin] }
+        email_verified: { type: boolean }
+
+    AdminActionBody:
+      type: object
+      description: Необязательная привязка действия модератора к жалобе (аудит-лог)
+      properties:
+        complaint_id: { type: string, format: uuid }
+        note: { type: string }
+
+    AdminComplaint:
+      type: object
+      required: [id, shop_id, shop_slug, photo_id, photo_album_id, reason,
+                 reporter_name, reporter_email, content_url, status, created_at, resolved_at]
+      properties:
+        id: { type: string, format: uuid }
+        shop_id: { type: [string, "null"], format: uuid }
+        shop_slug: { type: [string, "null"] }
+        photo_id: { type: [string, "null"], format: uuid }
+        photo_album_id: { type: [string, "null"], format: uuid }
+        reason: { type: string }
+        reporter_name: { type: string }
+        reporter_email: { type: string }
+        content_url: { type: string }
+        status: { type: string, enum: [open, in_review, resolved, rejected] }
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
 
     Shop:
       type: object

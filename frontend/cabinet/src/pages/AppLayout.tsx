@@ -17,6 +17,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const shops = useQuery({ queryKey: ['shops'], queryFn: api.listShops })
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
 
   if (shops.isPending) {
     return <div className="p-8 text-center text-gray-500">Загрузка…</div>
@@ -51,6 +52,11 @@ export function AppLayout() {
               <span className="hidden sm:inline">
                 {usedMB} / {maxMB} МБ
               </span>
+              {me.data?.role === 'admin' && (
+                <Link to="/admin" className="text-gray-500 hover:text-gray-900">
+                  Модерация
+                </Link>
+              )}
               <Link to="/billing" className="text-gray-500 hover:text-gray-900">
                 Тариф
               </Link>

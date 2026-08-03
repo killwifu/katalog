@@ -18,12 +18,19 @@ type credentialsRequest struct {
 }
 
 type userResponse struct {
-	ID    string  `json:"id"`
-	Email *string `json:"email"`
+	ID            string  `json:"id"`
+	Email         *string `json:"email"`
+	Role          string  `json:"role"`
+	EmailVerified bool    `json:"email_verified"`
 }
 
 func toUserResponse(u db.User) userResponse {
-	return userResponse{ID: u.ID.String(), Email: u.Email}
+	return userResponse{
+		ID:            u.ID.String(),
+		Email:         u.Email,
+		Role:          string(u.Role),
+		EmailVerified: u.EmailVerifiedAt.Valid,
+	}
 }
 
 func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +72,7 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if !a.startSession(w, r, user) {
 		return
 	}
+	a.sendVerificationEmail(r.Context(), user)
 	writeJSON(w, http.StatusCreated, toUserResponse(user))
 }
 

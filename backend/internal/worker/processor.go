@@ -17,6 +17,7 @@ import (
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
+	"katalog/backend/internal/mail"
 	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
@@ -29,6 +30,7 @@ type Processor struct {
 	Revalidate *revalidate.Notifier
 	Billing    *billing.Client
 	BillingCfg config.BillingConfig
+	Mail       mail.Sender
 	Log        *slog.Logger
 }
 

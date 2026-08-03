@@ -80,6 +80,24 @@ func (a *API) requireShop(next http.Handler) http.Handler {
 	})
 }
 
+// requireAdmin — доступ только для users.role=admin. Не-админам всегда 404,
+// чтобы не раскрывать существование админ-зоны.
+func (a *API) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, err := a.Q.GetUserByID(r.Context(), userID(r))
+		if err != nil {
+			a.Log.Error("load user for admin check failed", "error", err)
+			apiError(w, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		if user.Role != db.UserRoleAdmin {
+			apiError(w, http.StatusNotFound, "not_found", "not found")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // rateLimit — фиксированное окно в Redis: limit запросов в минуту с одного IP.
 func (a *API) rateLimit(name string, limit int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

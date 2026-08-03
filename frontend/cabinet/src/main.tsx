@@ -13,9 +13,11 @@ import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
+import { AdminPage } from './pages/AdminPage'
 import { AuthPage } from './pages/AuthPage'
 import { BillingPage } from './pages/BillingPage'
 import { CaptionsPage } from './pages/CaptionsPage'
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -34,6 +36,31 @@ const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
   component: () => <AuthPage mode="register" />,
+})
+
+// Почтовые auth-потоки: без сессии (ссылки приходят в письмах).
+const tokenSearch = (s: Record<string, unknown>): { token: string } => ({
+  token: typeof s.token === 'string' ? s.token : '',
+})
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordPage,
+})
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  validateSearch: tokenSearch,
+  component: ResetPasswordPage,
+})
+
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/verify-email',
+  validateSearch: tokenSearch,
+  component: VerifyEmailPage,
 })
 
 // Все приватные экраны — под guard'ом сессии.
@@ -74,11 +101,20 @@ const billingRoute = createRoute({
   component: BillingPage,
 })
 
+const adminRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/admin',
+  component: AdminPage,
+})
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
     registerRoute,
-    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute]),
+    forgotPasswordRoute,
+    resetPasswordRoute,
+    verifyEmailRoute,
+    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute, adminRoute]),
   ]),
   basepath: '/app',
 })

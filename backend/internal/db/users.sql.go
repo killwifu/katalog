@@ -15,7 +15,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, tg_user_id)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, tg_user_id, created_at, updated_at
+RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at
 `
 
 type CreateUserParams struct {
@@ -34,6 +34,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.TgUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
 }
@@ -49,7 +51,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, tg_user_id, created_at, updated_at FROM users
+SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at FROM users
 WHERE email = $1
 `
 
@@ -63,12 +65,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email *string) (User, erro
 		&i.TgUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, tg_user_id, created_at, updated_at FROM users
+SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at FROM users
 WHERE id = $1
 `
 
@@ -82,6 +86,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.TgUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Role,
+		&i.EmailVerifiedAt,
 	)
 	return i, err
 }

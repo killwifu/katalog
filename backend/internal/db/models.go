@@ -143,6 +143,51 @@ func (ns NullLeadChannel) Value() (driver.Value, error) {
 	return string(ns.LeadChannel), nil
 }
 
+type ModerationAction string
+
+const (
+	ModerationActionComplaintStatus ModerationAction = "complaint_status"
+	ModerationActionBlockPhoto      ModerationAction = "block_photo"
+	ModerationActionHideAlbum       ModerationAction = "hide_album"
+	ModerationActionSuspendShop     ModerationAction = "suspend_shop"
+	ModerationActionUnflagPhoto     ModerationAction = "unflag_photo"
+)
+
+func (e *ModerationAction) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ModerationAction(s)
+	case string:
+		*e = ModerationAction(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ModerationAction: %T", src)
+	}
+	return nil
+}
+
+type NullModerationAction struct {
+	ModerationAction ModerationAction `json:"moderation_action"`
+	Valid            bool             `json:"valid"` // Valid is true if ModerationAction is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullModerationAction) Scan(value interface{}) error {
+	if value == nil {
+		ns.ModerationAction, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ModerationAction.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullModerationAction) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ModerationAction), nil
+}
+
 type PaymentStatus string
 
 const (
@@ -403,6 +448,48 @@ func (ns NullSubscriptionStatus) Value() (driver.Value, error) {
 	return string(ns.SubscriptionStatus), nil
 }
 
+type UserRole string
+
+const (
+	UserRoleUser  UserRole = "user"
+	UserRoleAdmin UserRole = "admin"
+)
+
+func (e *UserRole) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserRole(s)
+	case string:
+		*e = UserRole(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserRole: %T", src)
+	}
+	return nil
+}
+
+type NullUserRole struct {
+	UserRole UserRole `json:"user_role"`
+	Valid    bool     `json:"valid"` // Valid is true if UserRole is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserRole) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserRole, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserRole.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserRole) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserRole), nil
+}
+
 type Album struct {
 	ID           uuid.UUID          `json:"id"`
 	ShopID       uuid.UUID          `json:"shop_id"`
@@ -418,13 +505,16 @@ type Album struct {
 }
 
 type Complaint struct {
-	ID         uuid.UUID          `json:"id"`
-	ShopID     uuid.UUID          `json:"shop_id"`
-	PhotoID    uuid.NullUUID      `json:"photo_id"`
-	Reason     string             `json:"reason"`
-	Status     ComplaintStatus    `json:"status"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	ResolvedAt pgtype.Timestamptz `json:"resolved_at"`
+	ID            uuid.UUID          `json:"id"`
+	ShopID        uuid.NullUUID      `json:"shop_id"`
+	PhotoID       uuid.NullUUID      `json:"photo_id"`
+	Reason        string             `json:"reason"`
+	Status        ComplaintStatus    `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ResolvedAt    pgtype.Timestamptz `json:"resolved_at"`
+	ReporterName  string             `json:"reporter_name"`
+	ReporterEmail string             `json:"reporter_email"`
+	ContentUrl    string             `json:"content_url"`
 }
 
 type DailyStat struct {
@@ -442,6 +532,18 @@ type LeadClick struct {
 	PhotoID     uuid.NullUUID      `json:"photo_id"`
 	Channel     LeadChannel        `json:"channel"`
 	VisitorHash string             `json:"visitor_hash"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type ModerationLog struct {
+	ID          uuid.UUID          `json:"id"`
+	AdminID     uuid.UUID          `json:"admin_id"`
+	Action      ModerationAction   `json:"action"`
+	ComplaintID uuid.NullUUID      `json:"complaint_id"`
+	ShopID      uuid.NullUUID      `json:"shop_id"`
+	AlbumID     uuid.NullUUID      `json:"album_id"`
+	PhotoID     uuid.NullUUID      `json:"photo_id"`
+	Note        string             `json:"note"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -473,6 +575,7 @@ type Photo struct {
 	SortOrder  int32              `json:"sort_order"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	Flagged    bool               `json:"flagged"`
 }
 
 type Shop struct {
@@ -505,10 +608,12 @@ type Subscription struct {
 }
 
 type User struct {
-	ID           uuid.UUID          `json:"id"`
-	Email        *string            `json:"email"`
-	PasswordHash *string            `json:"password_hash"`
-	TgUserID     pgtype.Int8        `json:"tg_user_id"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              uuid.UUID          `json:"id"`
+	Email           *string            `json:"email"`
+	PasswordHash    *string            `json:"password_hash"`
+	TgUserID        pgtype.Int8        `json:"tg_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Role            UserRole           `json:"role"`
+	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }

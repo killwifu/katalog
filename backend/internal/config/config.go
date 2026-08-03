@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -31,7 +32,25 @@ type Config struct {
 	StorefrontURL string
 	// RevalidateSecret — shared secret вебхука Go -> Next (пустой = вебхук выключен).
 	RevalidateSecret string
-	Billing          BillingConfig
+	// SiteURL — публичный базовый URL (ссылки в письмах: сброс пароля и т.п.).
+	SiteURL string
+	// StopWords — стоп-слова подписей: совпадение ставит фото флаг ручной
+	// проверки модератором (не автоблок). Пустой список = проверка выключена.
+	StopWords []string
+	Billing   BillingConfig
+	Mail      MailConfig
+}
+
+// MailConfig — транзакционная почта. Пустой SMTPHost = письма пишутся в лог.
+type MailConfig struct {
+	SMTPHost string
+	SMTPPort int
+	SMTPUser string
+	SMTPPass string
+	// From — адрес отправителя писем.
+	From string
+	// AdminEmail — куда уходят уведомления о новых жалобах (пусто = не слать).
+	AdminEmail string
 }
 
 // PlanLimits — лимиты и цена тарифа. PriceKopecks 0 = бесплатный тариф.
@@ -80,6 +99,16 @@ func Load() Config {
 		PublicRateLimit:  getenvInt64("PUBLIC_RATE_LIMIT", 300),
 		StorefrontURL:    getenv("STOREFRONT_URL", "http://localhost:3000"),
 		RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
+		SiteURL:          getenv("SITE_URL", "http://localhost"),
+		StopWords:        splitList(os.Getenv("STOP_WORDS")),
+		Mail: MailConfig{
+			SMTPHost:   os.Getenv("SMTP_HOST"),
+			SMTPPort:   int(getenvInt64("SMTP_PORT", 587)),
+			SMTPUser:   os.Getenv("SMTP_USER"),
+			SMTPPass:   os.Getenv("SMTP_PASS"),
+			From:       getenv("MAIL_FROM", "noreply@localhost"),
+			AdminEmail: os.Getenv("ADMIN_EMAIL"),
+		},
 		Billing: BillingConfig{
 			Plans: map[string]PlanLimits{
 				"free": {
@@ -105,6 +134,17 @@ func Load() Config {
 			ReturnURL:         getenv("BILLING_RETURN_URL", "http://localhost/app/billing"),
 		},
 	}
+}
+
+// splitList — comma-separated env в список непустых значений без пробелов.
+func splitList(raw string) []string {
+	var out []string
+	for part := range strings.SplitSeq(raw, ",") {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func getenvInt64(key string, fallback int64) int64 {

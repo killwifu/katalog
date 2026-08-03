@@ -25,6 +25,7 @@ var reservedSlugs = map[string]struct{}{
 	"about": {}, "help": {}, "support": {}, "blog": {}, "docs": {}, "status": {},
 	"healthz": {}, "metrics": {}, "mail": {}, "billing": {}, "settings": {},
 	"terms": {}, "privacy": {}, "abuse": {}, "root": {}, "system": {},
+	"content-policy": {},
 }
 
 func validateSlug(slug string) string {

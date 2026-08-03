@@ -15,7 +15,26 @@ const (
 	TypeStatsAggregate   = "stats:aggregate"
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
+	TypeEmailSend        = "email:send"
 )
+
+type EmailSendPayload struct {
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Text    string `json:"text"`
+}
+
+// NewEmailSend — асинхронная отправка письма воркером (ретраи бесплатно).
+func NewEmailSend(to, subject, text string) (*asynq.Task, error) {
+	payload, err := json.Marshal(EmailSendPayload{To: to, Subject: subject, Text: text})
+	if err != nil {
+		return nil, fmt.Errorf("marshal email:send payload: %w", err)
+	}
+	return asynq.NewTask(TypeEmailSend, payload,
+		asynq.MaxRetry(5),
+		asynq.Timeout(time.Minute),
+	), nil
+}
 
 type PhotoProcessPayload struct {
 	PhotoID uuid.UUID `json:"photo_id"`

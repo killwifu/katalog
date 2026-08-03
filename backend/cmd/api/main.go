@@ -64,6 +64,7 @@ func run(logger *slog.Logger) error {
 		Q:          db.New(pool),
 		Pool:       pool,
 		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
+		Tokens:     auth.NewTokens(rdb),
 		RDB:        rdb,
 		Store:      store,
 		Tasks:      tasksClient,

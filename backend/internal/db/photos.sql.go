@@ -15,7 +15,7 @@ import (
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photos (album_id, shop_id, orig_size, source, sort_order)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
 `
 
 type CreatePhotoParams struct {
@@ -50,6 +50,7 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Flagged,
 	)
 	return i, err
 }
@@ -73,7 +74,7 @@ func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) (int64
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE id = $1
 `
 
@@ -95,12 +96,13 @@ func (q *Queries) GetPhoto(ctx context.Context, id uuid.UUID) (Photo, error) {
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Flagged,
 	)
 	return i, err
 }
 
 const getPhotoForShop = `-- name: GetPhotoForShop :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -128,12 +130,13 @@ func (q *Queries) GetPhotoForShop(ctx context.Context, arg GetPhotoForShopParams
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Flagged,
 	)
 	return i, err
 }
 
 const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE album_id = $1 AND shop_id = $2
 ORDER BY sort_order, created_at
 `
@@ -167,6 +170,7 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Flagged,
 		); err != nil {
 			return nil, err
 		}
@@ -193,7 +197,7 @@ const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
 SET status = 'processing', orig_size = $2, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
 `
 
 type SetPhotoProcessingParams struct {
@@ -220,6 +224,7 @@ func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessing
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Flagged,
 	)
 	return i, err
 }
@@ -251,7 +256,7 @@ const updatePhotoCaption = `-- name: UpdatePhotoCaption :one
 UPDATE photos
 SET caption = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
 `
 
 type UpdatePhotoCaptionParams struct {
@@ -278,6 +283,7 @@ func (q *Queries) UpdatePhotoCaption(ctx context.Context, arg UpdatePhotoCaption
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Flagged,
 	)
 	return i, err
 }

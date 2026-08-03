@@ -17,6 +17,7 @@ import (
 	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/mail"
 	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
@@ -64,6 +65,7 @@ func run(logger *slog.Logger) error {
 		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
 		Billing:    billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
 		BillingCfg: cfg.Billing,
+		Mail:       mail.New(cfg.Mail, logger),
 		Log:        logger,
 	}
 
@@ -85,6 +87,7 @@ func run(logger *slog.Logger) error {
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	mux.HandleFunc(tasks.TypeBillingLifecycle, processor.HandleBillingLifecycle)
 	mux.HandleFunc(tasks.TypeBillingRenew, processor.HandleBillingRenew)
+	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
 
 	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
 	scheduler := asynq.NewScheduler(redisOpt, &asynq.SchedulerOpts{Logger: asynqLogger{logger}})

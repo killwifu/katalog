@@ -98,6 +98,9 @@ services:
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       BILLING_RETURN_URL: ${BILLING_RETURN_URL:-http://localhost/app/billing}
+      SITE_URL: ${SITE_URL:-http://localhost}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      STOP_WORDS: ${STOP_WORDS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +133,11 @@ services:
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-dev-revalidate-secret}
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@localhost}
     depends_on:
       postgres:
         condition: service_healthy

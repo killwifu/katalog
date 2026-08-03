@@ -27,6 +27,7 @@ type API struct {
 	// Pool — для транзакций (обработка платёжных вебхуков).
 	Pool       *pgxpool.Pool
 	Sessions   *auth.Sessions
+	Tokens     *auth.Tokens
 	RDB        *redis.Client
 	Store      *storage.Client
 	Tasks      *asynq.Client
@@ -55,6 +56,8 @@ func (a *API) Router() http.Handler {
 			r.Get("/shops/{slug}/search", a.handlePublicSearch)
 			r.Post("/lead-click", a.handleLeadClick)
 			r.Get("/sitemap", a.handlePublicSitemap)
+			// Notice-and-takedown: жалоба правообладателя, без auth.
+			r.Post("/complaints", a.handleCreateComplaint)
 		})
 
 		// Вебхук ЮKassa: без сессии; подлинность проверяется запросом
@@ -66,6 +69,9 @@ func (a *API) Router() http.Handler {
 			r.Use(a.rateLimit("auth", a.Cfg.AuthRateLimit))
 			r.Post("/auth/register", a.handleRegister)
 			r.Post("/auth/login", a.handleLogin)
+			r.Post("/auth/password/forgot", a.handleForgotPassword)
+			r.Post("/auth/password/reset", a.handleResetPassword)
+			r.Post("/auth/verify-email", a.handleVerifyEmail)
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(a.requireAuth)
@@ -102,6 +108,18 @@ func (a *API) Router() http.Handler {
 			r.Post("/photos/confirm", a.handleConfirmPhotos)
 			r.Patch("/photos/{photoID}", a.handleUpdatePhoto)
 			r.Delete("/photos/{photoID}", a.handleDeletePhoto)
+
+			// Админ-зона: только для users.role=admin (не-админам 404).
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(a.requireAdmin)
+				r.Get("/complaints", a.handleAdminListComplaints)
+				r.Patch("/complaints/{complaintID}", a.handleAdminUpdateComplaint)
+				r.Get("/photos/flagged", a.handleAdminListFlagged)
+				r.Post("/photos/{photoID}/block", a.handleAdminBlockPhoto)
+				r.Post("/photos/{photoID}/unflag", a.handleAdminUnflagPhoto)
+				r.Post("/albums/{albumID}/hide", a.handleAdminHideAlbum)
+				r.Post("/shops/{shopID}/suspend", a.handleAdminSuspendShop)
+			})
 		})
 	})
 
