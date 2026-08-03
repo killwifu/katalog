@@ -138,6 +138,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-noreply@localhost}
+      SITE_URL: ${SITE_URL:-http://localhost}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      TRAFFIC_ALERT_MULTIPLIER: ${TRAFFIC_ALERT_MULTIPLIER:-5}
+      TRAFFIC_ALERT_MIN_VIEWS: ${TRAFFIC_ALERT_MIN_VIEWS:-1000}
     depends_on:
       postgres:
         condition: service_healthy

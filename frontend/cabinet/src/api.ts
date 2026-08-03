@@ -121,6 +121,15 @@ export type Photo = {
 
 export type ConfirmResult = { photo_id: string; status: string; error?: string }
 
+export type ShopStats = {
+  days: number
+  totals: { views: number; unique_visitors: number; lead_clicks: number }
+  daily: { date: string; views: number; unique_visitors: number; lead_clicks: number }[]
+  channels: { channel: string; clicks: number }[]
+  top_albums: { album_id: string; title: string; views: number }[]
+  top_photos: { photo_id: string; caption: string; clicks: number; thumb_url?: string }[]
+}
+
 export const api = {
   register: (email: string, password: string) =>
     request<User>('POST', '/auth/register', { email, password }),
@@ -161,6 +170,9 @@ export const api = {
   updateCaption: (photoId: string, caption: string) =>
     request<Photo>('PATCH', `/photos/${photoId}`, { caption }),
   deletePhoto: (photoId: string) => request<void>('DELETE', `/photos/${photoId}`),
+
+  getStats: (shopId: string, days: number) =>
+    request<ShopStats>('GET', `/shops/${shopId}/stats?days=${days}`),
 
   getBilling: (shopId: string) => request<Billing>('GET', `/shops/${shopId}/billing`),
   subscribe: (shopId: string, plan: Plan) =>

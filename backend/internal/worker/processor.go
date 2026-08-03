@@ -29,7 +29,7 @@ type Processor struct {
 	RDB        *redis.Client
 	Revalidate *revalidate.Notifier
 	Billing    *billing.Client
-	BillingCfg config.BillingConfig
+	Cfg        config.Config
 	Mail       mail.Sender
 	Log        *slog.Logger
 }

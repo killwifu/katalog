@@ -64,7 +64,7 @@ func run(logger *slog.Logger) error {
 		RDB:        rdb,
 		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
 		Billing:    billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
-		BillingCfg: cfg.Billing,
+		Cfg:        cfg,
 		Mail:       mail.New(cfg.Mail, logger),
 		Log:        logger,
 	}
@@ -88,6 +88,8 @@ func run(logger *slog.Logger) error {
 	mux.HandleFunc(tasks.TypeBillingLifecycle, processor.HandleBillingLifecycle)
 	mux.HandleFunc(tasks.TypeBillingRenew, processor.HandleBillingRenew)
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
+	mux.HandleFunc(tasks.TypeStatsDigest, processor.HandleStatsDigest)
+	mux.HandleFunc(tasks.TypeTrafficAlert, processor.HandleTrafficAlert)
 
 	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
 	scheduler := asynq.NewScheduler(redisOpt, &asynq.SchedulerOpts{Logger: asynqLogger{logger}})
@@ -105,6 +107,22 @@ func run(logger *slog.Logger) error {
 	}
 	if _, err := scheduler.Register("0 1 * * *", tasks.NewBillingRenew()); err != nil {
 		return fmt.Errorf("register billing renew cron: %w", err)
+	}
+	// Алерт на аномальный трафик — после ночной агрегации daily_stats.
+	alertTask, err := tasks.NewTrafficAlert("")
+	if err != nil {
+		return err
+	}
+	if _, err := scheduler.Register("15 1 * * *", alertTask); err != nil {
+		return fmt.Errorf("register traffic alert cron: %w", err)
+	}
+	// Ежемесячный дайджест продавцам — 1-го числа за прошлый месяц.
+	digestTask, err := tasks.NewStatsDigest("")
+	if err != nil {
+		return err
+	}
+	if _, err := scheduler.Register("0 6 1 * *", digestTask); err != nil {
+		return fmt.Errorf("register digest cron: %w", err)
 	}
 	if err := scheduler.Start(); err != nil {
 		return fmt.Errorf("start scheduler: %w", err)

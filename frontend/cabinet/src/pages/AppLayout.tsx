@@ -52,6 +52,9 @@ export function AppLayout() {
               <span className="hidden sm:inline">
                 {usedMB} / {maxMB} МБ
               </span>
+              <Link to="/stats" className="text-gray-500 hover:text-gray-900">
+                Статистика
+              </Link>
               {me.data?.role === 'admin' && (
                 <Link to="/admin" className="text-gray-500 hover:text-gray-900">
                   Модерация

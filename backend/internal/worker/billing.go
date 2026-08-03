@@ -19,7 +19,7 @@ func (p *Processor) HandleBillingLifecycle(ctx context.Context, _ *asynq.Task) e
 	if err != nil {
 		return fmt.Errorf("shops enter grace: %w", err)
 	}
-	suspended, err := p.Q.ShopsEnterSuspended(ctx, int32(p.BillingCfg.GraceDays))
+	suspended, err := p.Q.ShopsEnterSuspended(ctx, int32(p.Cfg.Billing.GraceDays))
 	if err != nil {
 		return fmt.Errorf("shops enter suspended: %w", err)
 	}
@@ -53,7 +53,7 @@ func (p *Processor) HandleBillingRenew(ctx context.Context, _ *asynq.Task) error
 	}
 	var charged int
 	for _, sub := range subs {
-		limits := p.BillingCfg.Limits(string(sub.Plan))
+		limits := p.Cfg.Billing.Limits(string(sub.Plan))
 		if limits.PriceKopecks <= 0 {
 			p.Log.Warn("skip renew: plan has no price", "shop_id", sub.ShopID, "plan", sub.Plan)
 			continue

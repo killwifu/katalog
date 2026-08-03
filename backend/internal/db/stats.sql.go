@@ -12,6 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveShops = `-- name: CountActiveShops :one
+SELECT count(*) FROM shops
+WHERE status = 'active'
+`
+
+func (q *Queries) CountActiveShops(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveShops)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLeadClicksBetween = `-- name: CountLeadClicksBetween :many
 SELECT shop_id, count(*) AS clicks
 FROM lead_clicks
@@ -39,6 +51,344 @@ func (q *Queries) CountLeadClicksBetween(ctx context.Context, arg CountLeadClick
 	for rows.Next() {
 		var i CountLeadClicksBetweenRow
 		if err := rows.Scan(&i.ShopID, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countPhotosUploadedSince = `-- name: CountPhotosUploadedSince :one
+SELECT count(*) FROM photos
+WHERE created_at >= $1
+`
+
+// Бизнес-метрики для /metrics.
+func (q *Queries) CountPhotosUploadedSince(ctx context.Context, createdAt pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, countPhotosUploadedSince, createdAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getShopLeadsByChannel = `-- name: GetShopLeadsByChannel :many
+SELECT channel, count(*)::bigint AS clicks
+FROM lead_clicks
+WHERE shop_id = $1 AND created_at >= $2 AND created_at < $3
+GROUP BY channel
+ORDER BY clicks DESC
+`
+
+type GetShopLeadsByChannelParams struct {
+	ShopID      uuid.UUID          `json:"shop_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+}
+
+type GetShopLeadsByChannelRow struct {
+	Channel LeadChannel `json:"channel"`
+	Clicks  int64       `json:"clicks"`
+}
+
+// Клики «написать» — реальное время из lead_clicks (не ждут ночной агрегации).
+func (q *Queries) GetShopLeadsByChannel(ctx context.Context, arg GetShopLeadsByChannelParams) ([]GetShopLeadsByChannelRow, error) {
+	rows, err := q.db.Query(ctx, getShopLeadsByChannel, arg.ShopID, arg.CreatedAt, arg.CreatedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetShopLeadsByChannelRow
+	for rows.Next() {
+		var i GetShopLeadsByChannelRow
+		if err := rows.Scan(&i.Channel, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getShopStatsDaily = `-- name: GetShopStatsDaily :many
+SELECT date, views, unique_visitors, lead_clicks
+FROM daily_stats
+WHERE shop_id = $1 AND album_id IS NULL AND date >= $2 AND date <= $3
+ORDER BY date
+`
+
+type GetShopStatsDailyParams struct {
+	ShopID uuid.UUID   `json:"shop_id"`
+	Date   pgtype.Date `json:"date"`
+	Date_2 pgtype.Date `json:"date_2"`
+}
+
+type GetShopStatsDailyRow struct {
+	Date           pgtype.Date `json:"date"`
+	Views          int64       `json:"views"`
+	UniqueVisitors int64       `json:"unique_visitors"`
+	LeadClicks     int64       `json:"lead_clicks"`
+}
+
+func (q *Queries) GetShopStatsDaily(ctx context.Context, arg GetShopStatsDailyParams) ([]GetShopStatsDailyRow, error) {
+	rows, err := q.db.Query(ctx, getShopStatsDaily, arg.ShopID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetShopStatsDailyRow
+	for rows.Next() {
+		var i GetShopStatsDailyRow
+		if err := rows.Scan(
+			&i.Date,
+			&i.Views,
+			&i.UniqueVisitors,
+			&i.LeadClicks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getShopStatsTotals = `-- name: GetShopStatsTotals :one
+
+SELECT coalesce(sum(views), 0)::bigint           AS views,
+       coalesce(sum(unique_visitors), 0)::bigint AS unique_visitors,
+       coalesce(sum(lead_clicks), 0)::bigint     AS lead_clicks
+FROM daily_stats
+WHERE shop_id = $1 AND album_id IS NULL AND date >= $2 AND date <= $3
+`
+
+type GetShopStatsTotalsParams struct {
+	ShopID uuid.UUID   `json:"shop_id"`
+	Date   pgtype.Date `json:"date"`
+	Date_2 pgtype.Date `json:"date_2"`
+}
+
+type GetShopStatsTotalsRow struct {
+	Views          int64 `json:"views"`
+	UniqueVisitors int64 `json:"unique_visitors"`
+	LeadClicks     int64 `json:"lead_clicks"`
+}
+
+// Дашборд продавца. Строки album_id IS NULL — уровень магазина: shop-ключ
+// инкрементится на каждой странице витрины, т.е. это общие просмотры;
+// альбомные строки — разбивка по альбомам (подмножество).
+func (q *Queries) GetShopStatsTotals(ctx context.Context, arg GetShopStatsTotalsParams) (GetShopStatsTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getShopStatsTotals, arg.ShopID, arg.Date, arg.Date_2)
+	var i GetShopStatsTotalsRow
+	err := row.Scan(&i.Views, &i.UniqueVisitors, &i.LeadClicks)
+	return i, err
+}
+
+const getShopTopAlbums = `-- name: GetShopTopAlbums :many
+SELECT d.album_id, a.title, sum(d.views)::bigint AS views
+FROM daily_stats d
+JOIN albums a ON a.id = d.album_id
+WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.date >= $2 AND d.date <= $3
+GROUP BY d.album_id, a.title
+ORDER BY views DESC, a.title
+LIMIT 5
+`
+
+type GetShopTopAlbumsParams struct {
+	ShopID uuid.UUID   `json:"shop_id"`
+	Date   pgtype.Date `json:"date"`
+	Date_2 pgtype.Date `json:"date_2"`
+}
+
+type GetShopTopAlbumsRow struct {
+	AlbumID uuid.NullUUID `json:"album_id"`
+	Title   string        `json:"title"`
+	Views   int64         `json:"views"`
+}
+
+func (q *Queries) GetShopTopAlbums(ctx context.Context, arg GetShopTopAlbumsParams) ([]GetShopTopAlbumsRow, error) {
+	rows, err := q.db.Query(ctx, getShopTopAlbums, arg.ShopID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetShopTopAlbumsRow
+	for rows.Next() {
+		var i GetShopTopAlbumsRow
+		if err := rows.Scan(&i.AlbumID, &i.Title, &i.Views); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getShopTopPhotos = `-- name: GetShopTopPhotos :many
+SELECT l.photo_id, p.caption, p.status, count(*)::bigint AS clicks
+FROM lead_clicks l
+JOIN photos p ON p.id = l.photo_id
+WHERE l.shop_id = $1 AND l.created_at >= $2 AND l.created_at < $3
+GROUP BY l.photo_id, p.caption, p.status
+ORDER BY clicks DESC, l.photo_id
+LIMIT 10
+`
+
+type GetShopTopPhotosParams struct {
+	ShopID      uuid.UUID          `json:"shop_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
+}
+
+type GetShopTopPhotosRow struct {
+	PhotoID uuid.NullUUID `json:"photo_id"`
+	Caption string        `json:"caption"`
+	Status  PhotoStatus   `json:"status"`
+	Clicks  int64         `json:"clicks"`
+}
+
+func (q *Queries) GetShopTopPhotos(ctx context.Context, arg GetShopTopPhotosParams) ([]GetShopTopPhotosRow, error) {
+	rows, err := q.db.Query(ctx, getShopTopPhotos, arg.ShopID, arg.CreatedAt, arg.CreatedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetShopTopPhotosRow
+	for rows.Next() {
+		var i GetShopTopPhotosRow
+		if err := rows.Scan(
+			&i.PhotoID,
+			&i.Caption,
+			&i.Status,
+			&i.Clicks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShopsStatsRange = `-- name: ListShopsStatsRange :many
+SELECT s.id AS shop_id, s.name, s.slug, u.email,
+       coalesce(sum(d.views), 0)::bigint           AS views,
+       coalesce(sum(d.unique_visitors), 0)::bigint AS unique_visitors,
+       coalesce(sum(d.lead_clicks), 0)::bigint     AS lead_clicks
+FROM shops s
+JOIN users u ON u.id = s.owner_id
+LEFT JOIN daily_stats d
+       ON d.shop_id = s.id AND d.album_id IS NULL AND d.date >= $1 AND d.date < $2
+WHERE s.status = 'active' AND u.email IS NOT NULL
+GROUP BY s.id, s.name, s.slug, u.email
+ORDER BY s.created_at
+`
+
+type ListShopsStatsRangeParams struct {
+	Date   pgtype.Date `json:"date"`
+	Date_2 pgtype.Date `json:"date_2"`
+}
+
+type ListShopsStatsRangeRow struct {
+	ShopID         uuid.UUID `json:"shop_id"`
+	Name           string    `json:"name"`
+	Slug           string    `json:"slug"`
+	Email          *string   `json:"email"`
+	Views          int64     `json:"views"`
+	UniqueVisitors int64     `json:"unique_visitors"`
+	LeadClicks     int64     `json:"lead_clicks"`
+}
+
+// Месячный дайджест: totals за период по активным магазинам с email владельца.
+func (q *Queries) ListShopsStatsRange(ctx context.Context, arg ListShopsStatsRangeParams) ([]ListShopsStatsRangeRow, error) {
+	rows, err := q.db.Query(ctx, listShopsStatsRange, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListShopsStatsRangeRow
+	for rows.Next() {
+		var i ListShopsStatsRangeRow
+		if err := rows.Scan(
+			&i.ShopID,
+			&i.Name,
+			&i.Slug,
+			&i.Email,
+			&i.Views,
+			&i.UniqueVisitors,
+			&i.LeadClicks,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrafficAnomalies = `-- name: ListTrafficAnomalies :many
+WITH daily AS (
+    SELECT shop_id, date, views
+    FROM daily_stats
+    WHERE album_id IS NULL AND date >= $1::date - 7 AND date <= $1::date
+)
+SELECT y.shop_id, s.slug, s.name,
+       y.views::bigint AS day_views,
+       coalesce(avg(w.views), 0)::bigint AS week_avg
+FROM daily y
+JOIN shops s ON s.id = y.shop_id
+LEFT JOIN daily w ON w.shop_id = y.shop_id AND w.date < y.date
+WHERE y.date = $1::date
+GROUP BY y.shop_id, s.slug, s.name, y.views
+HAVING y.views >= $2::bigint
+   AND y.views::float8 > $3::float8 * coalesce(avg(w.views), 0)
+ORDER BY y.views DESC
+`
+
+type ListTrafficAnomaliesParams struct {
+	Day        pgtype.Date `json:"day"`
+	MinViews   int64       `json:"min_views"`
+	Multiplier float64     `json:"multiplier"`
+}
+
+type ListTrafficAnomaliesRow struct {
+	ShopID   uuid.UUID `json:"shop_id"`
+	Slug     string    `json:"slug"`
+	Name     string    `json:"name"`
+	DayViews int64     `json:"day_views"`
+	WeekAvg  int64     `json:"week_avg"`
+}
+
+// Аномальный трафик: просмотры за день $1 против среднего за 7 предыдущих
+// дней. Порог min_views отсекает мелкие магазины, multiplier — кратность.
+func (q *Queries) ListTrafficAnomalies(ctx context.Context, arg ListTrafficAnomaliesParams) ([]ListTrafficAnomaliesRow, error) {
+	rows, err := q.db.Query(ctx, listTrafficAnomalies, arg.Day, arg.MinViews, arg.Multiplier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrafficAnomaliesRow
+	for rows.Next() {
+		var i ListTrafficAnomaliesRow
+		if err := rows.Scan(
+			&i.ShopID,
+			&i.Slug,
+			&i.Name,
+			&i.DayViews,
+			&i.WeekAvg,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

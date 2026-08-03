@@ -33,8 +33,10 @@ type API struct {
 	Tasks      *asynq.Client
 	Revalidate *revalidate.Notifier
 	Billing    *billing.Client
-	Cfg        config.Config
-	Log        *slog.Logger
+	// PublicLatency — гистограмма латентности публичных запросов для /metrics.
+	PublicLatency *Histogram
+	Cfg           config.Config
+	Log           *slog.Logger
 }
 
 func (a *API) Router() http.Handler {
@@ -45,11 +47,14 @@ func (a *API) Router() http.Handler {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	// Бизнес-метрики Prometheus. Наружу через Caddy не проксируется.
+	r.Get("/metrics", a.handleMetrics)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Публичные эндпоинты витрины: отдельный неймспейс, без сессии,
 		// отдельные response-типы (никаких приватных полей наружу).
 		r.Route("/public", func(r chi.Router) {
+			r.Use(a.measurePublic)
 			r.Use(a.rateLimit("public", a.Cfg.PublicRateLimit))
 			r.Get("/shops/{slug}", a.handlePublicShop)
 			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
@@ -90,6 +95,7 @@ func (a *API) Router() http.Handler {
 					r.Get("/billing", a.handleGetBilling)
 					r.Post("/billing/subscribe", a.handleSubscribe)
 					r.Post("/billing/cancel", a.handleCancelSubscription)
+					r.Get("/stats", a.handleShopStats)
 
 					r.Route("/albums", func(r chi.Router) {
 						r.Post("/", a.handleCreateAlbum)

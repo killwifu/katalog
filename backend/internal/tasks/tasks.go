@@ -16,7 +16,43 @@ const (
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
 	TypeEmailSend        = "email:send"
+	TypeStatsDigest      = "stats:digest"
+	TypeTrafficAlert     = "stats:traffic-alert"
 )
+
+// StatsDigestPayload — месяц дайджеста в формате YYYY-MM (UTC).
+// Пустой = прошлый календарный месяц (для запуска по cron 1-го числа).
+type StatsDigestPayload struct {
+	Month string `json:"month"`
+}
+
+func NewStatsDigest(month string) (*asynq.Task, error) {
+	payload, err := json.Marshal(StatsDigestPayload{Month: month})
+	if err != nil {
+		return nil, fmt.Errorf("marshal stats:digest payload: %w", err)
+	}
+	return asynq.NewTask(TypeStatsDigest, payload,
+		asynq.MaxRetry(3),
+		asynq.Timeout(30*time.Minute),
+	), nil
+}
+
+// TrafficAlertPayload — дата проверки в формате YYYY-MM-DD (UTC).
+// Пустая = вчера (запуск по cron после ночной агрегации).
+type TrafficAlertPayload struct {
+	Date string `json:"date"`
+}
+
+func NewTrafficAlert(date string) (*asynq.Task, error) {
+	payload, err := json.Marshal(TrafficAlertPayload{Date: date})
+	if err != nil {
+		return nil, fmt.Errorf("marshal stats:traffic-alert payload: %w", err)
+	}
+	return asynq.NewTask(TypeTrafficAlert, payload,
+		asynq.MaxRetry(3),
+		asynq.Timeout(10*time.Minute),
+	), nil
+}
 
 type EmailSendPayload struct {
 	To      string `json:"to"`

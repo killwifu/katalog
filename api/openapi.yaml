@@ -6,7 +6,7 @@ info:
     клиентские типы генерируются из этого файла (orval).
     Аутентификация: сессионная httpOnly cookie `katalog_session`.
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
-  version: 0.5.0
+  version: 0.6.0
 servers:
   - url: /
 
@@ -248,6 +248,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Billing"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/stats:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: getShopStats
+      summary: Статистика магазина за период (дашборд продавца)
+      description: >
+        Просмотры и уникальные — из daily_stats (по вчерашний день, ночная
+        агрегация); клики «написать», разбивка по каналам и топ фото —
+        из lead_clicks в реальном времени.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShopStats"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -981,6 +1006,58 @@ components:
         email: { type: [string, "null"], format: email }
         role: { type: string, enum: [user, admin] }
         email_verified: { type: boolean }
+
+    ShopStats:
+      type: object
+      required: [days, totals, daily, channels, top_albums, top_photos]
+      properties:
+        days: { type: integer }
+        totals:
+          type: object
+          required: [views, unique_visitors, lead_clicks]
+          properties:
+            views: { type: integer }
+            unique_visitors: { type: integer }
+            lead_clicks: { type: integer }
+        daily:
+          type: array
+          items:
+            type: object
+            required: [date, views, unique_visitors, lead_clicks]
+            properties:
+              date: { type: string, format: date }
+              views: { type: integer }
+              unique_visitors: { type: integer }
+              lead_clicks: { type: integer }
+        channels:
+          type: array
+          items:
+            type: object
+            required: [channel, clicks]
+            properties:
+              channel: { type: string, enum: [telegram, whatsapp, max, vk] }
+              clicks: { type: integer }
+        top_albums:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [album_id, title, views]
+            properties:
+              album_id: { type: string, format: uuid }
+              title: { type: string }
+              views: { type: integer }
+        top_photos:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [photo_id, caption, clicks]
+            properties:
+              photo_id: { type: string, format: uuid }
+              caption: { type: string }
+              clicks: { type: integer }
+              thumb_url: { type: string }
 
     AdminActionBody:
       type: object

@@ -61,17 +61,18 @@ func run(logger *slog.Logger) error {
 	defer tasksClient.Close()
 
 	app := &api.API{
-		Q:          db.New(pool),
-		Pool:       pool,
-		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
-		Tokens:     auth.NewTokens(rdb),
-		RDB:        rdb,
-		Store:      store,
-		Tasks:      tasksClient,
-		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
-		Billing:    billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
-		Cfg:        cfg,
-		Log:        logger,
+		Q:             db.New(pool),
+		Pool:          pool,
+		Sessions:      auth.NewSessions(rdb, cfg.SessionTTL),
+		Tokens:        auth.NewTokens(rdb),
+		RDB:           rdb,
+		Store:         store,
+		Tasks:         tasksClient,
+		Revalidate:    revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),
+		Billing:       billing.New(cfg.Billing.YooKassaAPIURL, cfg.Billing.YooKassaShopID, cfg.Billing.YooKassaSecretKey),
+		PublicLatency: api.NewHistogram(),
+		Cfg:           cfg,
+		Log:           logger,
 	}
 
 	srv := &http.Server{

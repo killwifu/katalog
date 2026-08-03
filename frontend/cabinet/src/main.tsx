@@ -7,7 +7,7 @@ import {
   redirect,
   RouterProvider,
 } from '@tanstack/react-router'
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
@@ -18,6 +18,11 @@ import { AuthPage } from './pages/AuthPage'
 import { BillingPage } from './pages/BillingPage'
 import { CaptionsPage } from './pages/CaptionsPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
+
+// Recharts тяжёлый — страница статистики грузится отдельным чанком.
+const StatsPage = lazy(() =>
+  import('./pages/StatsPage').then((m) => ({ default: m.StatsPage })),
+)
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -107,6 +112,16 @@ const adminRoute = createRoute({
   component: AdminPage,
 })
 
+const statsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/stats',
+  component: () => (
+    <Suspense fallback={<p className="text-gray-500">Загрузка…</p>}>
+      <StatsPage />
+    </Suspense>
+  ),
+})
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
@@ -114,7 +129,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute, adminRoute]),
+    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

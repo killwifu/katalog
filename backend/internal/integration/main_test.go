@@ -202,6 +202,9 @@ func run(m *testing.M) int {
 		SiteURL:         "http://katalog.test",
 		StopWords:       []string{"контрафакт", "запрещёнка"},
 		Mail:            config.MailConfig{AdminEmail: "moderator@test.local"},
+		// Низкий порог, чтобы тест алерта не создавал тысячи просмотров.
+		TrafficAlertMultiplier: 5,
+		TrafficAlertMinViews:   100,
 		Billing: config.BillingConfig{
 			// Маленький лимит фото на free — для теста квоты.
 			Plans: map[string]config.PlanLimits{
@@ -215,17 +218,18 @@ func run(m *testing.M) int {
 		},
 	}
 	app := &api.API{
-		Q:          env.q,
-		Pool:       env.pool,
-		Sessions:   auth.NewSessions(rdb, cfg.SessionTTL),
-		Tokens:     auth.NewTokens(rdb),
-		RDB:        rdb,
-		Store:      env.store,
-		Tasks:      asynqClient,
-		Revalidate: notifier,
-		Billing:    ykClient,
-		Cfg:        cfg,
-		Log:        logger,
+		Q:             env.q,
+		Pool:          env.pool,
+		Sessions:      auth.NewSessions(rdb, cfg.SessionTTL),
+		Tokens:        auth.NewTokens(rdb),
+		RDB:           rdb,
+		Store:         env.store,
+		Tasks:         asynqClient,
+		Revalidate:    notifier,
+		Billing:       ykClient,
+		PublicLatency: api.NewHistogram(),
+		Cfg:           cfg,
+		Log:           logger,
 	}
 	env.srv = httptest.NewServer(app.Router())
 	defer env.srv.Close()
@@ -243,7 +247,7 @@ func run(m *testing.M) int {
 		RDB:        rdb,
 		Revalidate: notifier,
 		Billing:    ykClient,
-		BillingCfg: cfg.Billing,
+		Cfg:        cfg,
 		Mail:       env.mail,
 		Log:        logger,
 	}

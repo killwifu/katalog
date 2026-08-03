@@ -39,6 +39,12 @@ type Config struct {
 	StopWords []string
 	Billing   BillingConfig
 	Mail      MailConfig
+	// TrafficAlertMultiplier — во сколько раз дневные просмотры магазина
+	// должны превысить средненедельные, чтобы уйдало письмо админу.
+	TrafficAlertMultiplier float64
+	// TrafficAlertMinViews — минимум просмотров за день для срабатывания
+	// (отсекает шум маленьких магазинов).
+	TrafficAlertMinViews int64
 }
 
 // MailConfig — транзакционная почта. Пустой SMTPHost = письма пишутся в лог.
@@ -84,23 +90,25 @@ func (b BillingConfig) Limits(plan string) PlanLimits {
 
 func Load() Config {
 	return Config{
-		HTTPAddr:         getenv("HTTP_ADDR", ":8080"),
-		WorkerHealthAddr: getenv("WORKER_HEALTH_ADDR", ":8081"),
-		DatabaseURL:      getenv("DATABASE_URL", "postgres://katalog:katalog@localhost:5432/katalog?sslmode=disable"),
-		RedisAddr:        getenv("REDIS_ADDR", "localhost:6379"),
-		S3Endpoint:       getenv("S3_ENDPOINT", "http://localhost:9000"),
-		S3PublicEndpoint: getenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000"),
-		S3Bucket:         getenv("S3_BUCKET", "katalog"),
-		S3AccessKey:      getenv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:      getenv("S3_SECRET_KEY", "minioadmin"),
-		CookieSecure:     os.Getenv("COOKIE_SECURE") == "true",
-		SessionTTL:       30 * 24 * time.Hour,
-		AuthRateLimit:    getenvInt64("AUTH_RATE_LIMIT", 20),
-		PublicRateLimit:  getenvInt64("PUBLIC_RATE_LIMIT", 300),
-		StorefrontURL:    getenv("STOREFRONT_URL", "http://localhost:3000"),
-		RevalidateSecret: os.Getenv("REVALIDATE_SECRET"),
-		SiteURL:          getenv("SITE_URL", "http://localhost"),
-		StopWords:        splitList(os.Getenv("STOP_WORDS")),
+		HTTPAddr:               getenv("HTTP_ADDR", ":8080"),
+		WorkerHealthAddr:       getenv("WORKER_HEALTH_ADDR", ":8081"),
+		DatabaseURL:            getenv("DATABASE_URL", "postgres://katalog:katalog@localhost:5432/katalog?sslmode=disable"),
+		RedisAddr:              getenv("REDIS_ADDR", "localhost:6379"),
+		S3Endpoint:             getenv("S3_ENDPOINT", "http://localhost:9000"),
+		S3PublicEndpoint:       getenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000"),
+		S3Bucket:               getenv("S3_BUCKET", "katalog"),
+		S3AccessKey:            getenv("S3_ACCESS_KEY", "minioadmin"),
+		S3SecretKey:            getenv("S3_SECRET_KEY", "minioadmin"),
+		CookieSecure:           os.Getenv("COOKIE_SECURE") == "true",
+		SessionTTL:             30 * 24 * time.Hour,
+		AuthRateLimit:          getenvInt64("AUTH_RATE_LIMIT", 20),
+		PublicRateLimit:        getenvInt64("PUBLIC_RATE_LIMIT", 300),
+		StorefrontURL:          getenv("STOREFRONT_URL", "http://localhost:3000"),
+		RevalidateSecret:       os.Getenv("REVALIDATE_SECRET"),
+		SiteURL:                getenv("SITE_URL", "http://localhost"),
+		StopWords:              splitList(os.Getenv("STOP_WORDS")),
+		TrafficAlertMultiplier: getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),
+		TrafficAlertMinViews:   getenvInt64("TRAFFIC_ALERT_MIN_VIEWS", 1000),
 		Mail: MailConfig{
 			SMTPHost:   os.Getenv("SMTP_HOST"),
 			SMTPPort:   int(getenvInt64("SMTP_PORT", 587)),
@@ -145,6 +153,15 @@ func splitList(raw string) []string {
 		}
 	}
 	return out
+}
+
+func getenvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	return fallback
 }
 
 func getenvInt64(key string, fallback int64) int64 {
