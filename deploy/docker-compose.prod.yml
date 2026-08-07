@@ -1,0 +1,177 @@
+# Прод-стек: один сервер, образы из GHCR, хранилище — облачный S3.
+# Запуск на сервере:
+#   docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d
+#
+# Отличия от deploy/docker-compose.yml (локального):
+#   - нет minio/minio-init: фото живут в облачном S3-совместимом хранилище;
+#   - нет build: образы тянутся из GHCR по тегу (их собирает CI);
+#   - Postgres и Redis не публикуют порты наружу — только внутренняя сеть;
+#   - Caddy слушает 80 и 443 и выпускает TLS сам.
+name: katalog
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER обязателен}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
+      POSTGRES_DB: ${POSTGRES_DB:-katalog}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-katalog}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --appendonly no
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  migrate:
+    image: ghcr.io/${GHCR_OWNER:?GHCR_OWNER обязателен}/katalog-migrate:${IMAGE_TAG:-latest}
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: ghcr.io/${GHCR_OWNER}/katalog-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
+      REDIS_ADDR: redis:6379
+      # Облачный S3: endpoint провайдера, тот же и для pre-signed URL клиенту.
+      S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT обязателен}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?S3_PUBLIC_ENDPOINT обязателен}
+      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET обязателен}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY обязателен}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY обязателен}
+      # Деривативы отдаёт CDN-домен, не домен приложения.
+      MEDIA_BASE_URL: ${MEDIA_BASE_URL:?MEDIA_BASE_URL обязателен}
+      COOKIE_SECURE: "true"
+      STOREFRONT_URL: http://storefront:3000
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:?REVALIDATE_SECRET обязателен}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      BILLING_RETURN_URL: https://${APP_DOMAIN}/app/billing
+      SITE_URL: https://${APP_DOMAIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      STOP_WORDS: ${STOP_WORDS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  worker:
+    image: ghcr.io/${GHCR_OWNER}/katalog-worker:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      WORKER_HEALTH_ADDR: ":8081"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
+      REDIS_ADDR: redis:6379
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      STOREFRONT_URL: http://storefront:3000
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:?нужен SMTP — без почты не работают регистрация и сброс пароля}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM обязателен}
+      SITE_URL: https://${APP_DOMAIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      TRAFFIC_ALERT_MULTIPLIER: ${TRAFFIC_ALERT_MULTIPLIER:-5}
+      TRAFFIC_ALERT_MIN_VIEWS: ${TRAFFIC_ALERT_MIN_VIEWS:-1000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  storefront:
+    image: ghcr.io/${GHCR_OWNER}/katalog-storefront:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8080
+      REDIS_URL: redis://redis:6379
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET}
+      SITE_URL: https://${APP_DOMAIN}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  cabinet:
+    image: ghcr.io/${GHCR_OWNER}/katalog-cabinet:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN обязателен}
+      ACME_EMAIL: ${ACME_EMAIL:?нужен email для Let's Encrypt}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      storefront:
+        condition: service_healthy
+      cabinet:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:2019/config/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  pgdata:
+  redisdata:
+  caddydata:
+  caddyconfig:

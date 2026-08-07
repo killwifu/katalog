@@ -1201,7 +1201,10 @@ components:
 
     PhotoUrls:
       type: object
-      description: Деривативы WebP (300/800/1600), отдаются с CDN-пути /media
+      description: >
+        Деривативы WebP (300/800/1600). Префикс задаётся MEDIA_BASE_URL:
+        относительный /media локально, абсолютный URL CDN-домена в проде —
+        клиент должен подставлять значение как есть, не достраивая его.
       properties:
         thumb: { type: string }
         medium: { type: string }

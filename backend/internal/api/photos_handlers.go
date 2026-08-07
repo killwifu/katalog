@@ -33,7 +33,7 @@ type photoResponse struct {
 	Urls      map[string]string `json:"urls,omitempty"`
 }
 
-func toPhotoResponse(p db.Photo) photoResponse {
+func (a *API) toPhotoResponse(p db.Photo) photoResponse {
 	resp := photoResponse{
 		ID:        p.ID.String(),
 		AlbumID:   p.AlbumID.String(),
@@ -44,11 +44,7 @@ func toPhotoResponse(p db.Photo) photoResponse {
 		SortOrder: p.SortOrder,
 	}
 	if p.Status == db.PhotoStatusReady {
-		resp.Urls = map[string]string{
-			"thumb":  fmt.Sprintf("/media/%s/%s/300.webp", p.ShopID, p.ID),
-			"medium": fmt.Sprintf("/media/%s/%s/800.webp", p.ShopID, p.ID),
-			"large":  fmt.Sprintf("/media/%s/%s/1600.webp", p.ShopID, p.ID),
-		}
+		resp.Urls = a.mediaURLs(p.ShopID, p.ID)
 	}
 	return resp
 }
@@ -260,7 +256,7 @@ func (a *API) handleListPhotos(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]photoResponse, 0, len(photos))
 	for _, p := range photos {
-		out = append(out, toPhotoResponse(p))
+		out = append(out, a.toPhotoResponse(p))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -305,7 +301,7 @@ func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, toPhotoResponse(updated))
+	writeJSON(w, http.StatusOK, a.toPhotoResponse(updated))
 }
 
 func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {

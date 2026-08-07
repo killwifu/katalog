@@ -59,11 +59,14 @@ type publicPhotoResponse struct {
 	Urls    map[string]string `json:"urls"`
 }
 
-func mediaURLs(shopID, photoID uuid.UUID) map[string]string {
+// mediaURLs — адреса деривативов. Префикс задаётся MEDIA_BASE_URL:
+// относительный "/media" локально, отдельный CDN-домен в проде.
+func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
+	base := a.Cfg.MediaBaseURL
 	return map[string]string{
-		"thumb":  fmt.Sprintf("/media/%s/%s/300.webp", shopID, photoID),
-		"medium": fmt.Sprintf("/media/%s/%s/800.webp", shopID, photoID),
-		"large":  fmt.Sprintf("/media/%s/%s/1600.webp", shopID, photoID),
+		"thumb":  fmt.Sprintf("%s/%s/%s/300.webp", base, shopID, photoID),
+		"medium": fmt.Sprintf("%s/%s/%s/800.webp", base, shopID, photoID),
+		"large":  fmt.Sprintf("%s/%s/%s/1600.webp", base, shopID, photoID),
 	}
 }
 
@@ -83,14 +86,14 @@ func toPublicShopResponse(s db.Shop) publicShopResponse {
 	}
 }
 
-func toPublicPhotoResponse(p db.Photo) publicPhotoResponse {
+func (a *API) toPublicPhotoResponse(p db.Photo) publicPhotoResponse {
 	return publicPhotoResponse{
 		ID:      p.ID.String(),
 		AlbumID: p.AlbumID.String(),
 		Caption: p.Caption,
 		Width:   p.Width,
 		Height:  p.Height,
-		Urls:    mediaURLs(p.ShopID, p.ID),
+		Urls:    a.mediaURLs(p.ShopID, p.ID),
 	}
 }
 
@@ -145,7 +148,7 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 			cover = fallbackCover[al.ID]
 		}
 		if cover != uuid.Nil {
-			resp.CoverUrls = mediaURLs(shop.ID, cover)
+			resp.CoverUrls = a.mediaURLs(shop.ID, cover)
 		}
 		out = append(out, resp)
 	}
@@ -199,7 +202,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 
 	outPhotos := make([]publicPhotoResponse, 0, len(photos))
 	for _, p := range photos {
-		outPhotos = append(outPhotos, toPublicPhotoResponse(p))
+		outPhotos = append(outPhotos, a.toPublicPhotoResponse(p))
 	}
 	albumOut := publicAlbumResponse{
 		ID:         album.ID.String(),
@@ -244,7 +247,7 @@ func (a *API) handlePublicSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	photos := make([]publicPhotoResponse, 0, len(ftsRows))
 	for _, row := range ftsRows {
-		photos = append(photos, toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
+		photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
 	}
 
 	if len(photos) == 0 {
@@ -258,7 +261,7 @@ func (a *API) handlePublicSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, row := range trgmRows {
-			photos = append(photos, toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
+			photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
 		}
 	}
 

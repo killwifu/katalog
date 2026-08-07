@@ -118,6 +118,47 @@ cd frontend/cabinet && npm install && npm run dev      # http://localhost:5173/a
 cd frontend/storefront && npm install && npm run dev   # http://localhost:3000
 ```
 
+## Деплой в прод
+
+Один сервер с Docker, образы из GHCR, фото — в облачном S3-совместимом
+хранилище. Локальный `deploy/docker-compose.yml` для прода не годится:
+он держит MinIO рядом, публикует порты Postgres и Redis наружу и слушает
+`:80` без TLS.
+
+Что нужно до первого деплоя:
+
+1. Домен с A-записью на сервер, открытые 80 и 443 — Caddy выпускает
+   сертификат Let's Encrypt сам, отдельный шаг не нужен.
+2. Бакет в S3 (Yandex Object Storage, VK Cloud — любой S3-совместимый)
+   и CDN-домен, смотрящий на префикс `drv/` этого бакета. Деривативы
+   отдаются только с него: контент не должен идти с домена приложения.
+3. SMTP: без почты не работают регистрация и сброс пароля.
+4. Проверить, что среди существующих магазинов нет slug'ов, которые теперь
+   заняты публичными страницами:
+   `select slug from shops where slug in ('pricing','updates','remove-bg')`.
+   Эндпоинта смены slug нет — чинить придётся в БД.
+
+Дальше на сервере:
+
+```sh
+git clone https://github.com/killwifu/katalog.git && cd katalog
+cp .env.prod.example .env      # заполнить: домен, S3, SMTP, пароли, секреты
+docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d
+```
+
+Образы собирает CI и пушит в GHCR на каждый push в `main`: тег `latest`
+и тег по sha коммита. Обновление и откат — сменой `IMAGE_TAG` в `.env`:
+
+```sh
+IMAGE_TAG=<sha> docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d
+```
+
+Миграции применяет one-shot сервис `migrate` при каждом старте стека,
+до запуска `api` и `worker`.
+
+Бэкапить нужно том `pgdata` и бакет S3. Тома `redisdata` (кеш и очередь)
+и `caddydata` (сертификаты) восстанавливаются сами.
+
 ## Структура
 
 ```

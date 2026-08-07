@@ -34,6 +34,10 @@ type Config struct {
 	RevalidateSecret string
 	// SiteURL — публичный базовый URL (ссылки в письмах: сброс пароля и т.п.).
 	SiteURL string
+	// MediaBaseURL — префикс URL деривативов. По умолчанию относительный
+	// "/media" (его проксирует Caddy). В проде — отдельный CDN-домен:
+	// контент не должен отдаваться с домена приложения.
+	MediaBaseURL string
 	// StopWords — стоп-слова подписей: совпадение ставит фото флаг ручной
 	// проверки модератором (не автоблок). Пустой список = проверка выключена.
 	StopWords []string
@@ -106,6 +110,7 @@ func Load() Config {
 		StorefrontURL:          getenv("STOREFRONT_URL", "http://localhost:3000"),
 		RevalidateSecret:       os.Getenv("REVALIDATE_SECRET"),
 		SiteURL:                getenv("SITE_URL", "http://localhost"),
+		MediaBaseURL:           strings.TrimRight(getenv("MEDIA_BASE_URL", "/media"), "/"),
 		StopWords:              splitList(os.Getenv("STOP_WORDS")),
 		TrafficAlertMultiplier: getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),
 		TrafficAlertMinViews:   getenvInt64("TRAFFIC_ALERT_MIN_VIEWS", 1000),

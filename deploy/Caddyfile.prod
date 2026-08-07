@@ -1,0 +1,45 @@
+# Прод: один домен приложения, TLS выпускается автоматически.
+# Отличия от локального Caddyfile:
+#   - вместо :80 — домен из ${APP_DOMAIN}, Caddy сам получает сертификат
+#     Let's Encrypt (нужны открытые 80 и 443 и A-запись на этот сервер);
+#   - маршрутов в MinIO нет: оригиналы грузятся pre-signed PUT напрямую
+#     в облачный S3, деривативы отдаёт CDN-домен провайдера (MEDIA_BASE_URL).
+#     Домен приложения картинок не отдаёт вообще.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode gzip zstd
+
+	handle /healthz {
+		reverse_proxy api:8080
+	}
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	redir /app /app/
+
+	handle_path /app/* {
+		# Кабинет — SPA со статикой, хешированные ассеты иммутабельны.
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy cabinet:80
+	}
+
+	# Всё остальное (в т.ч. /{slug}) — витрина Next.js.
+	handle {
+		reverse_proxy storefront:3000
+	}
+
+	# Заголовки безопасности. HSTS включаем только когда домен уже
+	# отдаётся по https и откатываться назад не планируется.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+}
