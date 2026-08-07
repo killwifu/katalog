@@ -14,14 +14,21 @@ if [ -z "${CODESPACE_NAME:-}" ]; then
 fi
 
 domain="$GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN"
-cat >> .env <<EOF
+host="${CODESPACE_NAME}-80.${domain}"
 
+# Скрипт запускается и при пересборке контейнера: старый блок срезаем,
+# иначе .env копится дубликатами и ручные правки перебиваются нижней копией.
+sed -i '/^# --- Codespaces overrides/,$d' .env
+
+cat >> .env <<EOF
 # --- Codespaces overrides (.devcontainer/setup.sh) ---
+# Блок всегда в конце файла и пересоздаётся целиком при каждом запуске.
 # Дубликаты ключей ниже переопределяют значения выше (последний выигрывает).
-# S3 — через Caddy на 80-м порту (/katalog/*): наружу нужен один порт.
-S3_PUBLIC_ENDPOINT=https://${CODESPACE_NAME}-80.${domain}
-S3_SIGNING_HOST=${CODESPACE_NAME}-80.${domain}
-SITE_URL=https://${CODESPACE_NAME}-80.${domain}
+# S3 — через Caddy на 80-м порту (/katalog/orig/*): наружу нужен один порт.
+S3_PUBLIC_ENDPOINT=https://${host}
+# Codespaces переписывает Host — восстанавливаем тот, для которого подписан URL.
+S3_SIGNING_HOST=${host}
+SITE_URL=https://${host}
 COOKIE_SECURE=true
 EOF
-echo "codespaces .env ready: site https://${CODESPACE_NAME}-80.${domain}"
+echo "codespaces .env ready: site https://${host}"

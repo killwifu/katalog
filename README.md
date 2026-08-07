@@ -33,7 +33,7 @@ make down                    # останавливает стек
    ```sh
    gh codespace ports visibility 80:public -c "$CODESPACE_NAME"
    ```
-   (S3-загрузки тоже идут через 80-й порт — маршрут `/katalog/*` в Caddy).
+   (S3-загрузки тоже идут через 80-й порт — маршрут `/katalog/orig/*` в Caddy).
 3. Публичная ссылка на демо — вкладка Ports, порт 80:
    `https://<codespace>-80.app.github.dev`. Демо-данные: `make seed`.
 

@@ -184,8 +184,13 @@ services:
   caddy:
     image: caddy:2-alpine
     environment:
-      # Host для SigV4-подписи при проксировании /katalog/* в MinIO.
-      S3_SIGNING_HOST: ${S3_SIGNING_HOST:-localhost}
+      # Имя бакета в маршрутах: /{bucket}/orig/* и /media/* -> /{bucket}/drv/.
+      S3_BUCKET: ${S3_BUCKET:-katalog}
+      # Host для SigV4-подписи при проксировании загрузок в MinIO. По умолчанию —
+      # плейсхолдер Caddy: Host клиента как есть (обычное поведение reverse-proxy).
+      # Задаётся, только если внешний прокси переписывает Host (Codespaces);
+      # тогда значение = host из S3_PUBLIC_ENDPOINT (без схемы).
+      S3_SIGNING_HOST: ${S3_SIGNING_HOST:-{http.request.hostport}}
     ports:
       - "80:80"
     volumes:

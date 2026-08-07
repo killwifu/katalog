@@ -8,12 +8,15 @@
 		reverse_proxy api:8080
 	}
 
-	# S3 API MinIO через основной порт (путь = имя бакета): pre-signed
-	# загрузки работают там, где наружу проброшен только 80 (Codespaces).
-	# Анонимно читается только drv/* (bucket policy), PUT — только по подписи.
+	# Загрузка оригиналов: pre-signed PUT в MinIO через основной порт
+	# (путь = имя бакета) — там, где наружу проброшен только 80 (Codespaces).
+	# Наружу отдаётся ТОЛЬКО префикс orig/: на корне бакета анонимный
+	# ListBucket (bucket policy разрешает список drv/*) перечислил бы фото
+	# всех магазинов. Чтение деривативов — ниже, через /media/*.
 	# Host восстанавливается в тот, для которого API подписывал URL:
 	# внешние прокси (Codespaces) переписывают Host, ломая SigV4-подпись.
-	handle /katalog/* {
+	# Значение задаёт docker-compose; по умолчанию — Host клиента как есть.
+	handle /{$S3_BUCKET:katalog}/orig/* {
 		reverse_proxy minio:9000 {
 			header_up Host {$S3_SIGNING_HOST}
 		}
@@ -23,7 +26,7 @@
 	# В проде это отдельный CDN-домен. Ключ дериватива иммутабелен
 	# (photo_id + размер) — кешируем навсегда.
 	handle /media/* {
-		uri replace /media/ /katalog/drv/
+		uri replace /media/ /{$S3_BUCKET:katalog}/drv/
 		reverse_proxy minio:9000 {
 			header_down Cache-Control "public, max-age=31536000, immutable"
 		}

@@ -64,11 +64,28 @@ jobs:
       - name: Start stack
         run: |
           cp .env.example .env
+          # Загрузка идёт через Caddy (маршрут /{bucket}/orig/* + SigV4-подпись),
+          # как в Codespaces и проде, а не напрямую в MinIO: иначе публичный
+          # путь загрузки не покрыт e2e. S3_SIGNING_HOST намеренно пуст —
+          # проверяем и дефолт «Host клиента как есть».
+          echo "S3_PUBLIC_ENDPOINT=http://localhost" >> .env
           docker compose --env-file .env -f deploy/docker-compose.yml up -d --build
       - name: Wait for stack
         run: |
           timeout 300 bash -c 'until curl -fsS http://localhost/healthz >/dev/null 2>&1; do sleep 3; done'
           timeout 120 bash -c 'until curl -fsS http://localhost/ >/dev/null 2>&1; do sleep 3; done'
+      # Наружу торчит только загрузка в orig/. Корень бакета дал бы анонимный
+      # ListBucket (bucket policy разрешает список drv/*) — перечисление фото
+      # всех магазинов в обход is_hidden и password_hash альбомов.
+      - name: S3 API не отдаёт список бакета наружу
+        run: |
+          for path in '/katalog/?list-type=2&prefix=drv' '/katalog?list-type=2&prefix=drv'; do
+            body=$(curl -sL "http://localhost${path}")
+            case "$body" in
+              *ListBucketResult*)
+                echo "S3 bucket listing exposed at ${path}"; echo "$body" | head -c 300; exit 1 ;;
+            esac
+          done
       - name: Seed demo shop + ISR e2e (photo visible ≤ 60s)
         working-directory: backend
         run: go run ./cmd/seed -e2e -out ../seed.json
