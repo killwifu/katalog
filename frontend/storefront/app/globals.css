@@ -30,8 +30,10 @@
   --border-strong:    #CFCCC4;
 
   /* --- Типографика ------------------------------------------------------- */
-  /* --font-golos приходит из next/font (см. app/layout.tsx). */
-  --font: var(--font-golos), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Системный стек — база, в том числе на витрине магазина: это 95% трафика
+     и жёсткий бюджет LCP < 2.5s. Фирменный Golos Text подключается только
+     на публичных страницах (см. app/(marketing)/layout.tsx). */
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --fs-h1:   clamp(26px, 4.2vw, 38px);
   --fs-h2:   clamp(20px, 2.6vw, 27px);
   --fs-h3:   17px;
