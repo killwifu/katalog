@@ -1,0 +1,166 @@
+/* «Убрать фон»: зона загрузки, сравнение до/после и настройки результата. */
+
+.top {
+  padding: 40px 0 26px;
+  text-align: center;
+}
+
+.top p {
+  margin: 10px auto 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  max-width: 50ch;
+}
+
+.tool {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.drop {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  padding: 26px 18px;
+  text-align: center;
+}
+
+.drop svg { margin: 0 auto; }
+
+.drop h3 { margin: 10px 0 4px; }
+
+.drop p {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.dropBtns {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.dropBtns :global(.btn) { flex: 1; }
+
+.status {
+  margin-top: 14px;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  margin: 16px 0 8px;
+}
+
+/* --- Сравнение до/после --------------------------------------------------- */
+
+.cmp {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.cmp svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.after { position: absolute; inset: 0; }
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #fff;
+}
+
+.cmpRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cmpRow span {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.cmpRow input { flex: 1; }
+
+/* --- Настройки результата ------------------------------------------------- */
+
+.optsLabel {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  margin-bottom: 8px;
+}
+
+.optsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.opt {
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.optOn {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 500;
+}
+
+.limit {
+  background: var(--brand-soft);
+  border-radius: var(--r-card);
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.limit b {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--brand-ink);
+}
+
+.limit p {
+  margin: 5px 0 12px;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--brand-ink);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  padding: 18px 0 34px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+}
+
+@media (min-width: 860px) {
+  .tool { grid-template-columns: minmax(0, 1fr) 260px; align-items: start; }
+  .drop { margin-bottom: 16px; }
+  .dropBtns { justify-content: center; }
+  .dropBtns :global(.btn) { flex: 0 0 auto; }
+}

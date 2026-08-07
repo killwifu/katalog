@@ -1,0 +1,149 @@
+/* Шапка, подвал и липкая полоса действия — общие для публичных страниц.
+   Токены берутся из app/globals.css. */
+
+/* --- Шапка ---------------------------------------------------------------- */
+
+.head {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.headIn {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.nav {
+  display: none;
+  flex: 1;
+  gap: 20px;
+  font-size: var(--fs-sm);
+}
+
+.nav a {
+  opacity: 0.82;
+  padding-bottom: 2px;
+}
+
+.nav a:hover { opacity: 1; }
+
+.nav a[aria-current='page'] {
+  opacity: 1;
+  font-weight: 500;
+  border-bottom: 2px solid var(--on-brand);
+}
+
+.right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login {
+  font-size: var(--fs-sm);
+  opacity: 0.85;
+}
+
+.login:hover { opacity: 1; }
+
+.burger {
+  display: inline-flex;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--on-brand);
+  cursor: pointer;
+}
+
+/* Мобильное меню: раскрывается бургером. */
+.mobNav {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 20px 14px;
+  font-size: var(--fs-body);
+}
+
+.mobNav a {
+  padding: 9px 0;
+  opacity: 0.9;
+}
+
+.mobNavOpen { display: flex; }
+
+@media (min-width: 860px) {
+  .burger { display: none; }
+  .nav { display: flex; }
+  .mobNav { display: none; }
+}
+
+/* --- Подвал --------------------------------------------------------------- */
+
+.foot {
+  padding: 22px 0 30px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.footIn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+}
+
+.foot a:hover { color: var(--text-2); }
+
+/* --- Липкая полоса действия (только мобильный) ---------------------------- */
+
+.sticky {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stickyText {
+  flex: 1;
+  min-width: 0;
+}
+
+.stickyText b {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.stickyText span {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* Отступ под полосой, чтобы она не перекрывала конец страницы. */
+.stickySpacer { height: 76px; }
+
+@media (min-width: 860px) {
+  .sticky,
+  .stickySpacer {
+    display: none;
+  }
+}

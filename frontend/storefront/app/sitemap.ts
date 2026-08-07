@@ -7,12 +7,22 @@ const SITE_URL = process.env.SITE_URL ?? 'http://localhost'
 // данные кешируются fetch-кешем на час.
 export const dynamic = 'force-dynamic'
 
-// Sitemap по активным магазинам (скрытые альбомы в выдачу API не попадают).
+// Публичные страницы сервиса — их адреса статичны.
+const PUBLIC_PAGES = ['', '/pricing', '/updates', '/remove-bg']
+
+// Sitemap: публичные страницы + активные магазины
+// (скрытые альбомы в выдачу API не попадают).
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const shops = await getSitemapShops()
-  return shops.map((s) => ({
-    url: `${SITE_URL}/${encodeURIComponent(s.slug)}`,
-    lastModified: new Date(s.updated_at),
-    changeFrequency: 'daily',
-  }))
+  return [
+    ...PUBLIC_PAGES.map((path) => ({
+      url: `${SITE_URL}${path}`,
+      changeFrequency: 'weekly' as const,
+    })),
+    ...shops.map((s) => ({
+      url: `${SITE_URL}/${encodeURIComponent(s.slug)}`,
+      lastModified: new Date(s.updated_at),
+      changeFrequency: 'daily' as const,
+    })),
+  ]
 }

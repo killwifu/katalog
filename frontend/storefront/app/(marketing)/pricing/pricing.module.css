@@ -1,0 +1,213 @@
+/* Тарифы: карточки, таблица сравнения (десктоп) и панели по тарифам (мобильный). */
+
+.top {
+  padding: 44px 0 30px;
+  text-align: center;
+}
+
+.top p {
+  margin: 10px auto 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  max-width: 52ch;
+}
+
+.cards {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+
+.price {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 6px;
+}
+
+.price small {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.note {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* .btn и .tag — глобальные классы из globals.css, отсюда :global(). */
+.card :global(.btn) { margin: 16px 0; }
+
+.badge {
+  align-self: flex-start;
+  margin-bottom: 8px;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  padding: 18px 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+/* --- Таблица сравнения: десктоп ------------------------------------------ */
+
+.matrix {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.matrix th,
+.matrix td {
+  padding: 11px 12px;
+  font-weight: 400;
+}
+
+.matrix thead th {
+  vertical-align: bottom;
+  text-align: center;
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+
+.matrix thead th small {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.matrix thead th :global(.tag) { margin-bottom: 5px; }
+
+.matrix tbody th {
+  text-align: left;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.matrix td {
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+
+.group th {
+  padding-top: 26px;
+  padding-bottom: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* Колонка рекомендованного тарифа подсвечена по всей высоте. */
+.hl { background: var(--surface); }
+
+.matrix thead .hl {
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  padding-top: 14px;
+}
+
+.matrix tr:last-child .hl { border-radius: 0 0 var(--r-card) var(--r-card); }
+
+.same { color: var(--text-3); }
+
+.ctaRow td { padding-top: 20px; }
+.ctaRow .hl { padding: 20px 12px 22px; }
+
+/* --- Панели по тарифам: мобильный ---------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: var(--surface-alt);
+  border-radius: var(--r-pill);
+  margin-bottom: 18px;
+}
+
+.tabs button {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.tabs button[aria-selected='true'] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.panelPrice {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.panelPrice small {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.panelNote {
+  font-size: var(--fs-xs);
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  font-size: var(--fs-sm);
+}
+
+.row span:first-child { color: var(--text-2); }
+.row span:last-child { text-align: right; }
+
+.rowGroup {
+  padding-top: 18px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* --- Вопросы -------------------------------------------------------------- */
+
+.faq dt {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  margin-top: 18px;
+}
+
+.faq dd {
+  margin: 5px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+@media (min-width: 860px) {
+  .cards { grid-template-columns: repeat(4, 1fr); align-items: start; }
+  .matrix { display: table; }
+  .mobileMatrix { display: none; }
+}

@@ -69,7 +69,7 @@ export function ComplaintForm() {
           placeholder="Какие права нарушены и чем это подтверждается"
         />
       </label>
-      <button type="submit" disabled={state === 'sending'}>
+      <button type="submit" className="btn btn--primary" disabled={state === 'sending'}>
         {state === 'sending' ? 'Отправка…' : 'Отправить жалобу'}
       </button>
       {state === 'error' && <p className="form-error">{error}</p>}

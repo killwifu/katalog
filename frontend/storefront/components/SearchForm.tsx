@@ -11,7 +11,9 @@ export function SearchForm({ slug, initial }: { slug: string; initial?: string }
         required
         aria-label="Поиск по подписям"
       />
-      <button type="submit">Найти</button>
+      <button type="submit" className="btn btn--primary">
+        Найти
+      </button>
     </form>
   )
 }

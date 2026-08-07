@@ -44,7 +44,8 @@ make down                    # останавливает стек
 
 | URL | Что |
 | --- | --- |
-| `localhost/` и `localhost/{slug}` | витрина (Next.js SSR) |
+| `localhost/` | публичные страницы: главная, `/pricing`, `/updates`, `/remove-bg` |
+| `localhost/{slug}` | витрина магазина (Next.js SSR) |
 | `localhost/app/` | кабинет продавца (SPA), тарифы — `/app/billing`, статистика — `/app/stats` |
 | `localhost/app/admin` | админ-зона модератора (нужна роль `admin` в `users`) |
 | `localhost/api/v1/...` | Go API |
@@ -123,7 +124,9 @@ cd frontend/storefront && npm install && npm run dev   # http://localhost:3000
 backend/     Go: cmd/api, cmd/worker, internal/{api,worker,db,billing,mail,...}
 frontend/
   cabinet/     Vite + React + TS + Tailwind + TanStack Router (раздаётся по /app/)
-  storefront/  Next.js App Router (SSR витрина + статические страницы)
+  storefront/  Next.js App Router: app/(marketing) — публичные страницы,
+               app/[slug] — витрина магазина. Дизайн-токены в app/globals.css,
+               вёрстка страниц — в CSS-модулях рядом с ними
 deploy/      docker-compose.yml, Caddyfile
 api/         openapi.yaml — источник правды для контрактов
 migrations/  goose-миграции (schema для sqlc)

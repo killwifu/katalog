@@ -26,6 +26,9 @@ var reservedSlugs = map[string]struct{}{
 	"healthz": {}, "metrics": {}, "mail": {}, "billing": {}, "settings": {},
 	"terms": {}, "privacy": {}, "abuse": {}, "root": {}, "system": {},
 	"content-policy": {},
+	// Публичные страницы витрины: статический сегмент в Next перекрывает
+	// /{slug}, поэтому магазин с таким адресом стал бы недоступен.
+	"pricing": {}, "updates": {}, "remove-bg": {},
 }
 
 func validateSlug(slug string) string {

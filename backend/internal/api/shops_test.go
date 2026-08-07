@@ -23,6 +23,9 @@ func TestValidateSlug(t *testing.T) {
 		{name: "reserved api", slug: "api", wantOK: false},
 		{name: "reserved app", slug: "app", wantOK: false},
 		{name: "reserved media", slug: "media", wantOK: false},
+		{name: "reserved pricing", slug: "pricing", wantOK: false},
+		{name: "reserved updates", slug: "updates", wantOK: false},
+		{name: "reserved remove-bg", slug: "remove-bg", wantOK: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

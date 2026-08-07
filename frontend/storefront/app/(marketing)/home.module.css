@@ -1,0 +1,174 @@
+/* Главная. Мобильный — база, десктоп добавляется в @media (min-width: 860px). */
+
+.hero { padding: 46px 0 40px; }
+
+.heroGrid {
+  display: grid;
+  gap: 28px;
+}
+
+.hero h1 { margin: 12px 0; }
+
+.lead {
+  font-size: 16px;
+  color: var(--text-2);
+  max-width: 46ch;
+}
+
+.heroCta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* Превью витрины продавца: серые блоки вместо фотографий. */
+.peek {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: 12px;
+}
+
+.peekBar {
+  height: 30px;
+  border-radius: 8px;
+  background: var(--brand);
+  margin-bottom: 10px;
+}
+
+.peekTabs {
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+
+.peekTabs b { color: var(--text); font-weight: 500; }
+
+.peekGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.peekCell {
+  aspect-ratio: 4 / 5;
+  background: var(--surface-alt);
+  border-radius: 8px;
+}
+
+/* Заглушка под видео-гайд. */
+.video {
+  aspect-ratio: 16 / 9;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  display: grid;
+  place-items: center;
+}
+
+.videoPlay {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--brand);
+  display: grid;
+  place-items: center;
+}
+
+.grid2 { display: grid; gap: 12px; }
+
+.feature h3 { margin: 10px 0 5px; }
+
+.feature p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.steps { display: grid; gap: 20px; }
+
+.step { display: flex; gap: 14px; }
+
+.stepNum {
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.step h3 { margin-bottom: 3px; }
+
+.step p {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.plans { display: grid; gap: 10px; }
+
+.plan {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.planText {
+  flex: 1;
+  min-width: 0;
+}
+
+.planText b {
+  display: block;
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+
+.planText span {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.planPrice {
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.plansNote {
+  margin-top: 18px;
+  font-size: var(--fs-sm);
+}
+
+.plansNote a { color: var(--brand); }
+
+.final {
+  background: var(--surface-alt);
+  border-radius: var(--r-card);
+  padding: 30px 20px;
+  text-align: center;
+}
+
+.final p {
+  margin: 8px auto 18px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  max-width: 44ch;
+}
+
+@media (min-width: 860px) {
+  .hero { padding: 64px 0 56px; }
+  .heroGrid { grid-template-columns: 1.15fr 0.85fr; align-items: center; gap: 48px; }
+  .heroCta { flex-direction: row; }
+  .grid2 { grid-template-columns: 1fr 1fr; gap: 14px; }
+  .steps { grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .plans { grid-template-columns: repeat(3, 1fr); }
+  .plan { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .planPrice { font-size: 24px; }
+  .final { padding: 44px 20px; }
+}

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { ComplaintForm } from '../../components/ComplaintForm'
+import { ComplaintForm } from '@/components/ComplaintForm'
 
 export const metadata: Metadata = { title: 'Жалоба на контент — Katalog' }
 
