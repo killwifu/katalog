@@ -106,6 +106,13 @@ svg {
   max-width: 100%;
 }
 
+/* Атрибуты width/height у <img> — presentational hints, они попадают в CSS.
+   Без height:auto высота фото берётся из атрибута (оригинальные пиксели),
+   а aspect-ratio у карточки перестаёт работать: обе размерности заданы. */
+img {
+  height: auto;
+}
+
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
@@ -125,6 +132,12 @@ svg {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 0 20px;
+}
+
+/* Липкая полоса действия (components/site/StickyBar) фиксирована у нижнего
+   края и перекрыла бы подвал: страницы, где она есть, получают отступ снизу. */
+@media (max-width: 859px) {
+  body:has(.stickybar) { padding-bottom: 76px; }
 }
 
 .muted  { color: var(--text-2); }

@@ -138,12 +138,6 @@
   color: var(--text-3);
 }
 
-/* Отступ под полосой, чтобы она не перекрывала конец страницы. */
-.stickySpacer { height: 76px; }
-
 @media (min-width: 860px) {
-  .sticky,
-  .stickySpacer {
-    display: none;
-  }
+  .sticky { display: none; }
 }

@@ -17,10 +17,11 @@ export function PlanTabs() {
         {PLANS.map((p) => (
           <button
             key={p.id}
+            id={`plan-tab-${p.id}`}
             type="button"
             role="tab"
             aria-selected={p.id === active}
-            aria-controls={`plan-panel-${p.id}`}
+            aria-controls="plan-panel"
             onClick={() => setActive(p.id)}
           >
             {p.name}
@@ -28,7 +29,9 @@ export function PlanTabs() {
         ))}
       </div>
 
-      <div id={`plan-panel-${plan.id}`} role="tabpanel">
+      {/* Панель одна на все табы — отрисована всегда только активная,
+          поэтому и id у неё один, а связь с табом даёт aria-labelledby. */}
+      <div id="plan-panel" role="tabpanel" aria-labelledby={`plan-tab-${plan.id}`}>
         {plan.featured && <span className="tag">выбирают чаще</span>}
         <div className={styles.panelPrice}>
           {formatPrice(plan.price)} ₽{plan.price > 0 && <small>/мес</small>}

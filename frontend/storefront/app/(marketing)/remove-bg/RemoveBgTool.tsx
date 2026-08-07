@@ -67,7 +67,9 @@ export function RemoveBgTool() {
 
         <p className={`muted ${styles.hint}`}>Как это выглядит — потяните ползунок</p>
 
-        {/* Иллюстрация результата: слева кадр «с ковра», справа вырезанный товар. */}
+        {/* Иллюстрация результата. Ползунок открывает слой «после» слева направо:
+            тянешь к «после» — результата становится больше. Обратный порядок
+            (как в исходном макете) противоречил бы подписям у ползунка. */}
         <div className={styles.cmp}>
           <svg viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
             <defs>
@@ -85,7 +87,7 @@ export function RemoveBgTool() {
             <path d="M150 70 L200 92 L250 70 L286 104 L262 130 L256 240 L144 240 L138 130 L114 104 Z" fill="#C9502A" />
             <path d="M200 92 L200 240" stroke="#8E3417" strokeWidth="3" />
           </svg>
-          <div className={styles.after} style={{ clipPath: `inset(0 0 0 ${position}%)` }}>
+          <div className={styles.after} style={{ clipPath: `inset(0 ${100 - position}% 0 0)` }}>
             <svg viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true">
               <rect width="400" height="300" fill="url(#chk)" />
               <path d="M150 70 L200 92 L250 70 L286 104 L262 130 L256 240 L144 240 L138 130 L114 104 Z" fill="#C9502A" />
