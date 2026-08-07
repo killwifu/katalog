@@ -62,7 +62,13 @@ type publicPhotoResponse struct {
 // mediaURLs — адреса деривативов. Префикс задаётся MEDIA_BASE_URL:
 // относительный "/media" локально, отдельный CDN-домен в проде.
 func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
+	// Дефолт держим здесь, а не только в config.Load: API собирают и
+	// напрямую (тесты), и пустой префикс дал бы битые адреса всех картинок
+	// молча — ошибка вылезла бы только глазами на витрине.
 	base := a.Cfg.MediaBaseURL
+	if base == "" {
+		base = "/media"
+	}
 	return map[string]string{
 		"thumb":  fmt.Sprintf("%s/%s/%s/300.webp", base, shopID, photoID),
 		"medium": fmt.Sprintf("%s/%s/%s/800.webp", base, shopID, photoID),
