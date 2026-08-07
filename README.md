@@ -153,6 +153,47 @@ docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d
 IMAGE_TAG=<sha> docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d
 ```
 
+### Автовыкладка по SSH
+
+Джоб `deploy` в CI после успешных тестов и сборки образов заходит на сервер,
+переключает рабочую копию на задеплоенный коммит и поднимает стек с
+`IMAGE_TAG` = sha этого коммита. Джоб **выключен**, пока не выставлена
+переменная `DEPLOY_ENABLED=true` — иначе каждый push в `main` падал бы
+на отсутствующих доступах.
+
+На сервере нужен пользователь для деплоя, состоящий в группе `docker`,
+и клон репозитория в `DEPLOY_PATH`. Ключ — отдельный, только для CI:
+
+```sh
+ssh-keygen -t ed25519 -f deploy_key -N '' -C 'github-actions'
+ssh-copy-id -i deploy_key.pub deploy@<host>       # публичный — на сервер
+ssh-keyscan -p 22 <host>                          # -> SSH_KNOWN_HOSTS
+```
+
+Settings → Secrets and variables → Actions:
+
+| Secret | Что |
+| --- | --- |
+| `SSH_HOST` | адрес сервера |
+| `SSH_USER` | пользователь деплоя |
+| `SSH_KEY` | приватный ключ (содержимое `deploy_key`) |
+| `SSH_KNOWN_HOSTS` | вывод `ssh-keyscan` — чтобы подмена сервера не прошла молча |
+
+| Variable | Что |
+| --- | --- |
+| `DEPLOY_ENABLED` | `true` — включает джоб |
+| `APP_DOMAIN` | домен, на нём же проверяется `/healthz` после выкладки |
+| `DEPLOY_PATH` | путь к клону репозитория на сервере |
+| `SSH_PORT` | если не 22 |
+
+Логиниться в GHCR на сервере заранее не нужно: CI прокидывает свой
+короткоживущий токен на время выкладки и разлогинивается после.
+Если после `up -d` домен не отвечает на `/healthz` в течение 150 секунд,
+джоб падает — молчаливой выкладки сломанного стека не будет.
+
+Окружение джоба — `production`. В Settings → Environments на него можно
+повесить ручное подтверждение, если автовыкладка на каждый коммит не нужна.
+
 Миграции применяет one-shot сервис `migrate` при каждом старте стека,
 до запуска `api` и `worker`.
 

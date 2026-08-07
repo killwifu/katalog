@@ -152,3 +152,85 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/katalog-${{ matrix.image }}:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/katalog-${{ matrix.image }}:latest
+
+  # Выкладка на сервер по SSH. Выключена, пока в переменных репозитория
+  # не выставлен DEPLOY_ENABLED=true (Settings -> Secrets and variables ->
+  # Actions -> Variables): иначе каждый push в main падал бы на отсутствующих
+  # доступах. Нужные секреты и переменные перечислены в README.
+  deploy:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true' }}
+    needs: [backend, frontend, storefront-e2e, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: production
+      url: https://${{ vars.APP_DOMAIN }}
+    # Два деплоя одновременно на один сервер — гарантированная гонка.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PORT: ${{ vars.SSH_PORT || 22 }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+    steps:
+      - name: Ключ и known_hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Отпечаток сервера берём из секрета, а не StrictHostKeyChecking=no:
+          # иначе подмена сервера пройдёт незамеченной. Значение получить так:
+          # ssh-keyscan -p <port> <host>
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # Токен job'а даёт packages:read — долгоживущий PAT на сервере не нужен.
+      # Уходит через stdin, а не аргументом: иначе светился бы в ps на сервере.
+      - name: Логин в GHCR на сервере
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      - name: Обновить стек
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' SHA='${{ github.sha }}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+
+          # Компоуз и Caddyfile лежат в том же репозитории, что и образы,
+          # поэтому рабочая копия переключается на тот же коммит.
+          git fetch --quiet origin main
+          git checkout --quiet --detach "$SHA"
+
+          # IMAGE_TAG из окружения перебивает значение из .env: катим ровно
+          # тот коммит, который собрал CI, а не плавающий latest.
+          export IMAGE_TAG="$SHA"
+          COMPOSE="docker compose --env-file .env -f deploy/docker-compose.prod.yml"
+          $COMPOSE pull --quiet
+          $COMPOSE up -d --remove-orphans
+
+          docker logout ghcr.io
+          docker image prune -f
+          REMOTE
+
+      - name: Проверить, что сервис поднялся
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 "https://${{ vars.APP_DOMAIN }}/healthz" >/dev/null; then
+              echo "healthz отвечает"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "healthz не ответил за 150 секунд — стек не поднялся" >&2
+          exit 1
