@@ -26,12 +26,12 @@ type Client struct {
 	publicBase string
 }
 
-func New(endpoint, publicEndpoint, accessKey, secretKey, bucket string) (*Client, error) {
-	ops, err := newMinio(endpoint, accessKey, secretKey)
+func New(endpoint, publicEndpoint, accessKey, secretKey, bucket, region string) (*Client, error) {
+	ops, err := newMinio(endpoint, accessKey, secretKey, region)
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client for %s: %w", endpoint, err)
 	}
-	pre, err := newMinio(publicEndpoint, accessKey, secretKey)
+	pre, err := newMinio(publicEndpoint, accessKey, secretKey, region)
 	if err != nil {
 		return nil, fmt.Errorf("create s3 presign client for %s: %w", publicEndpoint, err)
 	}
@@ -49,7 +49,7 @@ func (c *Client) PublicDerivativeURL(shopID, photoID uuid.UUID, size int) string
 	return fmt.Sprintf("%s/%s/%s", c.publicBase, c.bucket, DerivativeKey(shopID, photoID, size))
 }
 
-func newMinio(endpoint, accessKey, secretKey string) (*minio.Client, error) {
+func newMinio(endpoint, accessKey, secretKey, region string) (*minio.Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("parse endpoint: %w", err)
@@ -60,7 +60,7 @@ func newMinio(endpoint, accessKey, secretKey string) (*minio.Client, error) {
 		// Явный регион: без него minio-go делает сетевой GetBucketLocation,
 		// а presign-клиент указывает на публичный endpoint, недоступный
 		// из контейнера api.
-		Region: "us-east-1",
+		Region: region,
 	})
 }
 

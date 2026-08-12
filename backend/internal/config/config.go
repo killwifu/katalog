@@ -21,6 +21,9 @@ type Config struct {
 	S3Bucket         string
 	S3AccessKey      string
 	S3SecretKey      string
+	// S3Region — регион в scope подписи SigV4. MinIO принимает любой,
+	// облачные провайдеры проверяют: Yandex Object Storage — ru-central1.
+	S3Region string
 	// CookieSecure — Secure-флаг сессионной cookie (в проде за TLS — true).
 	CookieSecure bool
 	SessionTTL   time.Duration
@@ -103,6 +106,7 @@ func Load() Config {
 		S3Bucket:               getenv("S3_BUCKET", "katalog"),
 		S3AccessKey:            getenv("S3_ACCESS_KEY", "minioadmin"),
 		S3SecretKey:            getenv("S3_SECRET_KEY", "minioadmin"),
+		S3Region:               getenv("S3_REGION", "us-east-1"),
 		CookieSecure:           os.Getenv("COOKIE_SECURE") == "true",
 		SessionTTL:             30 * 24 * time.Hour,
 		AuthRateLimit:          getenvInt64("AUTH_RATE_LIMIT", 20),

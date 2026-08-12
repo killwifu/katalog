@@ -154,7 +154,7 @@ func run(m *testing.M) int {
 	defer env.pool.Close()
 	env.q = db.New(env.pool)
 
-	env.store, err = storage.New(s3Endpoint, s3Endpoint, minioC.Username, minioC.Password, testBucket)
+	env.store, err = storage.New(s3Endpoint, s3Endpoint, minioC.Username, minioC.Password, testBucket, "us-east-1")
 	if err != nil {
 		log.Printf("storage client: %v", err)
 		return 1
