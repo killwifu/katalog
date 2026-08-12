@@ -49,7 +49,7 @@ func run(logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	store, err := storage.New(cfg.S3Endpoint, cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+	store, err := storage.New(cfg.S3Endpoint, cfg.S3PublicEndpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Region)
 	if err != nil {
 		return err
 	}
