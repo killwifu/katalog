@@ -60,6 +60,9 @@ services:
       S3_BUCKET: ${S3_BUCKET:?S3_BUCKET обязателен}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY обязателен}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY обязателен}
+      # Регион в scope подписи SigV4. MinIO принимает любой, облачные
+      # провайдеры проверяют: у Yandex Object Storage — ru-central1.
+      S3_REGION: ${S3_REGION:?S3_REGION обязателен}
       # Деривативы отдаёт CDN-домен, не домен приложения.
       MEDIA_BASE_URL: ${MEDIA_BASE_URL:?MEDIA_BASE_URL обязателен}
       COOKIE_SECURE: "true"
@@ -95,15 +98,20 @@ services:
       S3_BUCKET: ${S3_BUCKET}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_REGION: ${S3_REGION}
       STOREFRONT_URL: http://storefront:3000
       REVALIDATE_SECRET: ${REVALIDATE_SECRET}
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
-      SMTP_HOST: ${SMTP_HOST:?нужен SMTP — без почты не работают регистрация и сброс пароля}
+      # Пустой SMTP_HOST — письма пишутся в лог воркера. Регистрация и вход
+      # работают (подтверждение почты нигде не гейтит), но сброс пароля
+      # практически недоступен: ссылка уходит только в лог.
+      # Отложено — см. «Что отложено» в README.
+      SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
-      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM обязателен}
+      MAIL_FROM: ${MAIL_FROM:-noreply@localhost}
       SITE_URL: https://${APP_DOMAIN}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       TRAFFIC_ALERT_MULTIPLIER: ${TRAFFIC_ALERT_MULTIPLIER:-5}
