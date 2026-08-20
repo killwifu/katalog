@@ -103,15 +103,37 @@ func (a *API) toPublicPhotoResponse(p db.Photo) publicPhotoResponse {
 	}
 }
 
-// publicShopFromURL: активный магазин по slug, иначе 404.
+// publicShopFromURL: активный магазин по slug.
+//
+// Витрину, скрытую за неоплату, отличаем от несуществующей: покупателю
+// уходит 410 с именем и контактами продавца, чтобы он всё равно мог
+// написать (kit: unavailable). 404 здесь означал бы «такого магазина нет»
+// и обрывал бы связь с продавцом ровно тогда, когда она ему нужнее всего.
 func (a *API) publicShopFromURL(w http.ResponseWriter, r *http.Request) (db.Shop, bool) {
-	shop, err := a.Q.GetShopBySlug(r.Context(), chi.URLParam(r, "slug"))
+	shop, err := a.Q.GetShopBySlugAny(r.Context(), chi.URLParam(r, "slug"))
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusNotFound, "not_found", "shop not found")
 		return db.Shop{}, false
 	}
 	if err != nil {
 		a.internalError(w, "load public shop", err)
+		return db.Shop{}, false
+	}
+	// Заблокированный модератором или удалённый магазин наружу не отличается
+	// от несуществующего: причину блокировки покупателю знать незачем.
+	if shop.Status != db.ShopStatusActive {
+		apiError(w, http.StatusNotFound, "not_found", "shop not found")
+		return db.Shop{}, false
+	}
+	if shop.BillingState == db.BillingStateSuspended {
+		writeJSON(w, http.StatusGone, map[string]any{
+			"error":   "shop_unavailable",
+			"message": "shop is temporarily unavailable",
+			"shop": map[string]any{
+				"name":     shop.Name,
+				"contacts": json.RawMessage(shop.Contacts),
+			},
+		})
 		return db.Shop{}, false
 	}
 	return shop, true

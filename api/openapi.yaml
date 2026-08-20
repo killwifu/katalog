@@ -797,6 +797,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/PublicSection" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/shops/{shopID}/categories:
@@ -920,6 +921,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/PublicCategory" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/shops/{slug}/categories/{categorySlug}:
@@ -941,6 +943,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/PublicAlbum" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/shops/{slug}:
@@ -963,6 +966,7 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/PublicAlbum" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/shops/{slug}/albums/{albumID}:
@@ -996,6 +1000,7 @@ paths:
                   per_page: { type: integer }
                   total: { type: integer }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/shops/{slug}/search:
@@ -1023,6 +1028,7 @@ paths:
                     items: { $ref: "#/components/schemas/PublicPhoto" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/lead-click:
@@ -1046,6 +1052,7 @@ paths:
         "204": { description: Лид зафиксирован }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/sitemap:
@@ -1294,6 +1301,25 @@ components:
               password: { type: string, minLength: 8 }
 
   responses:
+    ShopUnavailable:
+      description: >
+        Витрина скрыта за неоплату. Отличается от 404 намеренно: покупателю
+        отдаются имя и контакты продавца, чтобы он мог написать напрямую.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, shop]
+            properties:
+              error: { type: string, enum: [shop_unavailable] }
+              message: { type: string }
+              shop:
+                type: object
+                required: [name, contacts]
+                properties:
+                  name: { type: string }
+                  contacts: { type: object, additionalProperties: { type: string } }
+
     BadRequest:
       description: Ошибка валидации
       content:

@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getCategories, getShopPage } from '@/lib/api'
+import { ShopUnavailableError, getCategories, getShopPage } from '@/lib/api'
 import { ShopHeader } from '@/components/ShopHeader'
 import { TrackView } from '@/components/TrackView'
 import { CategoryMenu } from '@/components/CategoryMenu'
+import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { ShopTabs } from '@/components/ShopTabs'
 import { AlbumGrid } from '@/components/AlbumGrid'
 
@@ -23,7 +24,16 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = params
-  const data = await getShopPage(slug)
+  let data: Awaited<ReturnType<typeof getShopPage>>
+  try {
+    data = await getShopPage(slug)
+  } catch (e) {
+    // Скрытая витрина всё равно должна отдавать осмысленный заголовок.
+    if (e instanceof ShopUnavailableError) {
+      return { title: `${e.payload.shop.name} — каталог временно недоступен` }
+    }
+    throw e
+  }
   if (!data) return { title: 'Магазин не найден' }
   const cover = data.albums.find((a) => a.cover_urls)?.cover_urls
   return {
@@ -42,7 +52,15 @@ export default async function ShopPage({ params }: Props) {
   const { slug } = params
   // Категории — второй запрос того же ISR-кеша: тег shop:{slug} общий,
   // вебхук инвалидирует обе выдачи разом.
-  const [data, categories] = await Promise.all([getShopPage(slug), getCategories(slug)])
+  let data: Awaited<ReturnType<typeof getShopPage>>
+  let categories: Awaited<ReturnType<typeof getCategories>>
+  try {
+    ;[data, categories] = await Promise.all([getShopPage(slug), getCategories(slug)])
+  } catch (e) {
+    // Неоплата — не «страница не найдена»: показываем контакты продавца.
+    if (e instanceof ShopUnavailableError) return <ShopUnavailable payload={e.payload} />
+    throw e
+  }
   if (!data) notFound()
   const { shop, albums } = data
   // Подальбомы показываются внутри родителя; на главной — только верхний уровень.

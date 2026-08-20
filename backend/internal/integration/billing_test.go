@@ -336,8 +336,10 @@ func TestBillingLifecycle(t *testing.T) {
 	if b.BillingState != "suspended" || b.Subscription.Status != "expired" {
 		t.Fatalf("after run 3: state %s, sub %+v", b.BillingState, b.Subscription)
 	}
-	if status, _ := c.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusNotFound {
-		t.Fatalf("public shop when suspended: status %d, want 404", status)
+	// 410, а не 404: витрина скрыта, но покупатель должен получить контакты
+	// продавца и суметь написать — подробнее в TestShopUnavailable.
+	if status, _ := c.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusGone {
+		t.Fatalf("public shop when suspended: status %d, want 410", status)
 	}
 
 	// Контент не удалён: фото на месте, кабинет работает.

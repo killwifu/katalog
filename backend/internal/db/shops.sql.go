@@ -116,34 +116,6 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 	return i, err
 }
 
-const getShopBySlug = `-- name: GetShopBySlug :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
-WHERE slug = $1 AND status = 'active' AND billing_state != 'suspended'
-`
-
-// Публичная витрина: только активные магазины; suspended по биллингу — скрыты.
-func (q *Queries) GetShopBySlug(ctx context.Context, slug string) (Shop, error) {
-	row := q.db.QueryRow(ctx, getShopBySlug, slug)
-	var i Shop
-	err := row.Scan(
-		&i.ID,
-		&i.OwnerID,
-		&i.Slug,
-		&i.Name,
-		&i.Description,
-		&i.Contacts,
-		&i.Settings,
-		&i.Status,
-		&i.Plan,
-		&i.StorageUsed,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.BillingState,
-		&i.PaidUntil,
-	)
-	return i, err
-}
-
 const getShopForOwner = `-- name: GetShopForOwner :one
 SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
 WHERE id = $1 AND owner_id = $2
@@ -183,6 +155,7 @@ WHERE owner_id = $1
 ORDER BY created_at
 `
 
+// Публичная витрина: только активные магазины; suspended по биллингу — скрыты.
 func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Shop, error) {
 	rows, err := q.db.Query(ctx, listShopsByOwner, ownerID)
 	if err != nil {

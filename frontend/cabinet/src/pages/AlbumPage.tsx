@@ -5,14 +5,29 @@ import { Dashboard } from '@uppy/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { api, type AlbumStatus, type Photo } from '../api'
+import { ApiError, api, type AlbumStatus, type Photo } from '../api'
 import { useShop } from './AppLayout'
 import '@uppy/core/dist/style.min.css'
 import '@uppy/dashboard/dist/style.min.css'
 
 // createUppy: presign у API -> прямой PUT в S3 (не через бэкенд) ->
 // batch-confirm по завершении. Ретраи при обрыве сети — кнопками Uppy.
-function createUppy(shopId: string, albumId: string, onBatchConfirmed: () => void) {
+// Причины отказа в presign — машинные коды бэкенда. Показываем человеческий
+// текст: «не удалось загрузить» без объяснения выглядит как поломка сервиса.
+const QUOTA_REASONS: Record<string, string> = {
+  photo_quota_exceeded: 'достигнут лимит фотографий на тарифе',
+  quota_exceeded: 'закончилось место в хранилище',
+  subscription_inactive: 'подписка неактивна, загрузка приостановлена',
+}
+
+export type UploadOutcome = { uploaded: number; total: number; reason?: string }
+
+function createUppy(
+  shopId: string,
+  albumId: string,
+  onBatchConfirmed: () => void,
+  onOutcome: (outcome: UploadOutcome) => void,
+) {
   const uppy = new Uppy({
     locale: ru_RU,
     restrictions: {
@@ -22,14 +37,31 @@ function createUppy(shopId: string, albumId: string, onBatchConfirmed: () => voi
   }).use(AwsS3, {
     shouldUseMultipart: false,
     async getUploadParameters(file) {
-      const { photo_id, url } = await api.presign(shopId, albumId, file.size ?? 0)
-      uppy.setFileMeta(file.id, { photoId: photo_id })
-      return { method: 'PUT', url, headers: {} }
+      try {
+        const { photo_id, url } = await api.presign(shopId, albumId, file.size ?? 0)
+        uppy.setFileMeta(file.id, { photoId: photo_id })
+        return { method: 'PUT', url, headers: {} }
+      } catch (e) {
+        // Лимит валит только этот файл, остальные продолжают грузиться:
+        // отказ целиком заставил бы продавца выбирать фото вручную заранее.
+        if (e instanceof ApiError && QUOTA_REASONS[e.code]) {
+          throw new Error(QUOTA_REASONS[e.code])
+        }
+        throw e
+      }
     },
   })
 
   uppy.on('complete', (result) => {
-    const ids = (result.successful ?? [])
+    const ok = result.successful ?? []
+    const failed = result.failed ?? []
+    if (failed.length > 0) {
+      const reason = Object.values(QUOTA_REASONS).find((r) =>
+        failed.some((f) => f.error?.includes(r)),
+      )
+      onOutcome({ uploaded: ok.length, total: ok.length + failed.length, reason })
+    }
+    const ids = ok
       .map((f) => (f.meta as { photoId?: string }).photoId)
       .filter((id): id is string => Boolean(id))
     if (ids.length === 0) return
@@ -54,11 +86,17 @@ export function AlbumPage() {
         : false,
   })
 
+  const [outcome, setOutcome] = useState<UploadOutcome | null>(null)
   const [uppy] = useState(() =>
-    createUppy(shop.id, albumId, () => {
-      void queryClient.invalidateQueries({ queryKey: ['photos', shop.id, albumId] })
-      void queryClient.invalidateQueries({ queryKey: ['shops'] })
-    }),
+    createUppy(
+      shop.id,
+      albumId,
+      () => {
+        void queryClient.invalidateQueries({ queryKey: ['photos', shop.id, albumId] })
+        void queryClient.invalidateQueries({ queryKey: ['shops'] })
+      },
+      setOutcome,
+    ),
   )
   useEffect(() => () => uppy.destroy(), [uppy])
 
@@ -111,6 +149,23 @@ export function AlbumPage() {
           </Link>
         </div>
       </div>
+
+      {outcome && (
+        <div className="mb-4 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span className="flex-1">
+            Поместилось {outcome.uploaded} из {outcome.total}
+            {outcome.reason ? `: ${outcome.reason}` : ''}.{' '}
+            {outcome.reason && (
+              <Link to="/billing" className="underline">
+                Посмотреть тарифы
+              </Link>
+            )}
+          </span>
+          <button onClick={() => setOutcome(null)} aria-label="Закрыть">
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="mb-6">
         <Dashboard uppy={uppy} height={260} proudlyDisplayPoweredByUppy={false} note="JPEG, PNG, WebP или HEIC, до 50 МБ" />
