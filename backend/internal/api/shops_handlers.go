@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -123,7 +124,34 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "create shop", err)
 		return
 	}
+	a.createSystemTabs(r, shop.ID)
 	writeJSON(w, http.StatusCreated, a.toShopResponse(shop))
+}
+
+// createSystemTabs — «Главная», «Альбомы» и «Контакты» генерируются
+// автоматически и продавцом не удаляются (kit). Ошибка не роняет создание
+// магазина: вкладки — навигация витрины, без них магазин рабочий,
+// а повторить их создание можно.
+func (a *API) createSystemTabs(r *http.Request, shopID uuid.UUID) {
+	systemTabs := []struct {
+		title string
+		slug  string
+	}{
+		{"Главная", "home"},
+		{"Альбомы", "albums"},
+		{"Контакты", "contacts"},
+	}
+	for i, t := range systemTabs {
+		if _, err := a.Q.CreateTab(r.Context(), db.CreateTabParams{
+			ShopID:    shopID,
+			Title:     t.title,
+			Slug:      t.slug,
+			IsSystem:  true,
+			SortOrder: int32(i),
+		}); err != nil {
+			a.Log.Warn("create system tab", "shop_id", shopID, "slug", t.slug, "error", err)
+		}
+	}
 }
 
 func (a *API) handleListShops(w http.ResponseWriter, r *http.Request) {

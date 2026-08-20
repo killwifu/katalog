@@ -18,7 +18,7 @@ type albumResponse struct {
 	Title        string  `json:"title"`
 	CoverPhotoID *string `json:"cover_photo_id"`
 	SortOrder    int32   `json:"sort_order"`
-	IsHidden     bool    `json:"is_hidden"`
+	Status       string  `json:"status"`
 	PhotoCount   int32   `json:"photo_count"`
 }
 
@@ -27,7 +27,7 @@ func toAlbumResponse(al db.Album) albumResponse {
 		ID:         al.ID.String(),
 		Title:      al.Title,
 		SortOrder:  al.SortOrder,
-		IsHidden:   al.IsHidden,
+		Status:     string(al.Status),
 		PhotoCount: al.PhotoCount,
 	}
 	if al.ParentID.Valid {
@@ -147,7 +147,7 @@ func (a *API) handleGetAlbum(w http.ResponseWriter, r *http.Request) {
 type updateAlbumRequest struct {
 	Title        *string `json:"title"`
 	SortOrder    *int32  `json:"sort_order"`
-	IsHidden     *bool   `json:"is_hidden"`
+	Status       *string `json:"status"`
 	CoverPhotoID *string `json:"cover_photo_id"`
 }
 
@@ -161,7 +161,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	title, sortOrder, isHidden, cover := album.Title, album.SortOrder, album.IsHidden, album.CoverPhotoID
+	title, sortOrder, status, cover := album.Title, album.SortOrder, album.Status, album.CoverPhotoID
 	if req.Title != nil {
 		title = strings.TrimSpace(*req.Title)
 		if title == "" || len(title) > 200 {
@@ -172,8 +172,14 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	if req.SortOrder != nil {
 		sortOrder = *req.SortOrder
 	}
-	if req.IsHidden != nil {
-		isHidden = *req.IsHidden
+	if req.Status != nil {
+		switch db.AlbumStatus(*req.Status) {
+		case db.AlbumStatusPublished, db.AlbumStatusUnlisted, db.AlbumStatusDraft:
+			status = db.AlbumStatus(*req.Status)
+		default:
+			apiError(w, http.StatusBadRequest, "invalid_status", "status must be published, unlisted or draft")
+			return
+		}
 	}
 	if req.CoverPhotoID != nil {
 		if *req.CoverPhotoID == "" {
@@ -209,7 +215,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		ShopID:       shop.ID,
 		Title:        title,
 		SortOrder:    sortOrder,
-		IsHidden:     isHidden,
+		Status:       status,
 		CoverPhotoID: cover,
 	})
 	if err != nil {

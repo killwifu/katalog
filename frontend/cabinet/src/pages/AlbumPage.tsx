@@ -5,7 +5,7 @@ import { Dashboard } from '@uppy/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { api, type Photo } from '../api'
+import { api, type AlbumStatus, type Photo } from '../api'
 import { useShop } from './AppLayout'
 import '@uppy/core/dist/style.min.css'
 import '@uppy/dashboard/dist/style.min.css'
@@ -72,6 +72,13 @@ export function AlbumPage() {
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const album = albums.data?.find((a) => a.id === albumId)
 
+  const setStatus = useMutation({
+    mutationFn: (status: AlbumStatus) => api.setAlbumStatus(shop.id, albumId, status),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
+    },
+  })
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -81,13 +88,28 @@ export function AlbumPage() {
           </Link>
           <h1 className="text-lg font-semibold text-gray-900">{album?.title ?? 'Альбом'}</h1>
         </div>
-        <Link
-          to="/albums/$albumId/captions"
-          params={{ albumId }}
-          className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700"
-        >
-          Проставить подписи
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Три статуса: «по ссылке» не показывает альбом в списках витрины,
+              но прямая ссылка работает — её можно разослать до публикации. */}
+          <select
+            value={album?.status ?? 'published'}
+            onChange={(e) => setStatus.mutate(e.target.value as AlbumStatus)}
+            disabled={!album || setStatus.isPending}
+            className="rounded border border-gray-300 px-2 py-2 text-sm"
+            aria-label="Видимость альбома"
+          >
+            <option value="published">Опубликован</option>
+            <option value="unlisted">По ссылке</option>
+            <option value="draft">Черновик</option>
+          </select>
+          <Link
+            to="/albums/$albumId/captions"
+            params={{ albumId }}
+            className="rounded bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-700"
+          >
+            Проставить подписи
+          </Link>
+        </div>
       </div>
 
       <div className="mb-6">

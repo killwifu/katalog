@@ -27,6 +27,14 @@ func TestTenantIsolation(t *testing.T) {
 	owner.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/categories",
 		map[string]any{"title": "Кроссовки", "slug": "krossovki"}, http.StatusCreated, &cat)
 
+	// Своя вкладка с секцией — те же ресурсы под чужой сессией.
+	var tab tabResp
+	owner.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs",
+		map[string]any{"title": "Опт", "slug": "opt"}, http.StatusCreated, &tab)
+	var section sectionResp
+	owner.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs/"+tab.ID+"/sections",
+		map[string]any{"title": "Новинки"}, http.StatusCreated, &section)
+
 	tests := []struct {
 		method string
 		path   string
@@ -50,6 +58,15 @@ func TestTenantIsolation(t *testing.T) {
 		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/categories/%s", shop.ID, cat.ID), map[string]any{"title": "hacked", "slug": "hacked-cat"}},
 		{"DELETE", fmt.Sprintf("/api/v1/shops/%s/categories/%s", shop.ID, cat.ID), nil},
 		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s/category", shop.ID, album.ID), map[string]any{"category_id": cat.ID}},
+		{"GET", "/api/v1/shops/" + shop.ID + "/tabs", nil},
+		{"POST", "/api/v1/shops/" + shop.ID + "/tabs", map[string]any{"title": "hacked", "slug": "hacked-tab"}},
+		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/tabs/%s", shop.ID, tab.ID), map[string]any{"title": "hacked"}},
+		{"DELETE", fmt.Sprintf("/api/v1/shops/%s/tabs/%s", shop.ID, tab.ID), nil},
+		{"POST", fmt.Sprintf("/api/v1/shops/%s/tabs/%s/sections", shop.ID, tab.ID), map[string]any{"title": "hacked"}},
+		{"GET", "/api/v1/shops/" + shop.ID + "/sections", nil},
+		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/sections/%s", shop.ID, section.ID), map[string]any{"title": "hacked"}},
+		{"DELETE", fmt.Sprintf("/api/v1/shops/%s/sections/%s", shop.ID, section.ID), nil},
+		{"PUT", fmt.Sprintf("/api/v1/shops/%s/sections/%s/albums", shop.ID, section.ID), map[string]any{"album_ids": []string{album.ID}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {

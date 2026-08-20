@@ -72,6 +72,12 @@ export type Shop = {
   storage_used: number
   storage_max: number
   max_photos: number
+  settings: ShopSettings
+}
+
+export type ShopSettings = {
+  msg_template?: string
+  watermark?: { enabled: boolean; text: string; opacity: number }
 }
 
 export type PlanInfo = {
@@ -102,7 +108,7 @@ export type Album = {
   title: string
   cover_photo_id: string | null
   sort_order: number
-  is_hidden: boolean
+  status: AlbumStatus
   photo_count: number
 }
 
@@ -112,6 +118,24 @@ export type Category = {
   title: string
   slug: string
   sort_order: number
+}
+
+export type AlbumStatus = 'published' | 'unlisted' | 'draft'
+
+export type Tab = {
+  id: string
+  title: string
+  slug: string
+  is_system: boolean
+  sort_order: number
+}
+
+export type Section = {
+  id: string
+  tab_id: string
+  title: string
+  sort_order: number
+  album_ids: string[]
 }
 
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'failed' | 'blocked'
@@ -154,8 +178,12 @@ export const api = {
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),
   getShop: (shopId: string) => request<Shop>('GET', `/shops/${shopId}`),
+  updateSettings: (shopId: string, settings: ShopSettings) =>
+    request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
+  setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
+    request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
   createAlbum: (shopId: string, title: string, parentId?: string) =>
     request<Album>('POST', `/shops/${shopId}/albums`, {
       title,
@@ -163,6 +191,21 @@ export const api = {
     }),
   listPhotos: (shopId: string, albumId: string) =>
     request<Photo[]>('GET', `/shops/${shopId}/albums/${albumId}/photos`),
+
+  listTabs: (shopId: string) => request<Tab[]>('GET', `/shops/${shopId}/tabs`),
+  createTab: (shopId: string, title: string, slug: string) =>
+    request<Tab>('POST', `/shops/${shopId}/tabs`, { title, slug }),
+  deleteTab: (shopId: string, tabId: string) =>
+    request<void>('DELETE', `/shops/${shopId}/tabs/${tabId}`),
+
+  listSections: (shopId: string) => request<Section[]>('GET', `/shops/${shopId}/sections`),
+  createSection: (shopId: string, tabId: string, title: string) =>
+    request<Section>('POST', `/shops/${shopId}/tabs/${tabId}/sections`, { title }),
+  deleteSection: (shopId: string, sectionId: string) =>
+    request<void>('DELETE', `/shops/${shopId}/sections/${sectionId}`),
+  // Состав секции задаётся целиком: порядок в массиве — порядок на витрине.
+  setSectionAlbums: (shopId: string, sectionId: string, albumIds: string[]) =>
+    request<void>('PUT', `/shops/${shopId}/sections/${sectionId}/albums`, { album_ids: albumIds }),
 
   listCategories: (shopId: string) =>
     request<Category[]>('GET', `/shops/${shopId}/categories`),

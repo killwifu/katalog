@@ -17,7 +17,7 @@ ORDER BY sort_order, created_at;
 UPDATE albums
 SET title          = $3,
     sort_order     = $4,
-    is_hidden      = $5,
+    status         = $5,
     cover_photo_id = $6,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,7 +67,7 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("download original: %w", err)
 	}
 
-	res, err := imaging.Process(data)
+	res, err := imaging.ProcessWithWatermark(data, p.watermarkFor(ctx, photo.ShopID))
 	var vErr *imaging.ValidationError
 	if errors.As(err, &vErr) {
 		log.Warn("photo validation failed", "reason", vErr.Reason)
@@ -119,4 +120,34 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 
 	log.Info("photo processed", "width", res.Width, "height", res.Height, "derivative_bytes", drvBytes)
 	return nil
+}
+
+// watermarkFor читает настройку знака из shops.settings. Ошибка здесь
+// не должна ронять обработку: фото важнее подписи, поэтому при сбое
+// просто обрабатываем без знака и пишем в лог.
+func (p *Processor) watermarkFor(ctx context.Context, shopID uuid.UUID) imaging.Watermark {
+	shop, err := p.Q.GetShopByID(ctx, shopID)
+	if err != nil {
+		p.Log.Warn("load shop for watermark", "shop_id", shopID, "error", err)
+		return imaging.Watermark{}
+	}
+	var settings struct {
+		Watermark struct {
+			Enabled bool    `json:"enabled"`
+			Text    string  `json:"text"`
+			Opacity float64 `json:"opacity"`
+		} `json:"watermark"`
+	}
+	if err := json.Unmarshal(shop.Settings, &settings); err != nil {
+		p.Log.Warn("parse shop settings", "shop_id", shopID, "error", err)
+		return imaging.Watermark{}
+	}
+	if !settings.Watermark.Enabled || settings.Watermark.Text == "" {
+		return imaging.Watermark{}
+	}
+	opacity := settings.Watermark.Opacity
+	if opacity <= 0 {
+		opacity = 0.55
+	}
+	return imaging.Watermark{Text: settings.Watermark.Text, Opacity: opacity}
 }
