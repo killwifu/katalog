@@ -34,6 +34,13 @@ export type PhotoPublic = {
 
 export type ShopPage = { shop: ShopPublic; albums: AlbumPublic[] }
 
+export type CategoryPublic = {
+  parent_slug: string | null
+  title: string
+  slug: string
+  album_count: number
+}
+
 export type AlbumPage = {
   shop: ShopPublic
   album: AlbumPublic
@@ -69,6 +76,20 @@ export function getAlbumPage(slug: string, albumId: string, page: number): Promi
 export function searchPhotos(slug: string, q: string): Promise<{ photos: PhotoPublic[] } | null> {
   return getJSON<{ photos: PhotoPublic[] }>(
     `/api/v1/public/shops/${encodeURIComponent(slug)}/search?q=${encodeURIComponent(q)}`,
+    slug,
+  )
+}
+
+export function getCategories(slug: string): Promise<CategoryPublic[] | null> {
+  return getJSON<CategoryPublic[]>(
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/categories`,
+    slug,
+  )
+}
+
+export function getCategoryAlbums(slug: string, categorySlug: string): Promise<AlbumPublic[] | null> {
+  return getJSON<AlbumPublic[]>(
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/categories/${encodeURIComponent(categorySlug)}`,
     slug,
   )
 }

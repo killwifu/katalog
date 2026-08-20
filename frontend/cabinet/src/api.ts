@@ -106,6 +106,14 @@ export type Album = {
   photo_count: number
 }
 
+export type Category = {
+  id: string
+  parent_id: string | null
+  title: string
+  slug: string
+  sort_order: number
+}
+
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'failed' | 'blocked'
 
 export type Photo = {
@@ -155,6 +163,28 @@ export const api = {
     }),
   listPhotos: (shopId: string, albumId: string) =>
     request<Photo[]>('GET', `/shops/${shopId}/albums/${albumId}/photos`),
+
+  listCategories: (shopId: string) =>
+    request<Category[]>('GET', `/shops/${shopId}/categories`),
+  createCategory: (shopId: string, title: string, slug: string, parentId?: string) =>
+    request<Category>('POST', `/shops/${shopId}/categories`, {
+      title,
+      slug,
+      ...(parentId ? { parent_id: parentId } : {}),
+    }),
+  updateCategory: (shopId: string, id: string, title: string, slug: string, sortOrder = 0) =>
+    request<Category>('PATCH', `/shops/${shopId}/categories/${id}`, {
+      title,
+      slug,
+      sort_order: sortOrder,
+    }),
+  // moveTo пустой — альбомы останутся без категории, но не удалятся.
+  deleteCategory: (shopId: string, id: string, moveTo?: string) =>
+    request<void>('DELETE', `/shops/${shopId}/categories/${id}${moveTo ? `?move_to=${moveTo}` : ''}`),
+  setAlbumCategory: (shopId: string, albumId: string, categoryId: string | null) =>
+    request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}/category`, {
+      category_id: categoryId,
+    }),
 
   presign: (shopId: string, albumId: string, size: number) =>
     request<{ photo_id: string; url: string }>('POST', '/uploads/presign', {

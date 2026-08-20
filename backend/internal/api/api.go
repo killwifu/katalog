@@ -59,6 +59,8 @@ func (a *API) Router() http.Handler {
 			r.Get("/shops/{slug}", a.handlePublicShop)
 			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
 			r.Get("/shops/{slug}/search", a.handlePublicSearch)
+			r.Get("/shops/{slug}/categories", a.handlePublicCategories)
+			r.Get("/shops/{slug}/categories/{categorySlug}", a.handlePublicCategory)
 			r.Post("/lead-click", a.handleLeadClick)
 			r.Get("/sitemap", a.handlePublicSitemap)
 			// Notice-and-takedown: жалоба правообладателя, без auth.
@@ -97,12 +99,20 @@ func (a *API) Router() http.Handler {
 					r.Post("/billing/cancel", a.handleCancelSubscription)
 					r.Get("/stats", a.handleShopStats)
 
+					r.Route("/categories", func(r chi.Router) {
+						r.Post("/", a.handleCreateCategory)
+						r.Get("/", a.handleListCategories)
+						r.Patch("/{categoryID}", a.handleUpdateCategory)
+						r.Delete("/{categoryID}", a.handleDeleteCategory)
+					})
+
 					r.Route("/albums", func(r chi.Router) {
 						r.Post("/", a.handleCreateAlbum)
 						r.Get("/", a.handleListAlbums)
 						r.Route("/{albumID}", func(r chi.Router) {
 							r.Get("/", a.handleGetAlbum)
 							r.Patch("/", a.handleUpdateAlbum)
+							r.Patch("/category", a.handleSetAlbumCategory)
 							r.Delete("/", a.handleDeleteAlbum)
 							r.Get("/photos", a.handleListPhotos)
 						})

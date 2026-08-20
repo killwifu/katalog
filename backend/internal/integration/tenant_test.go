@@ -20,6 +20,13 @@ func TestTenantIsolation(t *testing.T) {
 	registerUser(intruder)
 	intruderShop := createShop(intruder)
 
+	// Категория владельца — чтобы дёргать её id из-под чужой сессии.
+	var cat struct {
+		ID string `json:"id"`
+	}
+	owner.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/categories",
+		map[string]any{"title": "Кроссовки", "slug": "krossovki"}, http.StatusCreated, &cat)
+
 	tests := []struct {
 		method string
 		path   string
@@ -38,6 +45,11 @@ func TestTenantIsolation(t *testing.T) {
 		{"POST", "/api/v1/photos/confirm", map[string]any{"shop_id": shop.ID, "photo_ids": []string{photo}}},
 		{"PATCH", "/api/v1/photos/" + photo, map[string]any{"caption": "hacked"}},
 		{"DELETE", "/api/v1/photos/" + photo, nil},
+		{"GET", "/api/v1/shops/" + shop.ID + "/categories", nil},
+		{"POST", "/api/v1/shops/" + shop.ID + "/categories", map[string]any{"title": "hacked", "slug": "hacked-cat"}},
+		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/categories/%s", shop.ID, cat.ID), map[string]any{"title": "hacked", "slug": "hacked-cat"}},
+		{"DELETE", fmt.Sprintf("/api/v1/shops/%s/categories/%s", shop.ID, cat.ID), nil},
+		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s/category", shop.ID, album.ID), map[string]any{"category_id": cat.ID}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {

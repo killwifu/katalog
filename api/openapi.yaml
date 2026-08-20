@@ -613,6 +613,150 @@ paths:
   # ---- Публичный неймспейс витрины (без сессии, отдельные схемы ответов:
   # ---- приватные поля наружу не отдаются никогда) ----
 
+  /api/v1/shops/{shopID}/categories:
+    get:
+      operationId: listCategories
+      summary: Категории магазина (плоский список, дерево строит клиент)
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Category" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: createCategory
+      summary: Создать категорию (вложенность максимум 2 уровня)
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: slug уже занят в этом магазине
+
+  /api/v1/shops/{shopID}/categories/{categoryID}:
+    patch:
+      operationId: updateCategory
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - name: categoryID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: slug уже занят в этом магазине
+    delete:
+      operationId: deleteCategory
+      summary: Удалить категорию; альбомы не удаляются
+      description: >
+        Альбомы удаляемой категории переносятся в move_to.
+        Без параметра остаются без категории.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - name: categoryID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: move_to
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: No Content }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/albums/{albumID}/category:
+    patch:
+      operationId: setAlbumCategory
+      summary: Привязать альбом к категории (null — снять)
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Album" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/public/shops/{slug}/categories:
+    get:
+      operationId: getPublicCategories
+      summary: Дерево категорий витрины
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicCategory" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/shops/{slug}/categories/{categorySlug}:
+    get:
+      operationId: getPublicCategory
+      summary: Альбомы категории; у родителя видны и альбомы вложенных
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - name: categorySlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicAlbum" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/public/shops/{slug}:
     get:
       operationId: getPublicShop
@@ -1161,6 +1305,37 @@ components:
         sort_order: { type: integer }
         is_hidden: { type: boolean }
         photo_count: { type: integer }
+
+    Category:
+      type: object
+      required: [id, title, slug, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        parent_id: { type: string, format: uuid, nullable: true }
+        title: { type: string, maxLength: 200 }
+        slug: { type: string }
+        sort_order: { type: integer }
+
+    CategoryInput:
+      type: object
+      required: [title, slug]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        slug:
+          type: string
+          description: "3-64 символа: a-z, 0-9, одиночные дефисы"
+        parent_id: { type: string, format: uuid, nullable: true }
+        sort_order: { type: integer, default: 0 }
+
+    PublicCategory:
+      type: object
+      required: [title, slug, album_count]
+      description: Наружу без id и служебных полей
+      properties:
+        parent_slug: { type: string, nullable: true }
+        title: { type: string }
+        slug: { type: string }
+        album_count: { type: integer }
 
     PublicShop:
       type: object

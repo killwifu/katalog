@@ -30,7 +30,7 @@ func (q *Queries) AddAlbumPhotoCount(ctx context.Context, arg AddAlbumPhotoCount
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id
 `
 
 type CreateAlbumParams struct {
@@ -60,6 +60,7 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }
@@ -83,7 +84,7 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id FROM albums
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -108,12 +109,13 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id FROM albums
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -139,6 +141,7 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.PhotoCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CategoryID,
 		); err != nil {
 			return nil, err
 		}
@@ -158,7 +161,7 @@ SET title          = $3,
     cover_photo_id = $6,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id
 `
 
 type UpdateAlbumParams struct {
@@ -192,6 +195,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }

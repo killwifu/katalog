@@ -599,3 +599,76 @@ img {
   color: #B00020;
   font-size: var(--fs-sm);
 }
+
+/* --- Категории ------------------------------------------------------------
+   Одна структура данных — три раскладки (CategoryMenu): выпадающее меню
+   в шапке, дерево слева на странице категории, шторка на телефоне.
+   -------------------------------------------------------------------------- */
+
+.catlayout {
+  display: grid;
+  gap: 16px;
+}
+
+/* min-width: 0 обязателен: без него grid-элемент не даёт содержимому
+   сжиматься и сетка альбомов наезжает на дерево категорий. */
+.catlayout__main {
+  min-width: 0;
+}
+
+.catmenu {
+  position: relative;
+}
+
+.cattree {
+  list-style: none;
+}
+
+.cattree a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-el);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.cattree a:hover {
+  color: var(--brand);
+}
+
+.cattree a[aria-current='page'] {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 500;
+}
+
+.cattree ul {
+  list-style: none;
+  padding-left: 18px;
+  font-size: var(--fs-xs);
+}
+
+/* Выпадающая панель: в потоке на телефоне, наложением на десктопе. */
+.catpick {
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+}
+
+@media (min-width: 860px) {
+  .catlayout {
+    grid-template-columns: 220px 1fr;
+    gap: 28px;
+  }
+
+  .catmenu--dropdown .catpick {
+    position: absolute;
+    z-index: 20;
+    min-width: 260px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  }
+}
