@@ -12,6 +12,7 @@ import { createRoot } from 'react-dom/client'
 import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
+import { TabsPage } from './pages/TabsPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -107,6 +108,12 @@ const categoriesRoute = createRoute({
   component: CategoriesPage,
 })
 
+const tabsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/tabs',
+  component: TabsPage,
+})
+
 const billingRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/billing',
@@ -136,7 +143,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([albumsRoute, categoriesRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([albumsRoute, categoriesRoute, tabsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

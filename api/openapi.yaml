@@ -613,6 +613,192 @@ paths:
   # ---- Публичный неймспейс витрины (без сессии, отдельные схемы ответов:
   # ---- приватные поля наружу не отдаются никогда) ----
 
+  /api/v1/shops/{shopID}/tabs:
+    get:
+      operationId: listTabs
+      summary: Вкладки витрины (системные и свои)
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tab" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: createTab
+      summary: Своя вкладка
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, slug]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 100 }
+                slug: { type: string }
+                sort_order: { type: integer, default: 0 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tab" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: slug уже занят в этом магазине }
+
+  /api/v1/shops/{shopID}/tabs/{tabID}:
+    patch:
+      operationId: updateTab
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: tabID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 100 }
+                sort_order: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tab" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteTab
+      summary: Удалить свою вкладку; системная отвечает 404
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: tabID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: No Content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/tabs/{tabID}/sections:
+    post:
+      operationId: createSection
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: tabID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 100 }
+                sort_order: { type: integer, default: 0 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Section" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/sections:
+    get:
+      operationId: listSections
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Section" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/sections/{sectionID}:
+    patch:
+      operationId: updateSection
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: sectionID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 100 }
+                sort_order: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Section" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteSection
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: sectionID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: No Content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/sections/{sectionID}/albums:
+    put:
+      operationId: setSectionAlbums
+      summary: Задать состав секции целиком; порядок в массиве — порядок на витрине
+      description: Чужие альбомы молча отбрасываются запросом.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - { name: sectionID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [album_ids]
+              properties:
+                album_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "204": { description: No Content }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/public/shops/{slug}/tabs/{tabSlug}:
+    get:
+      operationId: getPublicTab
+      summary: Секции вкладки с альбомами; пустой массив — секций нет
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - { name: tabSlug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicSection" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/shops/{shopID}/categories:
     get:
       operationId: listCategories
@@ -1305,6 +1491,46 @@ components:
         sort_order: { type: integer }
         is_hidden: { type: boolean }
         photo_count: { type: integer }
+
+    Tab:
+      type: object
+      required: [id, title, slug, is_system, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, maxLength: 100 }
+        slug: { type: string }
+        is_system:
+          type: boolean
+          description: Системные («Главная», «Альбомы», «Контакты») не удаляются
+        sort_order: { type: integer }
+
+    Section:
+      type: object
+      required: [id, tab_id, title, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        tab_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 100 }
+        sort_order: { type: integer }
+        album_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    PublicTab:
+      type: object
+      required: [title, slug]
+      properties:
+        title: { type: string }
+        slug: { type: string }
+
+    PublicSection:
+      type: object
+      required: [title, albums]
+      properties:
+        title: { type: string }
+        albums:
+          type: array
+          items: { $ref: "#/components/schemas/PublicAlbum" }
 
     Category:
       type: object

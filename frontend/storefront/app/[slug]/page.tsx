@@ -4,6 +4,8 @@ import { getCategories, getShopPage } from '@/lib/api'
 import { ShopHeader } from '@/components/ShopHeader'
 import { TrackView } from '@/components/TrackView'
 import { CategoryMenu } from '@/components/CategoryMenu'
+import { ShopTabs } from '@/components/ShopTabs'
+import { AlbumGrid } from '@/components/AlbumGrid'
 
 // ISR: страница статическая, данные с тегом shop:{slug}.
 // Вебхук Go -> /api/revalidate инвалидирует мгновенно, TTL 60с — фолбэк.
@@ -51,10 +53,25 @@ export default async function ShopPage({ params }: Props) {
     <main className="page">
       <TrackView shopId={shop.id} />
       <ShopHeader shop={shop} />
+      <ShopTabs
+        shopSlug={slug}
+        tabs={data.tabs}
+        hasSections={data.sections.length > 0}
+        activeSlug="home"
+      />
       {categories && categories.length > 0 && (
         <CategoryMenu shopSlug={slug} categories={categories} layout="dropdown" />
       )}
-      {topLevel.length === 0 ? (
+      {/* Есть секции — показываем выкладку продавца; нет — все альбомы
+          по дате, как и раньше (kit). */}
+      {data.sections.length > 0 ? (
+        data.sections.map((section) => (
+          <section key={section.title} className="section">
+            <h2 className="section__head">{section.title}</h2>
+            <AlbumGrid shopSlug={slug} albums={section.albums} />
+          </section>
+        ))
+      ) : topLevel.length === 0 ? (
         <p className="empty">Каталог пока пуст.</p>
       ) : (
         <ul className="album-grid">

@@ -505,6 +505,12 @@ type Album struct {
 	CategoryID   uuid.NullUUID      `json:"category_id"`
 }
 
+type AlbumSection struct {
+	AlbumID   uuid.UUID `json:"album_id"`
+	SectionID uuid.UUID `json:"section_id"`
+	SortOrder int32     `json:"sort_order"`
+}
+
 type Category struct {
 	ID        uuid.UUID          `json:"id"`
 	ShopID    uuid.UUID          `json:"shop_id"`
@@ -590,6 +596,14 @@ type Photo struct {
 	Flagged    bool               `json:"flagged"`
 }
 
+type Section struct {
+	ID        uuid.UUID          `json:"id"`
+	TabID     uuid.UUID          `json:"tab_id"`
+	Title     string             `json:"title"`
+	SortOrder int32              `json:"sort_order"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Shop struct {
 	ID           uuid.UUID          `json:"id"`
 	OwnerID      uuid.UUID          `json:"owner_id"`
@@ -617,6 +631,17 @@ type Subscription struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	PaymentMethodID *string            `json:"payment_method_id"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Tab struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	Title     string             `json:"title"`
+	Slug      string             `json:"slug"`
+	IsSystem  bool               `json:"is_system"`
+	SortOrder int32              `json:"sort_order"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

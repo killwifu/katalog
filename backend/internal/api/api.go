@@ -59,6 +59,7 @@ func (a *API) Router() http.Handler {
 			r.Get("/shops/{slug}", a.handlePublicShop)
 			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
 			r.Get("/shops/{slug}/search", a.handlePublicSearch)
+			r.Get("/shops/{slug}/tabs/{tabSlug}", a.handlePublicTab)
 			r.Get("/shops/{slug}/categories", a.handlePublicCategories)
 			r.Get("/shops/{slug}/categories/{categorySlug}", a.handlePublicCategory)
 			r.Post("/lead-click", a.handleLeadClick)
@@ -98,6 +99,21 @@ func (a *API) Router() http.Handler {
 					r.Post("/billing/subscribe", a.handleSubscribe)
 					r.Post("/billing/cancel", a.handleCancelSubscription)
 					r.Get("/stats", a.handleShopStats)
+
+					r.Route("/tabs", func(r chi.Router) {
+						r.Post("/", a.handleCreateTab)
+						r.Get("/", a.handleListTabs)
+						r.Patch("/{tabID}", a.handleUpdateTab)
+						r.Delete("/{tabID}", a.handleDeleteTab)
+						r.Post("/{tabID}/sections", a.handleCreateSection)
+					})
+
+					r.Route("/sections", func(r chi.Router) {
+						r.Get("/", a.handleListSections)
+						r.Patch("/{sectionID}", a.handleUpdateSection)
+						r.Delete("/{sectionID}", a.handleDeleteSection)
+						r.Put("/{sectionID}/albums", a.handleSetSectionAlbums)
+					})
 
 					r.Route("/categories", func(r chi.Router) {
 						r.Post("/", a.handleCreateCategory)

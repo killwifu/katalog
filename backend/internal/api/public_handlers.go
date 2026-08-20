@@ -158,9 +158,29 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, resp)
 	}
+	// Вкладки — навигация витрины, нужна на каждой её странице; отдаём
+	// вместе с магазином, чтобы не гонять второй запрос. Секции «Главной»
+	// тоже здесь: если их нет, витрина показывает альбомы по дате (kit).
+	tabs, err := a.Q.ListTabsByShop(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "list tabs", err)
+		return
+	}
+	navTabs := make([]publicTabResponse, 0, len(tabs))
+	for _, t := range tabs {
+		navTabs = append(navTabs, publicTabResponse{Title: t.Title, Slug: t.Slug})
+	}
+	sections, err := a.publicSections(r, shop.ID, "home")
+	if err != nil {
+		a.internalError(w, "list home sections", err)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"shop":   toPublicShopResponse(shop),
-		"albums": out,
+		"shop":     toPublicShopResponse(shop),
+		"albums":   out,
+		"tabs":     navTabs,
+		"sections": sections,
 	})
 }
 

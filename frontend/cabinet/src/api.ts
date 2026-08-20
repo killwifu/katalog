@@ -114,6 +114,22 @@ export type Category = {
   sort_order: number
 }
 
+export type Tab = {
+  id: string
+  title: string
+  slug: string
+  is_system: boolean
+  sort_order: number
+}
+
+export type Section = {
+  id: string
+  tab_id: string
+  title: string
+  sort_order: number
+  album_ids: string[]
+}
+
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'failed' | 'blocked'
 
 export type Photo = {
@@ -163,6 +179,21 @@ export const api = {
     }),
   listPhotos: (shopId: string, albumId: string) =>
     request<Photo[]>('GET', `/shops/${shopId}/albums/${albumId}/photos`),
+
+  listTabs: (shopId: string) => request<Tab[]>('GET', `/shops/${shopId}/tabs`),
+  createTab: (shopId: string, title: string, slug: string) =>
+    request<Tab>('POST', `/shops/${shopId}/tabs`, { title, slug }),
+  deleteTab: (shopId: string, tabId: string) =>
+    request<void>('DELETE', `/shops/${shopId}/tabs/${tabId}`),
+
+  listSections: (shopId: string) => request<Section[]>('GET', `/shops/${shopId}/sections`),
+  createSection: (shopId: string, tabId: string, title: string) =>
+    request<Section>('POST', `/shops/${shopId}/tabs/${tabId}/sections`, { title }),
+  deleteSection: (shopId: string, sectionId: string) =>
+    request<void>('DELETE', `/shops/${shopId}/sections/${sectionId}`),
+  // Состав секции задаётся целиком: порядок в массиве — порядок на витрине.
+  setSectionAlbums: (shopId: string, sectionId: string, albumIds: string[]) =>
+    request<void>('PUT', `/shops/${shopId}/sections/${sectionId}/albums`, { album_ids: albumIds }),
 
   listCategories: (shopId: string) =>
     request<Category[]>('GET', `/shops/${shopId}/categories`),
