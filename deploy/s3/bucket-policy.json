@@ -2,6 +2,16 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "ServiceAccountFullAccess",
+      "Effect": "Allow",
+      "Principal": {"CanonicalUser": "<SERVICE_ACCOUNT_ID>"},
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::<BUCKET>",
+        "arn:aws:s3:::<BUCKET>/*"
+      ]
+    },
+    {
       "Sid": "PublicReadDerivatives",
       "Effect": "Allow",
       "Principal": "*",
