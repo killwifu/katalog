@@ -46,8 +46,10 @@ make down                    # останавливает стек
 | --- | --- |
 | `localhost/` | публичные страницы: главная, `/pricing`, `/updates`, `/remove-bg` |
 | `localhost/{slug}` | витрина магазина (Next.js SSR) |
-| `localhost/app/` | кабинет продавца (SPA), тарифы — `/app/billing`, статистика — `/app/stats` |
-| `localhost/app/admin` | админ-зона модератора (нужна роль `admin` в `users`) |
+| `localhost/app/` | обзор кабинета: ссылка на витрину, переходы, что доделать |
+| `localhost/app/albums` | альбомы; категории — `/app/categories`, вкладки — `/app/tabs` |
+| `localhost/app/settings` | оформление и водяной знак; тарифы — `/app/billing`, статистика — `/app/stats` |
+| `localhost/app/admin` | админ-зона: сводка платформы, жалобы, стоп-слова, продавцы (нужна роль `admin`) |
 | `localhost/api/v1/...` | Go API |
 | `localhost/abuse`, `/terms`, `/privacy`, `/content-policy` | форма жалобы и статические страницы |
 | `localhost:9001` | консоль MinIO (minioadmin/minioadmin) |

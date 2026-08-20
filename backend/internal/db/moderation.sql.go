@@ -71,6 +71,95 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 	return i, err
 }
 
+const adminListShops = `-- name: AdminListShops :many
+SELECT s.id, s.slug, s.name, s.plan, s.status, s.billing_state, s.storage_used,
+       u.email,
+       (SELECT count(*) FROM complaints c WHERE c.shop_id = s.id)::bigint AS complaints,
+       (SELECT count(*) FROM photos p WHERE p.shop_id = s.id AND p.status = 'ready')::bigint AS photos
+FROM shops s
+JOIN users u ON u.id = s.owner_id
+WHERE s.status != 'deleted'
+ORDER BY complaints DESC, s.created_at DESC
+LIMIT $1
+`
+
+type AdminListShopsRow struct {
+	ID           uuid.UUID    `json:"id"`
+	Slug         string       `json:"slug"`
+	Name         string       `json:"name"`
+	Plan         ShopPlan     `json:"plan"`
+	Status       ShopStatus   `json:"status"`
+	BillingState BillingState `json:"billing_state"`
+	StorageUsed  int64        `json:"storage_used"`
+	Email        *string      `json:"email"`
+	Complaints   int64        `json:"complaints"`
+	Photos       int64        `json:"photos"`
+}
+
+// Список продавцов с историей жалоб: модератору важно видеть, первый это
+// случай или система (kit), поэтому сортировка по числу жалоб.
+func (q *Queries) AdminListShops(ctx context.Context, limit int32) ([]AdminListShopsRow, error) {
+	rows, err := q.db.Query(ctx, adminListShops, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListShopsRow
+	for rows.Next() {
+		var i AdminListShopsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Plan,
+			&i.Status,
+			&i.BillingState,
+			&i.StorageUsed,
+			&i.Email,
+			&i.Complaints,
+			&i.Photos,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminPlatformOverview = `-- name: AdminPlatformOverview :one
+SELECT
+    (SELECT count(*) FROM shops WHERE status = 'active')::bigint            AS active_shops,
+    (SELECT count(*) FROM shops WHERE billing_state = 'suspended')::bigint  AS suspended_shops,
+    (SELECT count(*) FROM photos WHERE status = 'ready')::bigint            AS ready_photos,
+    (SELECT count(*) FROM complaints WHERE status = 'open')::bigint         AS open_complaints,
+    (SELECT coalesce(sum(storage_used), 0) FROM shops)::bigint              AS storage_used
+`
+
+type AdminPlatformOverviewRow struct {
+	ActiveShops    int64 `json:"active_shops"`
+	SuspendedShops int64 `json:"suspended_shops"`
+	ReadyPhotos    int64 `json:"ready_photos"`
+	OpenComplaints int64 `json:"open_complaints"`
+	StorageUsed    int64 `json:"storage_used"`
+}
+
+// Сводка платформы для админки: один запрос вместо пяти счётчиков.
+func (q *Queries) AdminPlatformOverview(ctx context.Context) (AdminPlatformOverviewRow, error) {
+	row := q.db.QueryRow(ctx, adminPlatformOverview)
+	var i AdminPlatformOverviewRow
+	err := row.Scan(
+		&i.ActiveShops,
+		&i.SuspendedShops,
+		&i.ReadyPhotos,
+		&i.OpenComplaints,
+		&i.StorageUsed,
+	)
+	return i, err
+}
+
 const adminSuspendShop = `-- name: AdminSuspendShop :one
 UPDATE shops
 SET status = 'suspended', updated_at = now()

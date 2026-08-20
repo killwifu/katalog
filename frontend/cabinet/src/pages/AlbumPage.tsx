@@ -83,7 +83,7 @@ export function AlbumPage() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
         <div>
-          <Link to="/" className="text-sm text-blue-600 hover:underline">
+          <Link to="/albums" className="text-sm text-blue-600 hover:underline">
             ← Альбомы
           </Link>
           <h1 className="text-lg font-semibold text-gray-900">{album?.title ?? 'Альбом'}</h1>

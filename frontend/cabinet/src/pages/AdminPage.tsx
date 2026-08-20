@@ -13,19 +13,28 @@ const STATUS_LABELS: Record<AdminComplaint['status'], string> = {
 }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<'complaints' | 'flagged'>('complaints')
+  const [tab, setTab] = useState<'overview' | 'complaints' | 'flagged' | 'sellers'>('overview')
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">Модерация</h1>
-      <div className="mb-4 flex gap-2">
+      <h1 className="mb-4 text-lg font-semibold text-gray-900">Платформа</h1>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <TabButton active={tab === 'overview'} onClick={() => setTab('overview')}>
+          Сводка
+        </TabButton>
         <TabButton active={tab === 'complaints'} onClick={() => setTab('complaints')}>
           Жалобы
         </TabButton>
         <TabButton active={tab === 'flagged'} onClick={() => setTab('flagged')}>
           Стоп-слова
         </TabButton>
+        <TabButton active={tab === 'sellers'} onClick={() => setTab('sellers')}>
+          Продавцы
+        </TabButton>
       </div>
-      {tab === 'complaints' ? <ComplaintsTab /> : <FlaggedTab />}
+      {tab === 'overview' && <OverviewTab />}
+      {tab === 'complaints' && <ComplaintsTab />}
+      {tab === 'flagged' && <FlaggedTab />}
+      {tab === 'sellers' && <SellersTab />}
     </div>
   )
 }
@@ -248,5 +257,81 @@ function ActionButton({
     >
       {children}
     </button>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  const gb = 1024 ** 3
+  return bytes >= gb ? `${(bytes / gb).toFixed(1)} ГБ` : `${Math.round(bytes / 1024 ** 2)} МБ`
+}
+
+function OverviewTab() {
+  const q = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => api.adminOverview() })
+  if (q.isPending) return <p className="text-gray-500">Загрузка…</p>
+  if (q.isError) return <p className="text-red-600">Не удалось загрузить сводку.</p>
+
+  const cards = [
+    { label: 'Активные магазины', value: String(q.data.active_shops) },
+    { label: 'Скрыты за неоплату', value: String(q.data.suspended_shops) },
+    { label: 'Фотографий', value: String(q.data.ready_photos) },
+    { label: 'Открытых жалоб', value: String(q.data.open_complaints) },
+    { label: 'Хранилище', value: formatBytes(q.data.storage_used) },
+  ]
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {cards.map((c) => (
+        <div key={c.label} className="rounded border border-gray-200 p-4">
+          <div className="text-sm text-gray-500">{c.label}</div>
+          <div className="text-2xl font-semibold text-gray-900">{c.value}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Продавцы отсортированы по числу жалоб: модератору важно отличить
+// единичный случай от системы, а не листать список по алфавиту.
+function SellersTab() {
+  const q = useQuery({ queryKey: ['admin', 'shops'], queryFn: () => api.adminListShops() })
+  if (q.isPending) return <p className="text-gray-500">Загрузка…</p>
+  if (q.isError) return <p className="text-red-600">Не удалось загрузить продавцов.</p>
+  if (q.data.length === 0) return <p className="text-gray-500">Продавцов пока нет.</p>
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-left text-gray-500">
+          <tr>
+            <th className="py-2">Магазин</th>
+            <th className="py-2">Почта</th>
+            <th className="py-2">Тариф</th>
+            <th className="py-2">Фото</th>
+            <th className="py-2">Место</th>
+            <th className="py-2">Жалобы</th>
+          </tr>
+        </thead>
+        <tbody>
+          {q.data.map((s) => (
+            <tr key={s.id} className="border-t border-gray-100">
+              <td className="py-2">
+                <a href={`/${s.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  {s.name}
+                </a>
+                {s.billing_state === 'suspended' && (
+                  <span className="ml-2 text-xs text-amber-700">скрыт</span>
+                )}
+              </td>
+              <td className="py-2 text-gray-600">{s.email}</td>
+              <td className="py-2 text-gray-600">{s.plan}</td>
+              <td className="py-2 text-gray-600">{s.photos}</td>
+              <td className="py-2 text-gray-600">{formatBytes(s.storage_used)}</td>
+              <td className={`py-2 ${s.complaints > 0 ? 'font-medium text-red-700' : 'text-gray-400'}`}>
+                {s.complaints}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
