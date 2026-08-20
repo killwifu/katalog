@@ -3,11 +3,14 @@ package worker
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"katalog/backend/internal/billing"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/mail"
 )
 
 // HandleBillingLifecycle — ежедневные переходы биллинговых состояний:
@@ -34,8 +37,90 @@ func (p *Processor) HandleBillingLifecycle(ctx context.Context, _ *asynq.Task) e
 	for _, s := range suspended {
 		p.Revalidate.Shop(s.Slug)
 	}
+
+	// Письма — после смены состояний: продавец узнаёт о переходе один раз,
+	// в момент, когда он уже произошёл. Сбой отправки не откатывает биллинг.
+	for _, s := range graced {
+		views, leads := p.shopMonthTotals(ctx, s.ID)
+		p.mailOwner(ctx, s.OwnerID, mail.GraceStarted(
+			s.Name, p.Cfg.SiteURL, s.Slug, views, leads, p.Cfg.Billing.GraceDays))
+	}
+	for _, s := range suspended {
+		p.mailOwner(ctx, s.OwnerID, mail.ShopHidden(s.Name, p.Cfg.SiteURL, s.Slug, contentKeepMonths))
+	}
+	p.notifyStorageLimits(ctx)
+
 	p.Log.Info("billing lifecycle done", "graced", len(graced), "suspended", len(suspended))
 	return nil
+}
+
+// contentKeepMonths — сколько храним фото после скрытия витрины. Значение
+// обещано покупателю в письме, поэтому живёт рядом с ним, а не в env:
+// менять его молча нельзя.
+const contentKeepMonths = 3
+
+// mailOwner отправляет письмо владельцу магазина. Письмо — не критичный
+// путь: сбой логируем и идём дальше, иначе одна недоставка остановит
+// обработку остальных магазинов.
+func (p *Processor) mailOwner(ctx context.Context, ownerID uuid.UUID, tpl mail.Template) {
+	user, err := p.Q.GetUserByID(ctx, ownerID)
+	if err != nil {
+		p.Log.Error("load owner for email", "owner_id", ownerID, "error", err)
+		return
+	}
+	if user.Email == nil || *user.Email == "" {
+		return
+	}
+	if err := p.Mail.Send(ctx, mail.Message{
+		To:      *user.Email,
+		Subject: tpl.Subject,
+		Text:    tpl.Text,
+	}); err != nil {
+		p.Log.Error("send owner email", "owner_id", ownerID, "subject", tpl.Subject, "error", err)
+	}
+}
+
+// shopMonthTotals — просмотры и переходы за последний месяц для письма
+// о неоплате. Нули не беда: шаблон опускает блок с цифрами.
+func (p *Processor) shopMonthTotals(ctx context.Context, shopID uuid.UUID) (int64, int64) {
+	to := time.Now().UTC()
+	rows, err := p.shopsStatsRange(ctx, to.AddDate(0, -1, 0), to)
+	if err != nil {
+		p.Log.Error("month totals for email", "shop_id", shopID, "error", err)
+		return 0, 0
+	}
+	for _, row := range rows {
+		if row.ShopID == shopID {
+			return row.Views, row.LeadClicks
+		}
+	}
+	return 0, 0
+}
+
+// notifyStorageLimits предупреждает о заканчивающемся месте один раз за
+// прогон, а не на каждую загрузку: письмо на каждый файл — верный способ
+// научить продавца не читать наши письма.
+func (p *Processor) notifyStorageLimits(ctx context.Context) {
+	for _, plan := range []string{"basic", "pro"} {
+		limits := p.Cfg.Billing.Limits(plan)
+		if limits.MaxStorage <= 0 {
+			continue
+		}
+		shops, err := p.Q.ShopsNearStorageLimit(ctx, limits.MaxStorage)
+		if err != nil {
+			p.Log.Error("shops near storage limit", "plan", plan, "error", err)
+			continue
+		}
+		for _, s := range shops {
+			if s.Email == nil || *s.Email == "" {
+				continue
+			}
+			tpl := mail.QuotaWarning(s.Name, p.Cfg.SiteURL, s.StorageUsed, limits.MaxStorage)
+			if err := p.Mail.Send(ctx, mail.Message{To: *s.Email, Subject: tpl.Subject, Text: tpl.Text}); err != nil {
+				p.Log.Error("send quota warning", "shop_id", s.ID, "error", err)
+			}
+		}
+	}
 }
 
 // HandleBillingRenew — рекуррентные списания: по каждой активной подписке
@@ -84,6 +169,12 @@ func (p *Processor) HandleBillingRenew(ctx context.Context, _ *asynq.Task) error
 				p.Log.Error("renew: cancel failed payment", "payment_id", pay.ID, "error", serr)
 			}
 			p.Log.Error("renew: yookassa charge failed", "shop_id", sub.ShopID, "error", err)
+			// Продавцу нужно действие, а не диагноз: письмо говорит, что
+			// делать, и сколько ещё работает витрина.
+			if shop, serr := p.Q.GetShopByID(ctx, sub.ShopID); serr == nil {
+				p.mailOwner(ctx, shop.OwnerID,
+					mail.ChargeFailed(shop.Name, p.Cfg.SiteURL, p.Cfg.Billing.GraceDays))
+			}
 			continue
 		}
 		if err := p.Q.SetPaymentProvider(ctx, db.SetPaymentProviderParams{
