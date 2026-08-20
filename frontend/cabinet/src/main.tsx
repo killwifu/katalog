@@ -13,6 +13,7 @@ import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { TabsPage } from './pages/TabsPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -114,6 +115,12 @@ const tabsRoute = createRoute({
   component: TabsPage,
 })
 
+const settingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/settings',
+  component: SettingsPage,
+})
+
 const billingRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/billing',
@@ -143,7 +150,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([albumsRoute, categoriesRoute, tabsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([albumsRoute, categoriesRoute, tabsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

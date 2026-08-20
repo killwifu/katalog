@@ -1492,6 +1492,24 @@ components:
         status: { $ref: "#/components/schemas/AlbumStatus" }
         photo_count: { type: integer }
 
+    ShopSettings:
+      type: object
+      description: Хранится в shops.settings; отдельного эндпоинта нет — PATCH /shops/{shopID}
+      properties:
+        msg_template:
+          type: string
+          maxLength: 200
+          description: Текст для мессенджера, подстановка {caption}
+        watermark:
+          type: object
+          description: >
+            Знак накладывается при загрузке, а не на лету: смена настроек
+            не затрагивает уже загруженные фотографии.
+          properties:
+            enabled: { type: boolean }
+            text: { type: string, maxLength: 40 }
+            opacity: { type: number, minimum: 0, maximum: 1 }
+
     AlbumStatus:
       type: string
       enum: [published, unlisted, draft]
