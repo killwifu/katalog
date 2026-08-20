@@ -279,12 +279,14 @@ UPDATE shops
 SET billing_state = 'grace', updated_at = now()
 WHERE plan != 'free' AND billing_state = 'ok'
   AND paid_until IS NOT NULL AND paid_until < now()
-RETURNING id, slug
+RETURNING id, slug, name, owner_id
 `
 
 type ShopsEnterGraceRow struct {
-	ID   uuid.UUID `json:"id"`
-	Slug string    `json:"slug"`
+	ID      uuid.UUID `json:"id"`
+	Slug    string    `json:"slug"`
+	Name    string    `json:"name"`
+	OwnerID uuid.UUID `json:"owner_id"`
 }
 
 // Жизненный цикл: оплата истекла -> grace (загрузка заблокирована).
@@ -297,7 +299,12 @@ func (q *Queries) ShopsEnterGrace(ctx context.Context) ([]ShopsEnterGraceRow, er
 	var items []ShopsEnterGraceRow
 	for rows.Next() {
 		var i ShopsEnterGraceRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.OwnerID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -313,12 +320,14 @@ UPDATE shops
 SET billing_state = 'suspended', updated_at = now()
 WHERE plan != 'free' AND billing_state = 'grace'
   AND paid_until < now() - make_interval(days => $1)
-RETURNING id, slug
+RETURNING id, slug, name, owner_id
 `
 
 type ShopsEnterSuspendedRow struct {
-	ID   uuid.UUID `json:"id"`
-	Slug string    `json:"slug"`
+	ID      uuid.UUID `json:"id"`
+	Slug    string    `json:"slug"`
+	Name    string    `json:"name"`
+	OwnerID uuid.UUID `json:"owner_id"`
 }
 
 // Grace истёк -> suspended (витрина скрыта, контент не удаляется).
@@ -331,7 +340,59 @@ func (q *Queries) ShopsEnterSuspended(ctx context.Context, days int32) ([]ShopsE
 	var items []ShopsEnterSuspendedRow
 	for rows.Next() {
 		var i ShopsEnterSuspendedRow
-		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const shopsNearStorageLimit = `-- name: ShopsNearStorageLimit :many
+SELECT s.id, s.name, s.slug, s.storage_used, u.email
+FROM shops s
+JOIN users u ON u.id = s.owner_id
+WHERE s.status = 'active'
+  AND s.billing_state = 'ok'
+  AND u.email IS NOT NULL
+  AND s.storage_used >= ($1::bigint * 9 / 10)
+  AND s.storage_used < $1::bigint
+`
+
+type ShopsNearStorageLimitRow struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	StorageUsed int64     `json:"storage_used"`
+	Email       *string   `json:"email"`
+}
+
+// Приближение к лимиту хранилища: письмо шлём один раз при переходе через
+// порог, поэтому отбираем только тех, кто ещё не предупреждён сегодня.
+func (q *Queries) ShopsNearStorageLimit(ctx context.Context, dollar_1 int64) ([]ShopsNearStorageLimitRow, error) {
+	rows, err := q.db.Query(ctx, shopsNearStorageLimit, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShopsNearStorageLimitRow
+	for rows.Next() {
+		var i ShopsNearStorageLimitRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.StorageUsed,
+			&i.Email,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

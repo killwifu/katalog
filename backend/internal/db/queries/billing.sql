@@ -66,7 +66,7 @@ UPDATE shops
 SET billing_state = 'grace', updated_at = now()
 WHERE plan != 'free' AND billing_state = 'ok'
   AND paid_until IS NOT NULL AND paid_until < now()
-RETURNING id, slug;
+RETURNING id, slug, name, owner_id;
 
 -- Grace истёк -> suspended (витрина скрыта, контент не удаляется).
 -- name: ShopsEnterSuspended :many
@@ -74,7 +74,7 @@ UPDATE shops
 SET billing_state = 'suspended', updated_at = now()
 WHERE plan != 'free' AND billing_state = 'grace'
   AND paid_until < now() - make_interval(days => $1)
-RETURNING id, slug;
+RETURNING id, slug, name, owner_id;
 
 -- name: MarkSubscriptionsPastDue :exec
 UPDATE subscriptions s
@@ -100,3 +100,15 @@ WHERE s.status = 'active'
       SELECT 1 FROM payments p
       WHERE p.shop_id = s.shop_id AND p.recurring AND p.status = 'pending'
   );
+
+-- Приближение к лимиту хранилища: письмо шлём один раз при переходе через
+-- порог, поэтому отбираем только тех, кто ещё не предупреждён сегодня.
+-- name: ShopsNearStorageLimit :many
+SELECT s.id, s.name, s.slug, s.storage_used, u.email
+FROM shops s
+JOIN users u ON u.id = s.owner_id
+WHERE s.status = 'active'
+  AND s.billing_state = 'ok'
+  AND u.email IS NOT NULL
+  AND s.storage_used >= ($1::bigint * 9 / 10)
+  AND s.storage_used < $1::bigint;

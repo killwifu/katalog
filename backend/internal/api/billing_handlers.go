@@ -11,6 +11,7 @@ import (
 
 	"katalog/backend/internal/billing"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/mail"
 )
 
 // Хендлеры тарифов и платежей. Поток оплаты:
@@ -295,6 +296,13 @@ func (a *API) settlePaymentSucceeded(ctx context.Context, p billing.Payment) err
 	// Витрина могла быть скрыта (suspended) — ревалидируем после коммита.
 	if shop, err := a.Q.GetShopByID(ctx, pay.ShopID); err == nil {
 		a.Revalidate.Shop(shop.Slug)
+		// Письмо только после коммита: подтверждать оплату, которая
+		// откатилась, хуже, чем не подтвердить её вовсе.
+		if user, uerr := a.Q.GetUserByID(ctx, shop.OwnerID); uerr == nil && user.Email != nil {
+			tpl := mail.PaymentSucceeded(shop.Name, string(pay.Plan), pay.Amount,
+				sub.PeriodEnd.Time.Format("02.01.2006"))
+			a.sendEmail(ctx, *user.Email, tpl.Subject, tpl.Text)
+		}
 	}
 	a.Log.Info("payment succeeded", "shop_id", pay.ShopID, "plan", pay.Plan, "paid_until", sub.PeriodEnd.Time)
 	return nil
