@@ -11,6 +11,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
+import { CategoriesPage } from './pages/CategoriesPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -100,6 +101,12 @@ const captionsRoute = createRoute({
   component: CaptionsPage,
 })
 
+const categoriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/categories',
+  component: CategoriesPage,
+})
+
 const billingRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/billing',
@@ -129,7 +136,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([albumsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([albumsRoute, categoriesRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

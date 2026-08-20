@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getShopPage } from '@/lib/api'
+import { getCategories, getShopPage } from '@/lib/api'
 import { ShopHeader } from '@/components/ShopHeader'
 import { TrackView } from '@/components/TrackView'
+import { CategoryMenu } from '@/components/CategoryMenu'
 
 // ISR: страница статическая, данные с тегом shop:{slug}.
 // Вебхук Go -> /api/revalidate инвалидирует мгновенно, TTL 60с — фолбэк.
@@ -37,7 +38,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ShopPage({ params }: Props) {
   const { slug } = params
-  const data = await getShopPage(slug)
+  // Категории — второй запрос того же ISR-кеша: тег shop:{slug} общий,
+  // вебхук инвалидирует обе выдачи разом.
+  const [data, categories] = await Promise.all([getShopPage(slug), getCategories(slug)])
   if (!data) notFound()
   const { shop, albums } = data
   // Подальбомы показываются внутри родителя; на главной — только верхний уровень.
@@ -48,6 +51,9 @@ export default async function ShopPage({ params }: Props) {
     <main className="page">
       <TrackView shopId={shop.id} />
       <ShopHeader shop={shop} />
+      {categories && categories.length > 0 && (
+        <CategoryMenu shopSlug={slug} categories={categories} layout="dropdown" />
+      )}
       {topLevel.length === 0 ? (
         <p className="empty">Каталог пока пуст.</p>
       ) : (

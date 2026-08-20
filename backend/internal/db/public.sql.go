@@ -74,7 +74,7 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id FROM albums
 WHERE id = $1 AND shop_id = $2 AND NOT is_hidden
 `
 
@@ -98,6 +98,7 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CategoryID,
 	)
 	return i, err
 }

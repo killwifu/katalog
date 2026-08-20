@@ -502,6 +502,18 @@ type Album struct {
 	PhotoCount   int32              `json:"photo_count"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	CategoryID   uuid.NullUUID      `json:"category_id"`
+}
+
+type Category struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	ParentID  uuid.NullUUID      `json:"parent_id"`
+	Title     string             `json:"title"`
+	Slug      string             `json:"slug"`
+	SortOrder int32              `json:"sort_order"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Complaint struct {
