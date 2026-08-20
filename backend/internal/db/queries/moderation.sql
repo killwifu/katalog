@@ -50,7 +50,7 @@ LIMIT 200;
 
 -- name: AdminHideAlbum :one
 UPDATE albums
-SET is_hidden = true, updated_at = now()
+SET status = 'draft', updated_at = now()
 WHERE id = $1
 RETURNING *;
 

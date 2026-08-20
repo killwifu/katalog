@@ -59,11 +59,26 @@ type Result struct {
 	Derivatives map[int][]byte // size px -> webp bytes
 }
 
+// Watermark — текстовая подпись поверх деривативов. Накладывается при
+// загрузке, а не на лету: смена настроек не затрагивает уже загруженное
+// (так и написано в интерфейсе кабинета).
+//
+// Только текст. Логотип-картинка — отдельная загрузка файла и хранение,
+// заводить их ради одного тарифа рано.
+type Watermark struct {
+	Text    string
+	Opacity float64 // 0..1; 0 или пусто — знака нет
+}
+
 // Process валидирует изображение и строит деривативы.
 // Порядок инварианта: magic bytes -> лимит разрешения ДО декодирования ->
 // EXIF-ориентация применяется, метаданные полностью вычищаются (геометки!) ->
 // WebP-деривативы -> pHash.
 func Process(data []byte) (*Result, error) {
+	return ProcessWithWatermark(data, Watermark{})
+}
+
+func ProcessWithWatermark(data []byte, wm Watermark) (*Result, error) {
 	if _, err := DetectFormat(data); err != nil {
 		return nil, err
 	}
@@ -90,6 +105,12 @@ func Process(data []byte) (*Result, error) {
 		thumb, err := vips.NewThumbnailWithSizeFromBuffer(data, size, size, vips.InterestingNone, vips.SizeDown)
 		if err != nil {
 			return nil, &ValidationError{Reason: fmt.Sprintf("decode failed: %v", err)}
+		}
+		// Знак кладём на уже уменьшённый дериватив: на превью 300px
+		// подпись от полноразмерного кадра была бы нечитаемой.
+		if err := applyWatermark(thumb, wm); err != nil {
+			thumb.Close()
+			return nil, fmt.Errorf("watermark %d: %w", size, err)
 		}
 		params := vips.NewWebpExportParams()
 		params.Quality = WebpQuality
@@ -154,4 +175,33 @@ func averageHash(data []byte) (int64, error) {
 		}
 	}
 	return int64(hash), nil
+}
+
+// applyWatermark рисует подпись в правом нижнем углу. Размер шрифта —
+// доля ширины кадра, иначе на thumb знак закроет фото, а на large
+// потеряется.
+func applyWatermark(img *vips.ImageRef, wm Watermark) error {
+	if wm.Text == "" || wm.Opacity <= 0 {
+		return nil
+	}
+	fontSize := img.Width() / 24
+	if fontSize < 9 {
+		// На совсем мелких превью читаемой подписи не выйдет — не портим кадр.
+		return nil
+	}
+	opacity := wm.Opacity
+	if opacity > 1 {
+		opacity = 1
+	}
+	return img.Label(&vips.LabelParams{
+		Text:      wm.Text,
+		Font:      fmt.Sprintf("sans %d", fontSize),
+		Width:     vips.Scalar{Value: 0.92, Relative: true},
+		Height:    vips.Scalar{Value: 0.92, Relative: true},
+		OffsetX:   vips.Scalar{Value: 0.04, Relative: true},
+		OffsetY:   vips.Scalar{Value: 0.88, Relative: true},
+		Opacity:   float32(opacity),
+		Color:     vips.Color{R: 255, G: 255, B: 255},
+		Alignment: vips.AlignLow,
+	})
 }

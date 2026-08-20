@@ -72,7 +72,7 @@ func TestPublicShopPage(t *testing.T) {
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
 		map[string]any{"title": "Скрытый"}, http.StatusCreated, &hidden)
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+hidden.ID,
-		map[string]any{"is_hidden": true}, http.StatusOK, nil)
+		map[string]any{"status": "draft"}, http.StatusOK, nil)
 
 	photoID := uploadPhoto(c, shop.ID, visible.ID, makeJPEG(t, 640, 480))
 	waitPhotoStatus(c, shop.ID, visible.ID, photoID, "ready", 60*time.Second)
@@ -85,7 +85,7 @@ func TestPublicShopPage(t *testing.T) {
 	// Форма ответа: приватные поля не должны утекать наружу.
 	for _, forbidden := range []string{
 		"email", "storage_used", "storage_max", "owner_id",
-		"password_hash", "plan", "is_hidden", "phash", "orig_size", "source",
+		"password_hash", "plan", "status", "phash", "orig_size", "source",
 	} {
 		if strings.Contains(string(raw), `"`+forbidden+`"`) {
 			t.Errorf("public shop response leaks %q: %s", forbidden, raw)
@@ -192,7 +192,7 @@ func TestPublicSearch(t *testing.T) {
 	waitPhotoStatus(c, shop.ID, hidden.ID, hiddenPhoto, "ready", 60*time.Second)
 	setCaption(c, hiddenPhoto, "Кроссовки из архива")
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+hidden.ID,
-		map[string]any{"is_hidden": true}, http.StatusOK, nil)
+		map[string]any{"status": "draft"}, http.StatusOK, nil)
 
 	search := func(q string) []publicPhotoJSON {
 		t.Helper()
