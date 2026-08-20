@@ -1112,6 +1112,46 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/admin/overview:
+    get:
+      operationId: adminOverview
+      summary: "[admin] Сводка платформы"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [active_shops, suspended_shops, ready_photos, open_complaints, storage_used]
+                properties:
+                  active_shops: { type: integer }
+                  suspended_shops: { type: integer }
+                  ready_photos: { type: integer }
+                  open_complaints: { type: integer }
+                  storage_used: { type: integer, format: int64 }
+        "404":
+          description: Не админ — админ-зона не раскрывается
+
+  /api/v1/admin/shops:
+    get:
+      operationId: adminListShops
+      summary: "[admin] Продавцы, сначала те, на кого больше жалоб"
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminShop" }
+        "404":
+          description: Не админ — админ-зона не раскрывается
+
   /api/v1/admin/complaints:
     get:
       operationId: adminListComplaints
@@ -1421,6 +1461,21 @@ components:
       properties:
         complaint_id: { type: string, format: uuid }
         note: { type: string }
+
+    AdminShop:
+      type: object
+      required: [id, slug, name, plan, status, billing_state, storage_used, photos, complaints]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        email: { type: string }
+        plan: { $ref: "#/components/schemas/PlanID" }
+        status: { type: string }
+        billing_state: { $ref: "#/components/schemas/BillingState" }
+        storage_used: { type: integer, format: int64 }
+        photos: { type: integer }
+        complaints: { type: integer }
 
     AdminComplaint:
       type: object

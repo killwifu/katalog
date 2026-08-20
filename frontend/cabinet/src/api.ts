@@ -80,6 +80,19 @@ export type ShopSettings = {
   watermark?: { enabled: boolean; text: string; opacity: number }
 }
 
+export type AdminShop = {
+  id: string
+  slug: string
+  name: string
+  email: string
+  plan: Plan
+  status: string
+  billing_state: BillingState
+  storage_used: number
+  photos: number
+  complaints: number
+}
+
 export type PlanInfo = {
   id: Plan
   max_photos: number
@@ -258,6 +271,16 @@ export const api = {
     request<void>('POST', `/shops/${shopId}/billing/cancel`),
 
   // Админ-зона (role=admin).
+  adminOverview: () =>
+    request<{
+      active_shops: number
+      suspended_shops: number
+      ready_photos: number
+      open_complaints: number
+      storage_used: number
+    }>('GET', '/admin/overview'),
+  adminListShops: () =>
+    request<AdminShop[]>('GET', '/admin/shops'),
   adminListComplaints: (status?: string) =>
     request<AdminComplaint[]>('GET', `/admin/complaints${status ? `?status=${status}` : ''}`),
   adminSetComplaintStatus: (id: string, status: string) =>

@@ -74,3 +74,25 @@ RETURNING *;
 UPDATE users
 SET email_verified_at = now(), updated_at = now()
 WHERE id = $1;
+
+-- Сводка платформы для админки: один запрос вместо пяти счётчиков.
+-- name: AdminPlatformOverview :one
+SELECT
+    (SELECT count(*) FROM shops WHERE status = 'active')::bigint            AS active_shops,
+    (SELECT count(*) FROM shops WHERE billing_state = 'suspended')::bigint  AS suspended_shops,
+    (SELECT count(*) FROM photos WHERE status = 'ready')::bigint            AS ready_photos,
+    (SELECT count(*) FROM complaints WHERE status = 'open')::bigint         AS open_complaints,
+    (SELECT coalesce(sum(storage_used), 0) FROM shops)::bigint              AS storage_used;
+
+-- Список продавцов с историей жалоб: модератору важно видеть, первый это
+-- случай или система (kit), поэтому сортировка по числу жалоб.
+-- name: AdminListShops :many
+SELECT s.id, s.slug, s.name, s.plan, s.status, s.billing_state, s.storage_used,
+       u.email,
+       (SELECT count(*) FROM complaints c WHERE c.shop_id = s.id)::bigint AS complaints,
+       (SELECT count(*) FROM photos p WHERE p.shop_id = s.id AND p.status = 'ready')::bigint AS photos
+FROM shops s
+JOIN users u ON u.id = s.owner_id
+WHERE s.status != 'deleted'
+ORDER BY complaints DESC, s.created_at DESC
+LIMIT $1;

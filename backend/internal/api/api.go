@@ -144,6 +144,8 @@ func (a *API) Router() http.Handler {
 			// Админ-зона: только для users.role=admin (не-админам 404).
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(a.requireAdmin)
+				r.Get("/overview", a.handleAdminOverview)
+				r.Get("/shops", a.handleAdminListShops)
 				r.Get("/complaints", a.handleAdminListComplaints)
 				r.Patch("/complaints/{complaintID}", a.handleAdminUpdateComplaint)
 				r.Get("/photos/flagged", a.handleAdminListFlagged)
