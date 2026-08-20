@@ -52,6 +52,9 @@ export function AppLayout() {
               <span className="hidden sm:inline">
                 {usedMB} / {maxMB} МБ
               </span>
+              <Link to="/settings" className="text-gray-500 hover:text-gray-900">
+                Настройки
+              </Link>
               <Link to="/tabs" className="text-gray-500 hover:text-gray-900">
                 Вкладки
               </Link>

@@ -72,6 +72,12 @@ export type Shop = {
   storage_used: number
   storage_max: number
   max_photos: number
+  settings: ShopSettings
+}
+
+export type ShopSettings = {
+  msg_template?: string
+  watermark?: { enabled: boolean; text: string; opacity: number }
 }
 
 export type PlanInfo = {
@@ -172,6 +178,8 @@ export const api = {
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),
   getShop: (shopId: string) => request<Shop>('GET', `/shops/${shopId}`),
+  updateSettings: (shopId: string, settings: ShopSettings) =>
+    request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
   setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
