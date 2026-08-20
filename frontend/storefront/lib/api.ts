@@ -59,11 +59,27 @@ export type AlbumPage = {
   total: number
 }
 
+// Витрина, скрытая за неоплату: API отдаёт 410 с контактами продавца.
+// Отличаем от 404, чтобы показать страницу «временно недоступна», а не
+// «не найдено» — покупатель должен суметь написать продавцу.
+export type ShopUnavailable = {
+  shop: { name: string; contacts: Record<string, string> }
+}
+
+export class ShopUnavailableError extends Error {
+  constructor(readonly payload: ShopUnavailable) {
+    super('shop unavailable')
+  }
+}
+
 async function getJSON<T>(path: string, slug: string): Promise<T | null> {
   const res = await fetch(`${API_URL}${path}`, {
     next: { revalidate: 60, tags: [`shop:${slug}`] },
   })
   if (res.status === 404) return null
+  if (res.status === 410) {
+    throw new ShopUnavailableError((await res.json()) as ShopUnavailable)
+  }
   if (!res.ok) {
     throw new Error(`API ${path}: ${res.status}`)
   }
