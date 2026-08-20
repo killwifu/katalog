@@ -201,11 +201,11 @@ func (q *Queries) GetTabForShop(ctx context.Context, arg GetTabForShopParams) (T
 
 const listPublicSectionAlbums = `-- name: ListPublicSectionAlbums :many
 SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_order,
-       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.is_hidden, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id
+       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
-LEFT JOIN albums a ON a.id = asec.album_id AND a.is_hidden = false
+LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published'
 WHERE t.shop_id = $1 AND t.slug = $2
 ORDER BY s.sort_order, s.created_at, asec.sort_order
 `
@@ -225,12 +225,12 @@ type ListPublicSectionAlbumsRow struct {
 	Title        *string            `json:"title"`
 	CoverPhotoID uuid.NullUUID      `json:"cover_photo_id"`
 	SortOrder    pgtype.Int4        `json:"sort_order"`
-	IsHidden     pgtype.Bool        `json:"is_hidden"`
 	PasswordHash *string            `json:"password_hash"`
 	PhotoCount   pgtype.Int4        `json:"photo_count"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	CategoryID   uuid.NullUUID      `json:"category_id"`
+	Status       NullAlbumStatus    `json:"status"`
 }
 
 // Публичная выкладка: секции вкладки со своими альбомами, одним запросом.
@@ -254,12 +254,12 @@ func (q *Queries) ListPublicSectionAlbums(ctx context.Context, arg ListPublicSec
 			&i.Title,
 			&i.CoverPhotoID,
 			&i.SortOrder,
-			&i.IsHidden,
 			&i.PasswordHash,
 			&i.PhotoCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CategoryID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

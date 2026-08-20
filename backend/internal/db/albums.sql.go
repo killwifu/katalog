@@ -30,7 +30,7 @@ func (q *Queries) AddAlbumPhotoCount(ctx context.Context, arg AddAlbumPhotoCount
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
 `
 
 type CreateAlbumParams struct {
@@ -55,12 +55,12 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.Title,
 		&i.CoverPhotoID,
 		&i.SortOrder,
-		&i.IsHidden,
 		&i.PasswordHash,
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CategoryID,
+		&i.Status,
 	)
 	return i, err
 }
@@ -84,7 +84,7 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status FROM albums
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -104,18 +104,18 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.Title,
 		&i.CoverPhotoID,
 		&i.SortOrder,
-		&i.IsHidden,
 		&i.PasswordHash,
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CategoryID,
+		&i.Status,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status FROM albums
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -136,12 +136,12 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.Title,
 			&i.CoverPhotoID,
 			&i.SortOrder,
-			&i.IsHidden,
 			&i.PasswordHash,
 			&i.PhotoCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CategoryID,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -157,11 +157,11 @@ const updateAlbum = `-- name: UpdateAlbum :one
 UPDATE albums
 SET title          = $3,
     sort_order     = $4,
-    is_hidden      = $5,
+    status         = $5,
     cover_photo_id = $6,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
 `
 
 type UpdateAlbumParams struct {
@@ -169,7 +169,7 @@ type UpdateAlbumParams struct {
 	ShopID       uuid.UUID     `json:"shop_id"`
 	Title        string        `json:"title"`
 	SortOrder    int32         `json:"sort_order"`
-	IsHidden     bool          `json:"is_hidden"`
+	Status       AlbumStatus   `json:"status"`
 	CoverPhotoID uuid.NullUUID `json:"cover_photo_id"`
 }
 
@@ -179,7 +179,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		arg.ShopID,
 		arg.Title,
 		arg.SortOrder,
-		arg.IsHidden,
+		arg.Status,
 		arg.CoverPhotoID,
 	)
 	var i Album
@@ -190,12 +190,12 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.Title,
 		&i.CoverPhotoID,
 		&i.SortOrder,
-		&i.IsHidden,
 		&i.PasswordHash,
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CategoryID,
+		&i.Status,
 	)
 	return i, err
 }

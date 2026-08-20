@@ -175,7 +175,7 @@ func TestTabsAndSections(t *testing.T) {
 	t.Run("скрытый альбом не отдаётся", func(t *testing.T) {
 		setAlbums(a1.ID)
 		c.mustJSON("PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s", shop.ID, a1.ID),
-			map[string]any{"title": a1.Title, "is_hidden": true}, http.StatusOK, &struct{}{})
+			map[string]any{"status": "draft"}, http.StatusOK, &struct{}{})
 		var sections []publicSection
 		c.mustJSON("GET", fmt.Sprintf("/api/v1/public/shops/%s/tabs/%s", shop.Slug, custom.Slug),
 			nil, http.StatusOK, &sections)

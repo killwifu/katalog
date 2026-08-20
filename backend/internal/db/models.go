@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlbumStatus string
+
+const (
+	AlbumStatusPublished AlbumStatus = "published"
+	AlbumStatusUnlisted  AlbumStatus = "unlisted"
+	AlbumStatusDraft     AlbumStatus = "draft"
+)
+
+func (e *AlbumStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AlbumStatus(s)
+	case string:
+		*e = AlbumStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AlbumStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAlbumStatus struct {
+	AlbumStatus AlbumStatus `json:"album_status"`
+	Valid       bool        `json:"valid"` // Valid is true if AlbumStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAlbumStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.AlbumStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AlbumStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAlbumStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AlbumStatus), nil
+}
+
 type BillingState string
 
 const (
@@ -497,12 +540,12 @@ type Album struct {
 	Title        string             `json:"title"`
 	CoverPhotoID uuid.NullUUID      `json:"cover_photo_id"`
 	SortOrder    int32              `json:"sort_order"`
-	IsHidden     bool               `json:"is_hidden"`
 	PasswordHash *string            `json:"password_hash"`
 	PhotoCount   int32              `json:"photo_count"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	CategoryID   uuid.NullUUID      `json:"category_id"`
+	Status       AlbumStatus        `json:"status"`
 }
 
 type AlbumSection struct {

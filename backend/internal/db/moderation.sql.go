@@ -46,9 +46,9 @@ func (q *Queries) AdminBlockPhoto(ctx context.Context, id uuid.UUID) (Photo, err
 
 const adminHideAlbum = `-- name: AdminHideAlbum :one
 UPDATE albums
-SET is_hidden = true, updated_at = now()
+SET status = 'draft', updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, is_hidden, password_hash, photo_count, created_at, updated_at, category_id
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
 `
 
 func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
@@ -61,12 +61,12 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 		&i.Title,
 		&i.CoverPhotoID,
 		&i.SortOrder,
-		&i.IsHidden,
 		&i.PasswordHash,
 		&i.PhotoCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CategoryID,
+		&i.Status,
 	)
 	return i, err
 }

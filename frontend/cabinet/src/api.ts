@@ -102,7 +102,7 @@ export type Album = {
   title: string
   cover_photo_id: string | null
   sort_order: number
-  is_hidden: boolean
+  status: AlbumStatus
   photo_count: number
 }
 
@@ -113,6 +113,8 @@ export type Category = {
   slug: string
   sort_order: number
 }
+
+export type AlbumStatus = 'published' | 'unlisted' | 'draft'
 
 export type Tab = {
   id: string
@@ -172,6 +174,8 @@ export const api = {
   getShop: (shopId: string) => request<Shop>('GET', `/shops/${shopId}`),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
+  setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
+    request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
   createAlbum: (shopId: string, title: string, parentId?: string) =>
     request<Album>('POST', `/shops/${shopId}/albums`, {
       title,
