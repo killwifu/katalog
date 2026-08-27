@@ -295,6 +295,13 @@ func (a *API) settlePaymentSucceeded(ctx context.Context, p billing.Payment) err
 
 	// Витрина могла быть скрыта (suspended) — ревалидируем после коммита.
 	if shop, err := a.Q.GetShopByID(ctx, pay.ShopID); err == nil {
+		// Оплата возвращает всё, что скрыл понижённый тариф: продавцу
+		// не нужно вспоминать, что он там выбирал месяц назад.
+		if n, cerr := a.Q.ClearPlanVisibility(ctx, shop.ID); cerr != nil {
+			a.Log.Error("clear plan visibility", "shop_id", shop.ID, "error", cerr)
+		} else if n > 0 {
+			a.Log.Info("plan visibility restored", "shop_id", shop.ID, "albums", n)
+		}
 		a.Revalidate.Shop(shop.Slug)
 		// Письмо только после коммита: подтверждать оплату, которая
 		// откатилась, хуже, чем не подтвердить её вовсе.

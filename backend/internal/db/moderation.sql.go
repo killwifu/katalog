@@ -48,7 +48,7 @@ const adminHideAlbum = `-- name: AdminHideAlbum :one
 UPDATE albums
 SET status = 'draft', updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
 `
 
 func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
@@ -67,6 +67,7 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 		&i.UpdatedAt,
 		&i.CategoryID,
 		&i.Status,
+		&i.HiddenByPlan,
 	)
 	return i, err
 }
