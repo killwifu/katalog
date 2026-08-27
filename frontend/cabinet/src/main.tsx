@@ -7,7 +7,7 @@ import {
   redirect,
   RouterProvider,
 } from '@tanstack/react-router'
-import { lazy, StrictMode, Suspense } from 'react'
+import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
@@ -17,6 +17,7 @@ import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ContactsPage } from './pages/ContactsPage'
 import { DowngradePage } from './pages/DowngradePage'
+import { lazyPage } from './lib/lazyPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -26,7 +27,7 @@ import { CaptionsPage } from './pages/CaptionsPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
 
 // Recharts тяжёлый — страница статистики грузится отдельным чанком.
-const StatsPage = lazy(() =>
+const StatsPage = lazyPage(() =>
   import('./pages/StatsPage').then((m) => ({ default: m.StatsPage })),
 )
 import './index.css'

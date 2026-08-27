@@ -40,8 +40,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
-      <form onSubmit={(e) => void submit(e)} className="w-full max-w-sm rounded-lg bg-white p-6 shadow">
-        <h1 className="mb-4 text-xl font-semibold text-ink">
+      <form onSubmit={(e) => void submit(e)} className="box w-full max-w-sm !mb-0">
+        <h1 className="mb-4 text-h1 font-semibold">
           {mode === 'register' ? 'Регистрация' : 'Вход'}
         </h1>
         <label className="mb-3 block">

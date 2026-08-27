@@ -41,18 +41,15 @@ export function StatsPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-ink">Статистика</h1>
+      <div className="page__head">
+        <h1>Статистика</h1>
+        <span className="spacer" />
         <div className="flex gap-1">
           {PERIODS.map((p) => (
             <button
               key={p.days}
               onClick={() => setDays(p.days)}
-              className={`rounded px-3 py-1.5 text-sm font-medium ${
-                days === p.days
-                  ? 'bg-brand text-on-brand'
-                  : 'border border-line-strong bg-white text-ink-2'
-              }`}
+              className={`btn btn--sm ${days === p.days ? 'btn--primary' : 'btn--ghost'}`}
             >
               {p.label}
             </button>
@@ -70,14 +67,14 @@ export function StatsPage() {
 function StatsBody({ stats }: { stats: ShopStats }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="stats">
         <KpiTile label="Просмотры" value={stats.totals.views} />
         <KpiTile label="Уникальные посетители" value={stats.totals.unique_visitors} />
         <KpiTile label="Клики «написать»" value={stats.totals.lead_clicks} />
       </div>
 
-      <section className="rounded-lg border border-line bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-ink">Посещаемость по дням</h2>
+      <section className="box">
+        <h2>Посещаемость по дням</h2>
         {stats.daily.length === 0 ? (
           <Empty text="Пока нет данных — просмотры появляются после первого дня работы витрины." />
         ) : (
@@ -127,8 +124,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
       </section>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <section className="rounded-lg border border-line bg-white p-4">
-          <h2 className="mb-3 text-sm font-medium text-ink">
+        <section className="box">
+          <h2>
             Клики «написать» по каналам
           </h2>
           {stats.channels.length === 0 ? (
@@ -144,8 +141,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
           )}
         </section>
 
-        <section className="rounded-lg border border-line bg-white p-4">
-          <h2 className="mb-3 text-sm font-medium text-ink">Топ-5 альбомов по просмотрам</h2>
+        <section className="box">
+          <h2>Топ-5 альбомов по просмотрам</h2>
           {stats.top_albums.length === 0 ? (
             <Empty text="Просмотров альбомов за период не было." />
           ) : (
@@ -160,8 +157,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
         </section>
       </div>
 
-      <section className="rounded-lg border border-line bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-ink">Топ-10 фото по кликам</h2>
+      <section className="box">
+        <h2>Топ-10 фото по кликам</h2>
         {stats.top_photos.length === 0 ? (
           <Empty text="Кликов по фото за период не было." />
         ) : (
@@ -195,11 +192,9 @@ function StatsBody({ stats }: { stats: ShopStats }) {
 
 function KpiTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-line bg-white p-4">
-      <div className="text-2xl font-bold text-ink">
-        {value.toLocaleString('ru-RU')}
-      </div>
-      <div className="mt-1 text-xs text-ink-2">{label}</div>
+    <div className="stat">
+      <span>{label}</span>
+      <b>{value.toLocaleString('ru-RU')}</b>
     </div>
   )
 }

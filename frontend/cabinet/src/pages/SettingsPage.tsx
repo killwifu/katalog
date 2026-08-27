@@ -33,7 +33,9 @@ export function SettingsPage() {
 
   return (
     <form onSubmit={submit} className="max-w-xl">
-      <h1 className="mb-4 text-lg font-semibold text-ink">Настройки</h1>
+      <div className="page__head">
+        <h1>Настройки</h1>
+      </div>
 
       <section className="mb-6 rounded border border-line p-4">
         <h2 className="mb-1 text-sm font-medium text-ink">Водяной знак</h2>

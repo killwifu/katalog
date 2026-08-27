@@ -61,7 +61,7 @@ export function AlbumPage() {
           <Link to="/albums" className="text-sm text-brand hover:underline">
             ← Альбомы
           </Link>
-          <h1 className="text-lg font-semibold text-ink">{album?.title ?? 'Альбом'}</h1>
+          <h1 className="text-h1 font-semibold">{album?.title ?? 'Альбом'}</h1>
         </div>
         <div className="flex items-center gap-2">
           {/* Три статуса: «по ссылке» не показывает альбом в списках витрины,

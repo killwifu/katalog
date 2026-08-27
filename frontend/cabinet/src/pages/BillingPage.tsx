@@ -60,7 +60,9 @@ export function BillingPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink">Тариф и оплата</h1>
+      <div className="page__head">
+        <h1>Тариф и оплата</h1>
+      </div>
 
       {stateMessage && (
         <div className="alert alert--danger">
@@ -68,7 +70,7 @@ export function BillingPage() {
         </div>
       )}
 
-      <section className="mb-6 rounded-lg border border-line bg-white p-4">
+      <section className="box">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <span className="font-medium text-ink">
@@ -136,11 +138,8 @@ function UsageBar({ label, pct }: { label: string; pct: number }) {
         <span>{label}</span>
         <span>{pct}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded bg-surface-alt">
-        <div
-          className={`h-full rounded ${pct >= 90 ? 'bg-danger' : 'bg-brand'}`}
-          style={{ width: `${pct}%` }}
-        />
+      <div className={`prog ${pct >= 90 ? 'prog--warn' : ''}`}>
+        <span style={{ width: `${pct}%` }} />
       </div>
     </div>
   )

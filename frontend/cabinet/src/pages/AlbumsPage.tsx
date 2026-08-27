@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, type Album } from '../api'
 import { useShop } from './AppLayout'
 
 export function AlbumsPage() {
@@ -67,15 +67,15 @@ export function AlbumsPage() {
         </div>
       )}
 
-      <ul className="space-y-2">
+      <ul className="rows">
         {roots.map((album) => (
           <li key={album.id}>
-            <AlbumRow id={album.id} title={album.title} count={album.photo_count} />
+            <AlbumRow album={album} />
             {children(album.id).length > 0 && (
-              <ul className="mt-2 ml-6 space-y-2">
+              <ul className="border-t border-line bg-surface-alt pl-6">
                 {children(album.id).map((child) => (
                   <li key={child.id}>
-                    <AlbumRow id={child.id} title={child.title} count={child.photo_count} />
+                    <AlbumRow album={child} />
                   </li>
                 ))}
               </ul>
@@ -87,15 +87,23 @@ export function AlbumsPage() {
   )
 }
 
-function AlbumRow({ id, title, count }: { id: string; title: string; count: number }) {
+// Статусы видны прямо в списке: продавцу важно с одного взгляда понять,
+// что покупатель уже видит, а что лежит черновиком.
+const STATUS: Record<Album['status'], { label: string; cls: string }> = {
+  published: { label: 'Опубликован', cls: 'badge badge--live' },
+  unlisted: { label: 'По ссылке', cls: 'badge badge--link' },
+  draft: { label: 'Черновик', cls: 'badge badge--draft' },
+}
+
+function AlbumRow({ album }: { album: Album }) {
+  const status = STATUS[album.status] ?? STATUS.draft
   return (
-    <Link
-      to="/albums/$albumId"
-      params={{ albumId: id }}
-      className="rows__row rounded-card border border-line bg-surface hover:border-line-strong"
-    >
-      <span className="font-medium text-ink">{title}</span>
-      <span className="text-sm text-ink-2">{count} фото</span>
+    <Link to="/albums/$albumId" params={{ albumId: album.id }} className="rows__row">
+      <span className="rows__main">
+        <b>{album.title}</b>
+        <span className="rows__meta">{album.photo_count} фото</span>
+      </span>
+      <span className={status.cls}>{status.label}</span>
     </Link>
   )
 }
