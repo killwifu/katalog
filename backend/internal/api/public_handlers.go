@@ -43,11 +43,14 @@ type publicShopResponse struct {
 }
 
 type publicAlbumResponse struct {
-	ID         string            `json:"id"`
-	ParentID   *string           `json:"parent_id"`
-	Title      string            `json:"title"`
-	PhotoCount int32             `json:"photo_count"`
-	CoverUrls  map[string]string `json:"cover_urls,omitempty"`
+	ID       string  `json:"id"`
+	ParentID *string `json:"parent_id"`
+	Title    string  `json:"title"`
+	// Description отдаётся только на странице альбома: в сетке он не нужен,
+	// а ответ витрины ISR кеширует целиком — незачем его раздувать.
+	Description string            `json:"description,omitempty"`
+	PhotoCount  int32             `json:"photo_count"`
+	CoverUrls   map[string]string `json:"cover_urls,omitempty"`
 }
 
 type publicPhotoResponse struct {
@@ -253,9 +256,10 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		outPhotos = append(outPhotos, a.toPublicPhotoResponse(p))
 	}
 	albumOut := publicAlbumResponse{
-		ID:         album.ID.String(),
-		Title:      album.Title,
-		PhotoCount: album.PhotoCount,
+		ID:          album.ID.String(),
+		Title:       album.Title,
+		Description: album.Description,
+		PhotoCount:  album.PhotoCount,
 	}
 	if album.ParentID.Valid {
 		s := album.ParentID.UUID.String()

@@ -547,6 +547,7 @@ type Album struct {
 	CategoryID   uuid.NullUUID      `json:"category_id"`
 	Status       AlbumStatus        `json:"status"`
 	HiddenByPlan bool               `json:"hidden_by_plan"`
+	Description  string             `json:"description"`
 }
 
 type AlbumSection struct {
@@ -649,20 +650,21 @@ type Section struct {
 }
 
 type Shop struct {
-	ID           uuid.UUID          `json:"id"`
-	OwnerID      uuid.UUID          `json:"owner_id"`
-	Slug         string             `json:"slug"`
-	Name         string             `json:"name"`
-	Description  string             `json:"description"`
-	Contacts     []byte             `json:"contacts"`
-	Settings     []byte             `json:"settings"`
-	Status       ShopStatus         `json:"status"`
-	Plan         ShopPlan           `json:"plan"`
-	StorageUsed  int64              `json:"storage_used"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	BillingState BillingState       `json:"billing_state"`
-	PaidUntil    pgtype.Timestamptz `json:"paid_until"`
+	ID            uuid.UUID          `json:"id"`
+	OwnerID       uuid.UUID          `json:"owner_id"`
+	Slug          string             `json:"slug"`
+	Name          string             `json:"name"`
+	Description   string             `json:"description"`
+	Contacts      []byte             `json:"contacts"`
+	Settings      []byte             `json:"settings"`
+	Status        ShopStatus         `json:"status"`
+	Plan          ShopPlan           `json:"plan"`
+	StorageUsed   int64              `json:"storage_used"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	BillingState  BillingState       `json:"billing_state"`
+	PaidUntil     pgtype.Timestamptz `json:"paid_until"`
+	SlugChangedAt pgtype.Timestamptz `json:"slug_changed_at"`
 }
 
 type Subscription struct {

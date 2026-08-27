@@ -1,17 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
-import { api, type Album } from '../api'
+import { api, type Album, type Category } from '../api'
 import { useShop } from './AppLayout'
 
 export function AlbumsPage() {
   const shop = useShop()
   const queryClient = useQueryClient()
+  const categories = useQuery({
+    queryKey: ['categories', shop.id],
+    queryFn: () => api.listCategories(shop.id),
+  })
   const albums = useQuery({
     queryKey: ['albums', shop.id],
     queryFn: () => api.listAlbums(shop.id),
   })
   const [title, setTitle] = useState('')
+  const [query, setQuery] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [sort, setSort] = useState<'recent' | 'title' | 'photos'>('recent')
 
   const create = useMutation({
     mutationFn: (t: string) => api.createAlbum(shop.id, t),
@@ -29,7 +36,18 @@ export function AlbumsPage() {
   if (albums.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (albums.isError) return <p className="text-danger">Не удалось загрузить альбомы.</p>
 
-  const roots = albums.data.filter((a) => !a.parent_id)
+  // Фильтрация на клиенте: список альбомов одного продавца ограничен
+  // тарифом и целиком уже загружен — гонять за этим сервер незачем.
+  const norm = query.trim().toLowerCase()
+  const roots = albums.data
+    .filter((a) => !a.parent_id)
+    .filter((a) => !norm || a.title.toLowerCase().includes(norm))
+    .filter((a) => !categoryId || a.category_id === categoryId)
+    .sort((x, y) => {
+      if (sort === 'title') return x.title.localeCompare(y.title, 'ru')
+      if (sort === 'photos') return y.photo_count - x.photo_count
+      return 0
+    })
   const children = (parentId: string) => albums.data.filter((a) => a.parent_id === parentId)
 
   return (
@@ -56,7 +74,52 @@ export function AlbumsPage() {
       </form>
       {create.isError && <p className="mb-4 text-sm text-danger">Не удалось создать альбом.</p>}
 
-      {roots.length === 0 && (
+      {/* Панель показывается, когда альбомов уже много: на трёх штуках
+          она только мешает. */}
+      {albums.data.filter((a) => !a.parent_id).length > 5 && (
+        <div className="mb-4 grid gap-2 sm:grid-cols-[2fr_1fr_1fr]">
+          <input
+            className="inp"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по названию"
+            aria-label="Поиск по названию"
+          />
+          <select
+            className="inp"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            aria-label="Категория"
+          >
+            <option value="">Все категории</option>
+            {(categories.data ?? []).map((c: Category) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+          <select
+            className="inp"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as typeof sort)}
+            aria-label="Сортировка"
+          >
+            <option value="recent">Сначала новые</option>
+            <option value="title">По названию</option>
+            <option value="photos">По числу фото</option>
+          </select>
+        </div>
+      )}
+
+      {roots.length === 0 && (norm || categoryId) && (
+        <div className="emptybox">
+          <div className="emptybox__ico" aria-hidden="true">🔍</div>
+          <h3>Ничего не найдено</h3>
+          <p>Попробуйте другое название или снимите фильтр по категории.</p>
+        </div>
+      )}
+
+      {roots.length === 0 && !norm && !categoryId && (
         <div className="emptybox">
           <div className="emptybox__ico" aria-hidden="true">📷</div>
           <h3>Альбомов пока нет</h3>

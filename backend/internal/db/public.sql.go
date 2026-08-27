@@ -47,7 +47,7 @@ func (q *Queries) CreateLeadClick(ctx context.Context, arg CreateLeadClickParams
 }
 
 const getActiveShopByID = `-- name: GetActiveShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE id = $1 AND status = 'active' AND billing_state != 'suspended'
 `
 
@@ -69,12 +69,13 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
 WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
 `
 
@@ -100,6 +101,7 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }

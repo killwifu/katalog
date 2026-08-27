@@ -48,7 +48,7 @@ const adminHideAlbum = `-- name: AdminHideAlbum :one
 UPDATE albums
 SET status = 'draft', updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
 `
 
 func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
@@ -68,6 +68,7 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }
@@ -165,7 +166,7 @@ const adminSuspendShop = `-- name: AdminSuspendShop :one
 UPDATE shops
 SET status = 'suspended', updated_at = now()
 WHERE id = $1
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at
 `
 
 func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, error) {
@@ -186,6 +187,7 @@ func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, err
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }
@@ -297,7 +299,7 @@ func (q *Queries) GetComplaint(ctx context.Context, id uuid.UUID) (Complaint, er
 }
 
 const getShopBySlugAny = `-- name: GetShopBySlugAny :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE slug = $1
 `
 
@@ -320,6 +322,7 @@ func (q *Queries) GetShopBySlugAny(ctx context.Context, slug string) (Shop, erro
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }

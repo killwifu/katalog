@@ -30,7 +30,7 @@ func (q *Queries) AddShopStorageUsed(ctx context.Context, arg AddShopStorageUsed
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at
 `
 
 type CreateShopParams struct {
@@ -67,6 +67,7 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }
@@ -90,7 +91,7 @@ func (q *Queries) DeleteShop(ctx context.Context, arg DeleteShopParams) (int64, 
 }
 
 const getShopByID = `-- name: GetShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE id = $1
 `
 
@@ -112,12 +113,13 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }
 
 const getShopForOwner = `-- name: GetShopForOwner :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -145,12 +147,13 @@ func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }
 
 const listShopsByOwner = `-- name: ListShopsByOwner :many
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE owner_id = $1
 ORDER BY created_at
 `
@@ -180,6 +183,7 @@ func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sh
 			&i.UpdatedAt,
 			&i.BillingState,
 			&i.PaidUntil,
+			&i.SlugChangedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +203,7 @@ SET name        = $3,
     settings    = $6,
     updated_at  = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at
 `
 
 type UpdateShopParams struct {
@@ -237,6 +241,45 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.UpdatedAt,
 		&i.BillingState,
 		&i.PaidUntil,
+		&i.SlugChangedAt,
+	)
+	return i, err
+}
+
+const updateShopSlug = `-- name: UpdateShopSlug :one
+UPDATE shops
+SET slug = $3, slug_changed_at = now(), updated_at = now()
+WHERE id = $1 AND owner_id = $2
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at
+`
+
+type UpdateShopSlugParams struct {
+	ID      uuid.UUID `json:"id"`
+	OwnerID uuid.UUID `json:"owner_id"`
+	Slug    string    `json:"slug"`
+}
+
+// Смена адреса — отдельным запросом: она ограничена по частоте и должна
+// отмечать дату, а обычное сохранение настроек этого делать не должно.
+func (q *Queries) UpdateShopSlug(ctx context.Context, arg UpdateShopSlugParams) (Shop, error) {
+	row := q.db.QueryRow(ctx, updateShopSlug, arg.ID, arg.OwnerID, arg.Slug)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.Contacts,
+		&i.Settings,
+		&i.Status,
+		&i.Plan,
+		&i.StorageUsed,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
+		&i.SlugChangedAt,
 	)
 	return i, err
 }

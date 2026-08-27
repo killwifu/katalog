@@ -24,6 +24,14 @@ SET name        = $3,
 WHERE id = $1 AND owner_id = $2
 RETURNING *;
 
+-- Смена адреса — отдельным запросом: она ограничена по частоте и должна
+-- отмечать дату, а обычное сохранение настроек этого делать не должно.
+-- name: UpdateShopSlug :one
+UPDATE shops
+SET slug = $3, slug_changed_at = now(), updated_at = now()
+WHERE id = $1 AND owner_id = $2
+RETURNING *;
+
 -- name: DeleteShop :execrows
 DELETE FROM shops
 WHERE id = $1 AND owner_id = $2;

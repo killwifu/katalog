@@ -56,23 +56,34 @@ type shopResponse struct {
 	StorageUsed  int64           `json:"storage_used"`
 	StorageMax   int64           `json:"storage_max"`
 	MaxPhotos    int64           `json:"max_photos"`
+	// SlugChangeableAt — когда адрес можно будет сменить снова. null,
+	// если можно прямо сейчас. Считает сервер: повторять правило
+	// в кабинете значит разойтись с ним при первой правке срока.
+	SlugChangeableAt *time.Time `json:"slug_changeable_at"`
 }
 
 func (a *API) toShopResponse(s db.Shop) shopResponse {
+	var slugChangeableAt *time.Time
+	if s.SlugChangedAt.Valid {
+		if next := s.SlugChangedAt.Time.Add(slugChangeCooldown); time.Now().Before(next) {
+			slugChangeableAt = &next
+		}
+	}
 	limits := a.Cfg.Billing.Limits(string(s.Plan))
 	resp := shopResponse{
-		ID:           s.ID.String(),
-		Slug:         s.Slug,
-		Name:         s.Name,
-		Description:  s.Description,
-		Contacts:     json.RawMessage(s.Contacts),
-		Settings:     json.RawMessage(s.Settings),
-		Status:       string(s.Status),
-		Plan:         string(s.Plan),
-		BillingState: string(s.BillingState),
-		StorageUsed:  s.StorageUsed,
-		StorageMax:   limits.MaxStorage,
-		MaxPhotos:    limits.MaxPhotos,
+		ID:               s.ID.String(),
+		Slug:             s.Slug,
+		Name:             s.Name,
+		Description:      s.Description,
+		Contacts:         json.RawMessage(s.Contacts),
+		Settings:         json.RawMessage(s.Settings),
+		Status:           string(s.Status),
+		Plan:             string(s.Plan),
+		BillingState:     string(s.BillingState),
+		StorageUsed:      s.StorageUsed,
+		StorageMax:       limits.MaxStorage,
+		MaxPhotos:        limits.MaxPhotos,
+		SlugChangeableAt: slugChangeableAt,
 	}
 	if s.PaidUntil.Valid {
 		resp.PaidUntil = &s.PaidUntil.Time
@@ -171,7 +182,13 @@ func (a *API) handleGetShop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.toShopResponse(shopFromCtx(r)))
 }
 
+// slugChangeCooldown — как часто продавец может менять адрес витрины.
+// Ограничение продуктовое, а не техническое: смена рвёт все разосланные
+// покупателям ссылки, и делать это «по настроению» нельзя.
+const slugChangeCooldown = 180 * 24 * time.Hour
+
 type updateShopRequest struct {
+	Slug        *string          `json:"slug"`
 	Name        *string          `json:"name"`
 	Description *string          `json:"description"`
 	Contacts    *json.RawMessage `json:"contacts"`
@@ -219,8 +236,54 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update shop", err)
 		return
 	}
+	// Адрес меняем после остальных полей и отдельным запросом: он отмечает
+	// дату смены, а обычное сохранение настроек её трогать не должно.
+	if req.Slug != nil && *req.Slug != updated.Slug {
+		var ok bool
+		updated, ok = a.changeShopSlug(w, r, updated, *req.Slug)
+		if !ok {
+			return
+		}
+	}
+
 	a.Revalidate.Shop(updated.Slug)
 	writeJSON(w, http.StatusOK, a.toShopResponse(updated))
+}
+
+// changeShopSlug меняет адрес витрины с проверкой частоты. Старый slug
+// тоже ревалидируем: страница по нему должна перестать отдаваться сразу,
+// а не висеть в кеше ISR до истечения TTL.
+func (a *API) changeShopSlug(w http.ResponseWriter, r *http.Request, shop db.Shop, raw string) (db.Shop, bool) {
+	slug := strings.ToLower(strings.TrimSpace(raw))
+	if msg := validateSlug(slug); msg != "" {
+		apiError(w, http.StatusBadRequest, "invalid_slug", msg)
+		return shop, false
+	}
+	if shop.SlugChangedAt.Valid {
+		if next := shop.SlugChangedAt.Time.Add(slugChangeCooldown); time.Now().Before(next) {
+			apiError(w, http.StatusConflict, "slug_change_too_soon",
+				"адрес можно менять не чаще раза в полгода: следующая смена после "+next.Format("02.01.2006"))
+			return shop, false
+		}
+	}
+
+	oldSlug := shop.Slug
+	renamed, err := a.Q.UpdateShopSlug(r.Context(), db.UpdateShopSlugParams{
+		ID:      shop.ID,
+		OwnerID: userID(r),
+		Slug:    slug,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			apiError(w, http.StatusConflict, "slug_taken", "this slug is already taken")
+			return shop, false
+		}
+		a.internalError(w, "update shop slug", err)
+		return shop, false
+	}
+	a.Revalidate.Shop(oldSlug)
+	return renamed, true
 }
 
 func (a *API) handleDeleteShop(w http.ResponseWriter, r *http.Request) {

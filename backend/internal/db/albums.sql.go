@@ -65,7 +65,7 @@ func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (in
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
 `
 
 type CreateAlbumParams struct {
@@ -97,6 +97,7 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }
@@ -120,7 +121,7 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -147,12 +148,13 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -180,6 +182,7 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.CategoryID,
 			&i.Status,
 			&i.HiddenByPlan,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -247,9 +250,10 @@ SET title          = $3,
     sort_order     = $4,
     status         = $5,
     cover_photo_id = $6,
+    description    = $7,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
 `
 
 type UpdateAlbumParams struct {
@@ -259,6 +263,7 @@ type UpdateAlbumParams struct {
 	SortOrder    int32         `json:"sort_order"`
 	Status       AlbumStatus   `json:"status"`
 	CoverPhotoID uuid.NullUUID `json:"cover_photo_id"`
+	Description  string        `json:"description"`
 }
 
 func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album, error) {
@@ -269,6 +274,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		arg.SortOrder,
 		arg.Status,
 		arg.CoverPhotoID,
+		arg.Description,
 	)
 	var i Album
 	err := row.Scan(
@@ -285,6 +291,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }

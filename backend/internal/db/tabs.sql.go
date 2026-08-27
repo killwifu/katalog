@@ -201,7 +201,7 @@ func (q *Queries) GetTabForShop(ctx context.Context, arg GetTabForShopParams) (T
 
 const listPublicSectionAlbums = `-- name: ListPublicSectionAlbums :many
 SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_order,
-       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan
+       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
@@ -232,6 +232,7 @@ type ListPublicSectionAlbumsRow struct {
 	CategoryID   uuid.NullUUID      `json:"category_id"`
 	Status       NullAlbumStatus    `json:"status"`
 	HiddenByPlan pgtype.Bool        `json:"hidden_by_plan"`
+	Description  *string            `json:"description"`
 }
 
 // Публичная выкладка: секции вкладки со своими альбомами, одним запросом.
@@ -262,6 +263,7 @@ func (q *Queries) ListPublicSectionAlbums(ctx context.Context, arg ListPublicSec
 			&i.CategoryID,
 			&i.Status,
 			&i.HiddenByPlan,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}

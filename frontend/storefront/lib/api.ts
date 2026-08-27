@@ -14,6 +14,8 @@ export type ShopPublic = {
 }
 
 export type AlbumPublic = {
+  // Описание отдаётся только на странице альбома, в сетке его нет.
+  description?: string
   id: string
   parent_id: string | null
   title: string

@@ -438,7 +438,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: updateAlbum
-      summary: Обновить альбом (title, sort_order, status, cover_photo_id)
+      summary: Обновить альбом (title, description, sort_order, status, cover_photo_id)
       requestBody:
         required: true
         content:
@@ -449,6 +449,10 @@ paths:
                 title: { type: string, maxLength: 200 }
                 sort_order: { type: integer }
                 status: { $ref: "#/components/schemas/AlbumStatus" }
+                description:
+                  type: string
+                  maxLength: 2000
+                  description: Условия покупки; на витрине показывается над фотографиями
                 cover_photo_id:
                   type: [string, "null"]
                   format: uuid
@@ -634,6 +638,13 @@ paths:
                 properties:
                   plan: { $ref: "#/components/schemas/PlanID" }
                   max_photos: { type: integer }
+        slug_changeable_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Когда адрес можно сменить снова; null — можно сейчас. Смена рвёт
+            разосланные ссылки, поэтому ограничена: не чаще раза в полгода.
                   total_photos: { type: integer }
                   visible_photos: { type: integer }
                   over_limit: { type: boolean }
@@ -1624,6 +1635,11 @@ components:
         cover_photo_id: { type: [string, "null"], format: uuid }
         sort_order: { type: integer }
         status: { $ref: "#/components/schemas/AlbumStatus" }
+        description:
+          type: string
+          maxLength: 2000
+          description: Условия покупки; на витрине показывается над фотографиями
+        category_id: { type: string, format: uuid, nullable: true }
         photo_count: { type: integer }
 
     ShopSettings:
