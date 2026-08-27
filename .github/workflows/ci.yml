@@ -10,8 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # libheif-plugin-libde265 — HEVC-декодер. Без него libvips читает
+      # заголовок HEIC, но не декодирует пиксели: айфонные фото молча
+      # не обрабатываются. В Debian (прод-образ) декодер встроен в libheif1,
+      # в Ubuntu вынесен в отдельный плагин — без него CI не проверяет
+      # формат, который продукт принимает.
       - name: Install libvips (govips)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libvips-dev libheif-plugin-libde265
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
