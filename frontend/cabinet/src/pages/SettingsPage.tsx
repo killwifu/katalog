@@ -20,8 +20,8 @@ export function SettingsPage() {
     },
   })
 
-  if (current.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (current.isError) return <p className="text-red-600">Не удалось загрузить настройки.</p>
+  if (current.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (current.isError) return <p className="text-danger">Не удалось загрузить настройки.</p>
 
   const patch = (next: Partial<ShopSettings>) => setDraft({ ...settings, ...next })
   const patchWm = (next: Partial<typeof wm>) => patch({ watermark: { ...wm, ...next } })
@@ -33,16 +33,16 @@ export function SettingsPage() {
 
   return (
     <form onSubmit={submit} className="max-w-xl">
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">Настройки</h1>
+      <h1 className="mb-4 text-lg font-semibold text-ink">Настройки</h1>
 
-      <section className="mb-6 rounded border border-gray-200 p-4">
-        <h2 className="mb-1 text-sm font-medium text-gray-900">Водяной знак</h2>
-        <p className="mb-3 text-sm text-gray-500">
+      <section className="mb-6 rounded border border-line p-4">
+        <h2 className="mb-1 text-sm font-medium text-ink">Водяной знак</h2>
+        <p className="mb-3 text-sm text-ink-2">
           Накладывается при загрузке. Уже загруженные фотографии не меняются — чтобы
           применить знак к ним, их нужно загрузить заново.
         </p>
 
-        <label className="mb-3 flex items-center gap-2 text-sm text-gray-700">
+        <label className="mb-3 flex items-center gap-2 text-sm text-ink-2">
           <input
             type="checkbox"
             checked={wm.enabled}
@@ -52,19 +52,19 @@ export function SettingsPage() {
         </label>
 
         <label className="mb-3 block">
-          <span className="mb-1 block text-sm text-gray-700">Текст</span>
+          <span className="mb-1 block text-sm text-ink-2">Текст</span>
           <input
             value={wm.text}
             onChange={(e) => patchWm({ text: e.target.value })}
             placeholder="@ваш_ник"
             maxLength={40}
             disabled={!wm.enabled}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+            className="inp w-full disabled:bg-surface-alt"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm text-gray-700">
+          <span className="mb-1 block text-sm text-ink-2">
             Заметность: {Math.round(wm.opacity * 100)}%
           </span>
           <input
@@ -79,9 +79,9 @@ export function SettingsPage() {
         </label>
       </section>
 
-      <section className="mb-6 rounded border border-gray-200 p-4">
-        <h2 className="mb-1 text-sm font-medium text-gray-900">Сообщение покупателя</h2>
-        <p className="mb-3 text-sm text-gray-500">
+      <section className="mb-6 rounded border border-line p-4">
+        <h2 className="mb-1 text-sm font-medium text-ink">Сообщение покупателя</h2>
+        <p className="mb-3 text-sm text-ink-2">
           Текст, который подставится в мессенджер. Доступна подстановка{' '}
           <code className="text-xs">{'{caption}'}</code>.
         </p>
@@ -90,18 +90,18 @@ export function SettingsPage() {
           onChange={(e) => patch({ msg_template: e.target.value })}
           placeholder="Здравствуйте! Интересует {caption}"
           maxLength={200}
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="inp w-full"
         />
       </section>
 
       <button
         type="submit"
         disabled={draft === null || save.isPending}
-        className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+        className="btn btn--primary"
       >
         {save.isPending ? 'Сохраняю…' : 'Сохранить'}
       </button>
-      {save.isError && <p className="mt-2 text-sm text-red-600">Не удалось сохранить.</p>}
+      {save.isError && <p className="mt-2 text-sm text-danger">Не удалось сохранить.</p>}
     </form>
   )
 }

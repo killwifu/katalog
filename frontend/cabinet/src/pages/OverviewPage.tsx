@@ -31,27 +31,29 @@ export function OverviewPage() {
 
   return (
     <div>
-      <section className="mb-6 rounded border border-gray-200 bg-white p-4">
-        <h1 className="mb-2 text-sm font-medium text-gray-500">Ссылка на каталог</h1>
+      {/* Ссылка — первое, что видит продавец: он отправляет её по десять раз
+          в день. Акцентная рамка здесь не украшение, а расстановка приоритета. */}
+      <section className="box box--accent">
+        <h2 className="!mb-2 text-sm font-medium text-ink-2">Ссылка на каталог</h2>
         <div className="flex flex-wrap items-center gap-2">
           <a
             href={shopUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 truncate text-base text-blue-600 hover:underline"
+            className="flex-1 truncate text-brand hover:underline"
           >
             {shopUrl}
           </a>
           <button
             onClick={() => void copy()}
-            className="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-700"
+            className="btn btn--primary btn--sm"
           >
             {copied ? 'Скопировано' : 'Копировать'}
           </button>
         </div>
       </section>
 
-      <section className="mb-6 grid gap-3 sm:grid-cols-3">
+      <section className="stats mb-6">
         <Metric
           label="Переходы в мессенджер"
           value={totals?.lead_clicks}
@@ -63,13 +65,13 @@ export function OverviewPage() {
       </section>
 
       {(drafts > 0 || empty > 0) && (
-        <section className="rounded border border-gray-200 p-4">
-          <h2 className="mb-2 text-sm font-medium text-gray-900">Стоит доделать</h2>
-          <ul className="space-y-1 text-sm text-gray-600">
+        <section className="box">
+          <h2>Стоит доделать</h2>
+          <ul className="space-y-1 text-sm text-ink-2">
             {empty > 0 && (
               <li>
                 Пустых альбомов: {empty} —{' '}
-                <Link to="/albums" className="text-blue-600 hover:underline">
+                <Link to="/albums" className="text-brand hover:underline">
                   загрузить фото
                 </Link>
               </li>
@@ -98,10 +100,10 @@ function Metric({
   accent?: boolean
 }) {
   return (
-    <div className={`rounded border p-4 ${accent ? 'border-gray-900' : 'border-gray-200'}`}>
-      <div className="text-sm text-gray-500">{label}</div>
-      <div className="text-2xl font-semibold text-gray-900">{value ?? '—'}</div>
-      <div className="text-xs text-gray-400">{hint}</div>
+    <div className={`stat ${accent ? 'stat--accent' : ''}`}>
+      <span>{label}</span>
+      <b>{value ?? '—'}</b>
+      <em>{hint}</em>
     </div>
   )
 }

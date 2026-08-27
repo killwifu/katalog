@@ -61,16 +61,16 @@ export function CategoriesPage() {
     if (title.trim()) create.mutate()
   }
 
-  if (categories.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (categories.isError) return <p className="text-red-600">Не удалось загрузить категории.</p>
+  if (categories.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (categories.isError) return <p className="text-danger">Не удалось загрузить категории.</p>
 
   const roots = categories.data.filter((c) => !c.parent_id)
   const children = (id: string) => categories.data.filter((c) => c.parent_id === id)
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-gray-900">Категории</h1>
-      <p className="mb-4 text-sm text-gray-500">
+      <h1 className="mb-1 text-lg font-semibold text-ink">Категории</h1>
+      <p className="mb-4 text-sm text-ink-2">
         Классификация альбомов, максимум два уровня. Покупатель видит их в меню витрины.
       </p>
 
@@ -79,18 +79,18 @@ export function CategoriesPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Название"
-          className="min-w-40 flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+          className="inp min-w-40 flex-1"
         />
         <input
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           placeholder={slugify(title) || 'адрес'}
-          className="min-w-40 flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+          className="inp min-w-40 flex-1"
         />
         <select
           value={parentId}
           onChange={(e) => setParentId(e.target.value)}
-          className="rounded border border-gray-300 px-3 py-2 text-sm"
+          className="inp"
         >
           <option value="">Верхний уровень</option>
           {roots.map((c) => (
@@ -102,22 +102,29 @@ export function CategoriesPage() {
         <button
           type="submit"
           disabled={!title.trim() || create.isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="btn btn--primary"
         >
           Добавить
         </button>
       </form>
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       {roots.length === 0 ? (
-        <p className="text-sm text-gray-500">Категорий пока нет.</p>
+        <div className="emptybox">
+          <div className="emptybox__ico" aria-hidden="true">🗂</div>
+          <h3>Категорий пока нет</h3>
+          <p>
+            Категории — это классификация альбомов: покупатель находит по ним товар
+            в меню витрины. Двух уровней достаточно.
+          </p>
+        </div>
       ) : (
-        <ul className="divide-y divide-gray-200 rounded border border-gray-200">
+        <ul className="divide-y divide-line rounded border border-line">
           {roots.map((c) => (
             <li key={c.id}>
               <Row category={c} all={categories.data} onDelete={remove.mutate} />
               {children(c.id).length > 0 && (
-                <ul className="border-t border-gray-100 bg-gray-50 pl-6">
+                <ul className="border-t border-line bg-surface-alt pl-6">
                   {children(c.id).map((sub) => (
                     <li key={sub.id}>
                       <Row category={sub} all={categories.data} onDelete={remove.mutate} />
@@ -150,14 +157,14 @@ function Row({
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-      <span className="flex-1 text-sm text-gray-900">{category.title}</span>
-      <code className="text-xs text-gray-400">/{category.slug}</code>
+      <span className="flex-1 text-sm text-ink">{category.title}</span>
+      <code className="text-xs text-ink-3">/{category.slug}</code>
       {confirming ? (
         <>
           <select
             value={moveTo}
             onChange={(e) => setMoveTo(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="inp"
           >
             <option value="">Оставить без категории</option>
             {targets.map((c) => (
@@ -168,16 +175,16 @@ function Row({
           </select>
           <button
             onClick={() => onDelete({ id: category.id, moveTo: moveTo || undefined })}
-            className="rounded bg-red-600 px-2 py-1 text-xs text-white"
+            className="btn btn--danger btn--sm"
           >
             Удалить
           </button>
-          <button onClick={() => setConfirming(false)} className="text-xs text-gray-500">
+          <button onClick={() => setConfirming(false)} className="text-xs text-ink-2">
             Отмена
           </button>
         </>
       ) : (
-        <button onClick={() => setConfirming(true)} className="text-xs text-gray-500 hover:text-red-600">
+        <button onClick={() => setConfirming(true)} className="text-xs text-ink-2 hover:text-danger">
           Удалить
         </button>
       )}

@@ -47,8 +47,8 @@ export function BillingPage() {
     },
   })
 
-  if (billing.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (billing.isError) return <p className="text-red-600">Не удалось загрузить тариф.</p>
+  if (billing.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (billing.isError) return <p className="text-danger">Не удалось загрузить тариф.</p>
 
   const b = billing.data
   const stateMessage = STATE_LABELS[b.billing_state]
@@ -60,22 +60,22 @@ export function BillingPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">Тариф и оплата</h1>
+      <h1 className="mb-4 text-lg font-semibold text-ink">Тариф и оплата</h1>
 
       {stateMessage && (
-        <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="alert alert--danger">
           {stateMessage}
         </div>
       )}
 
-      <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+      <section className="mb-6 rounded-lg border border-line bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <span className="font-medium text-gray-900">
+            <span className="font-medium text-ink">
               Текущий тариф: {PLAN_NAMES[b.plan]}
             </span>
             {b.paid_until && (
-              <span className="ml-2 text-sm text-gray-500">
+              <span className="ml-2 text-sm text-ink-2">
                 оплачен до {formatDate(b.paid_until)}
               </span>
             )}
@@ -84,14 +84,14 @@ export function BillingPage() {
             <button
               onClick={() => cancel.mutate()}
               disabled={cancel.isPending}
-              className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-50"
+              className="text-sm text-ink-2 hover:text-danger disabled:opacity-50"
             >
               Отключить автопродление
             </button>
           )}
         </div>
         {b.subscription?.status === 'canceled' && b.paid_until && (
-          <p className="mb-3 text-sm text-gray-500">
+          <p className="mb-3 text-sm text-ink-2">
             Автопродление отключено — тариф действует до {formatDate(b.paid_until)}.
           </p>
         )}
@@ -117,11 +117,11 @@ export function BillingPage() {
         ))}
       </div>
       {subscribe.isError && (
-        <p className="mt-4 text-sm text-red-600">
+        <p className="mt-4 text-sm text-danger">
           Не удалось начать оплату. Попробуйте ещё раз.
         </p>
       )}
-      <p className="mt-4 text-sm text-gray-500">
+      <p className="mt-4 text-sm text-ink-2">
         Оплата проходит через ЮKassa. Тариф активируется автоматически после
         подтверждения платежа (обычно в течение минуты).
       </p>
@@ -132,13 +132,13 @@ export function BillingPage() {
 function UsageBar({ label, pct }: { label: string; pct: number }) {
   return (
     <div className="mb-2">
-      <div className="mb-1 flex justify-between text-sm text-gray-600">
+      <div className="mb-1 flex justify-between text-sm text-ink-2">
         <span>{label}</span>
         <span>{pct}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded bg-gray-100">
+      <div className="h-2 overflow-hidden rounded bg-surface-alt">
         <div
-          className={`h-full rounded ${pct >= 90 ? 'bg-red-500' : 'bg-blue-500'}`}
+          className={`h-full rounded ${pct >= 90 ? 'bg-danger' : 'bg-brand'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -159,23 +159,23 @@ function PlanCard({
 }) {
   return (
     <div
-      className={`rounded-lg border bg-white p-4 ${current ? 'border-blue-500' : 'border-gray-200'}`}
+      className={`box ${current ? 'border-brand' : 'border-line'}`}
     >
-      <div className="mb-1 font-semibold text-gray-900">{PLAN_NAMES[plan.id]}</div>
-      <div className="mb-3 text-2xl font-bold text-gray-900">
+      <div className="mb-1 font-semibold text-ink">{PLAN_NAMES[plan.id]}</div>
+      <div className="mb-3 text-2xl font-bold text-ink">
         {plan.price_rub > 0 ? `${plan.price_rub} ₽/мес` : '0 ₽'}
       </div>
-      <ul className="mb-4 space-y-1 text-sm text-gray-600">
+      <ul className="mb-4 space-y-1 text-sm text-ink-2">
         <li>{plan.max_photos.toLocaleString('ru-RU')} фото</li>
         <li>{formatGB(plan.max_storage)} хранилища</li>
       </ul>
       {current ? (
-        <span className="text-sm font-medium text-blue-600">Ваш тариф</span>
+        <span className="text-sm font-medium text-brand">Ваш тариф</span>
       ) : plan.price_rub > 0 ? (
         <button
           onClick={onSubscribe}
           disabled={busy}
-          className="w-full rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn--primary w-full"
         >
           Подключить
         </button>
