@@ -16,6 +16,7 @@ export function OverviewPage() {
     queryFn: () => api.getStats(shop.id, 30),
   })
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
+  const downgrade = useQuery({ queryKey: ['downgrade', shop.id], queryFn: () => api.getDowngrade(shop.id) })
   const [copied, setCopied] = useState(false)
 
   const shopUrl = `${location.origin}/${shop.slug}`
@@ -31,6 +32,20 @@ export function OverviewPage() {
 
   return (
     <div>
+      {/* Предложение выбрать видимое висит в кабинете, пока фотографий больше
+          лимита: если продавец не выберет, мы всё равно ничего не удаляем. */}
+      {downgrade.data?.over_limit && (
+        <div className="alert alert--warn">
+          <span className="flex-1">
+            Фотографий больше, чем помещается в тариф: {downgrade.data.total_photos} из{' '}
+            {downgrade.data.max_photos}. Выберите, что останется видимым покупателям.
+          </span>
+          <Link to="/downgrade" className="shrink-0 font-medium underline">
+            Выбрать
+          </Link>
+        </div>
+      )}
+
       {/* Ссылка — первое, что видит продавец: он отправляет её по десять раз
           в день. Акцентная рамка здесь не украшение, а расстановка приоритета. */}
       <section className="box box--accent">

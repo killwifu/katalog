@@ -546,6 +546,7 @@ type Album struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	CategoryID   uuid.NullUUID      `json:"category_id"`
 	Status       AlbumStatus        `json:"status"`
+	HiddenByPlan bool               `json:"hidden_by_plan"`
 }
 
 type AlbumSection struct {

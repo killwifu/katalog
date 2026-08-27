@@ -16,6 +16,7 @@ import { TabsPage } from './pages/TabsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ContactsPage } from './pages/ContactsPage'
+import { DowngradePage } from './pages/DowngradePage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -129,6 +130,12 @@ const contactsRoute = createRoute({
   component: ContactsPage,
 })
 
+const downgradeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/downgrade',
+  component: DowngradePage,
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -164,7 +171,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, downgradeRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

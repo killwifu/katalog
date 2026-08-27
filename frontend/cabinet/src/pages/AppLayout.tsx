@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { createContext, useContext, useState } from 'react'
 import { api, type Shop } from '../api'
-import { CreateShopPage } from './CreateShopPage'
+import { OnboardingPage } from './OnboardingPage'
 
 const ShopContext = createContext<Shop | null>(null)
 
@@ -41,7 +41,7 @@ export function AppLayout() {
   }
 
   const shop = shops.data[0]
-  if (!shop) return <CreateShopPage />
+  if (!shop) return <OnboardingPage />
 
   const logout = async () => {
     await api.logout()

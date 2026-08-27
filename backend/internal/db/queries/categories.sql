@@ -43,7 +43,7 @@ RETURNING *;
 -- Публичное дерево категорий витрины: только те, где есть видимые альбомы,
 -- либо есть потомок с видимыми. Горячий путь покупателя — один запрос.
 -- name: ListPublicCategories :many
-SELECT c.*, count(a.id) FILTER (WHERE a.status = 'published') AS album_count
+SELECT c.*, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan) AS album_count
 FROM categories c
 LEFT JOIN albums a ON a.category_id = c.id
 WHERE c.shop_id = $1
@@ -54,6 +54,6 @@ ORDER BY c.sort_order, c.created_at;
 SELECT a.* FROM albums a
 JOIN categories c ON c.id = a.category_id
 WHERE a.shop_id = $1
-  AND a.status = 'published'
+  AND a.status = 'published' AND NOT a.hidden_by_plan
   AND (c.slug = $2 OR c.parent_id = (SELECT id FROM categories WHERE shop_id = $1 AND slug = $2))
 ORDER BY a.sort_order, a.created_at DESC;

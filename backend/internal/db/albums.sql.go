@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addAlbumPhotoCount = `-- name: AddAlbumPhotoCount :exec
@@ -27,10 +28,44 @@ func (q *Queries) AddAlbumPhotoCount(ctx context.Context, arg AddAlbumPhotoCount
 	return err
 }
 
+const applyPlanVisibility = `-- name: ApplyPlanVisibility :exec
+UPDATE albums
+SET hidden_by_plan = NOT (id = ANY($2::uuid[])),
+    updated_at     = now()
+WHERE shop_id = $1
+`
+
+type ApplyPlanVisibilityParams struct {
+	ShopID  uuid.UUID   `json:"shop_id"`
+	Column2 []uuid.UUID `json:"column_2"`
+}
+
+// Применение выбора: видимыми остаются только перечисленные альбомы.
+// Ничего не удаляется — снимается лишь видимость на витрине.
+func (q *Queries) ApplyPlanVisibility(ctx context.Context, arg ApplyPlanVisibilityParams) error {
+	_, err := q.db.Exec(ctx, applyPlanVisibility, arg.ShopID, arg.Column2)
+	return err
+}
+
+const clearPlanVisibility = `-- name: ClearPlanVisibility :execrows
+UPDATE albums
+SET hidden_by_plan = false, updated_at = now()
+WHERE shop_id = $1 AND hidden_by_plan
+`
+
+// Возврат после оплаты: скрытое тарифом возвращается целиком и сразу.
+func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearPlanVisibility, shopID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
 `
 
 type CreateAlbumParams struct {
@@ -61,6 +96,7 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.UpdatedAt,
 		&i.CategoryID,
 		&i.Status,
+		&i.HiddenByPlan,
 	)
 	return i, err
 }
@@ -84,7 +120,7 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan FROM albums
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -110,12 +146,13 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.UpdatedAt,
 		&i.CategoryID,
 		&i.Status,
+		&i.HiddenByPlan,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan FROM albums
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -142,6 +179,57 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.UpdatedAt,
 			&i.CategoryID,
 			&i.Status,
+			&i.HiddenByPlan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlbumsForDowngrade = `-- name: ListAlbumsForDowngrade :many
+SELECT a.id, a.title, a.photo_count, a.hidden_by_plan, a.created_at,
+       coalesce(sum(d.views), 0)::bigint AS views
+FROM albums a
+LEFT JOIN daily_stats d
+       ON d.album_id = a.id AND d.date >= (current_date - 30)
+WHERE a.shop_id = $1
+GROUP BY a.id
+ORDER BY views DESC, a.created_at DESC
+`
+
+type ListAlbumsForDowngradeRow struct {
+	ID           uuid.UUID          `json:"id"`
+	Title        string             `json:"title"`
+	PhotoCount   int32              `json:"photo_count"`
+	HiddenByPlan bool               `json:"hidden_by_plan"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Views        int64              `json:"views"`
+}
+
+// Экран понижения тарифа: альбомы с числом фото и просмотрами за 30 дней.
+// Просмотры нужны для варианта «самые просматриваемые» — он предзаполнен,
+// потому что чаще всего это и есть правильный выбор.
+func (q *Queries) ListAlbumsForDowngrade(ctx context.Context, shopID uuid.UUID) ([]ListAlbumsForDowngradeRow, error) {
+	rows, err := q.db.Query(ctx, listAlbumsForDowngrade, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlbumsForDowngradeRow
+	for rows.Next() {
+		var i ListAlbumsForDowngradeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.PhotoCount,
+			&i.HiddenByPlan,
+			&i.CreatedAt,
+			&i.Views,
 		); err != nil {
 			return nil, err
 		}
@@ -161,7 +249,7 @@ SET title          = $3,
     cover_photo_id = $6,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
 `
 
 type UpdateAlbumParams struct {
@@ -196,6 +284,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.UpdatedAt,
 		&i.CategoryID,
 		&i.Status,
+		&i.HiddenByPlan,
 	)
 	return i, err
 }

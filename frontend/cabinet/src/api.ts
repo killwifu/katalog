@@ -103,6 +103,23 @@ export type AdminShop = {
   complaints: number
 }
 
+export type DowngradeAlbum = {
+  id: string
+  title: string
+  photo_count: number
+  views: number
+  hidden_by_plan: boolean
+}
+
+export type DowngradeState = {
+  plan: Plan
+  max_photos: number
+  total_photos: number
+  visible_photos: number
+  over_limit: boolean
+  albums: DowngradeAlbum[]
+}
+
 export type PlanInfo = {
   id: Plan
   max_photos: number
@@ -268,6 +285,13 @@ export const api = {
   updateCaption: (photoId: string, caption: string) =>
     request<Photo>('PATCH', `/photos/${photoId}`, { caption }),
   deletePhoto: (photoId: string) => request<void>('DELETE', `/photos/${photoId}`),
+
+  getDowngrade: (shopId: string) =>
+    request<DowngradeState>('GET', `/shops/${shopId}/downgrade`),
+  // Видимыми остаются перечисленные альбомы, остальные скрываются.
+  // Ничего не удаляется.
+  applyDowngrade: (shopId: string, albumIds: string[]) =>
+    request<void>('PUT', `/shops/${shopId}/downgrade`, { album_ids: albumIds }),
 
   getStats: (shopId: string, days: number) =>
     request<ShopStats>('GET', `/shops/${shopId}/stats?days=${days}`),

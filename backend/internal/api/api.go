@@ -99,6 +99,8 @@ func (a *API) Router() http.Handler {
 					r.Post("/billing/subscribe", a.handleSubscribe)
 					r.Post("/billing/cancel", a.handleCancelSubscription)
 					r.Get("/stats", a.handleShopStats)
+					r.Get("/downgrade", a.handleGetDowngrade)
+					r.Put("/downgrade", a.handleApplyDowngrade)
 
 					r.Route("/tabs", func(r chi.Router) {
 						r.Post("/", a.handleCreateTab)

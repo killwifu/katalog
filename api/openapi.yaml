@@ -613,6 +613,59 @@ paths:
   # ---- Публичный неймспейс витрины (без сессии, отдельные схемы ответов:
   # ---- приватные поля наружу не отдаются никогда) ----
 
+  /api/v1/shops/{shopID}/downgrade:
+    get:
+      operationId: getDowngrade
+      summary: Состояние понижения тарифа — что помещается и из чего выбирать
+      description: >
+        Экран показывается, пока фотографий больше лимита тарифа, независимо
+        от события биллинга. Признак over_limit считает сервер: вычислять его
+        на клиенте — разойтись при первой смене лимитов.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan, max_photos, total_photos, visible_photos, over_limit, albums]
+                properties:
+                  plan: { $ref: "#/components/schemas/PlanID" }
+                  max_photos: { type: integer }
+                  total_photos: { type: integer }
+                  visible_photos: { type: integer }
+                  over_limit: { type: boolean }
+                  albums:
+                    type: array
+                    items: { $ref: "#/components/schemas/DowngradeAlbum" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: applyDowngrade
+      summary: Сохранить выбор видимых альбомов
+      description: >
+        Перечисленные альбомы остаются видимыми, остальные скрываются.
+        Ничего не удаляется; оплата подписки возвращает всё автоматически.
+        Чужие id в списке ни на что не влияют — запрос ограничен shop_id.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [album_ids]
+              properties:
+                album_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "204": { description: No Content }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/shops/{shopID}/tabs:
     get:
       operationId: listTabs
@@ -1598,6 +1651,18 @@ components:
         published — виден на витрине и в списках;
         unlisted — «по ссылке»: нет в списках, прямая ссылка работает;
         draft — не виден покупателю нигде.
+
+    DowngradeAlbum:
+      type: object
+      required: [id, title, photo_count, views, hidden_by_plan]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        photo_count: { type: integer }
+        views: { type: integer, description: просмотры за 30 дней }
+        hidden_by_plan:
+          type: boolean
+          description: скрыт понижением тарифа; вернётся при оплате
 
     Tab:
       type: object

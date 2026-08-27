@@ -67,6 +67,8 @@ func TestTenantIsolation(t *testing.T) {
 		{"PATCH", fmt.Sprintf("/api/v1/shops/%s/sections/%s", shop.ID, section.ID), map[string]any{"title": "hacked"}},
 		{"DELETE", fmt.Sprintf("/api/v1/shops/%s/sections/%s", shop.ID, section.ID), nil},
 		{"PUT", fmt.Sprintf("/api/v1/shops/%s/sections/%s/albums", shop.ID, section.ID), map[string]any{"album_ids": []string{album.ID}}},
+		{"GET", "/api/v1/shops/" + shop.ID + "/downgrade", nil},
+		{"PUT", "/api/v1/shops/" + shop.ID + "/downgrade", map[string]any{"album_ids": []string{album.ID}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
