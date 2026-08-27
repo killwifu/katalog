@@ -1,6 +1,18 @@
 :80 {
 	root * /srv
 	encode gzip
-	try_files {path} /index.html
-	file_server
+
+	# Хешированные ассеты в SPA-фолбэк попадать не должны. Иначе после
+	# деплоя старый чанк отдаётся как index.html с Content-Type text/html,
+	# динамический import падает на несовпадении MIME — и у всех, у кого
+	# кабинет был открыт, ломается переход на ленивую страницу.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }

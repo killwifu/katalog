@@ -69,23 +69,25 @@ export function CategoriesPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-ink">Категории</h1>
-      <p className="mb-4 text-sm text-ink-2">
+      <div className="page__head">
+        <h1>Категории</h1>
+      </div>
+      <p className="page__lead">
         Классификация альбомов, максимум два уровня. Покупатель видит их в меню витрины.
       </p>
 
-      <form onSubmit={submit} className="mb-6 flex flex-wrap gap-2">
+      <form onSubmit={submit} className="mb-6 grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Название"
-          className="inp min-w-40 flex-1"
+          className="inp"
         />
         <input
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           placeholder={slugify(title) || 'адрес'}
-          className="inp min-w-40 flex-1"
+          className="inp"
         />
         <select
           value={parentId}

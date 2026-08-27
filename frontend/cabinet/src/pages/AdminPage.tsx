@@ -16,7 +16,9 @@ export function AdminPage() {
   const [tab, setTab] = useState<'overview' | 'complaints' | 'flagged' | 'sellers'>('overview')
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink">Платформа</h1>
+      <div className="page__head">
+        <h1>Платформа</h1>
+      </div>
       <div className="mb-4 flex flex-wrap gap-2">
         <TabButton active={tab === 'overview'} onClick={() => setTab('overview')}>
           Сводка
@@ -112,7 +114,7 @@ function ComplaintsTab() {
 
       <ul className="space-y-3">
         {complaints.data.map((c) => (
-          <li key={c.id} className="rounded-lg border border-line bg-white p-4">
+          <li key={c.id} className="box">
             <div className="mb-1 flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-ink">
                 {STATUS_LABELS[c.status]} ·{' '}
@@ -218,7 +220,7 @@ function FlaggedTab() {
   return (
     <ul className="space-y-3">
       {flagged.data.map((p) => (
-        <li key={p.id} className="rounded-lg border border-line bg-white p-4">
+        <li key={p.id} className="box">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-sm text-ink-2">
               /{p.shop_slug} · статус {p.status}

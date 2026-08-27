@@ -9,8 +9,8 @@ import { api } from '../api'
 function AuthShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
-      <div className="w-full max-w-sm rounded-lg border border-line bg-white p-6">
-        <h1 className="mb-4 text-lg font-semibold text-ink">{title}</h1>
+      <div className="box w-full max-w-sm !mb-0">
+        <h1 className="mb-4 text-h1 font-semibold">{title}</h1>
         {children}
       </div>
     </div>

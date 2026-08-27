@@ -47,8 +47,10 @@ export function TabsPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-ink">Вкладки и разделы</h1>
-      <p className="mb-4 text-sm text-ink-2">
+      <div className="page__head">
+        <h1>Вкладки и разделы</h1>
+      </div>
+      <p className="page__lead">
         Вкладка → раздел → альбом. Пока разделов нет, витрина показывает все альбомы по дате.
       </p>
 
