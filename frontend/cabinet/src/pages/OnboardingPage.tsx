@@ -1,10 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import AwsS3 from '@uppy/aws-s3'
-import Uppy from '@uppy/core'
-import ru_RU from '@uppy/locales/lib/ru_RU'
+import type Uppy from '@uppy/core'
 import { Dashboard } from '@uppy/react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, ApiError, type Shop } from '../api'
+import { createPhotoUppy } from '../lib/uppy'
 import { slugify } from './CategoriesPage'
 import '@uppy/core/dist/style.min.css'
 import '@uppy/dashboard/dist/style.min.css'
@@ -135,22 +134,10 @@ function StepPhotos({ shop, onDone }: { shop: Shop; onDone: () => void }) {
       .createAlbum(shop.id, 'Первые товары')
       .then((album) => {
         if (cancelled) return
-        created = new Uppy({
-          locale: ru_RU,
-          restrictions: { allowedFileTypes: ['image/*', '.heic', '.heif'], maxFileSize: 50 * 1024 * 1024 },
-        }).use(AwsS3, {
-          shouldUseMultipart: false,
-          async getUploadParameters(file) {
-            const { photo_id, url } = await api.presign(shop.id, album.id, file.size ?? 0)
-            created?.setFileMeta(file.id, { photoId: photo_id })
-            return { method: 'PUT', url, headers: {} }
-          },
-        })
-        created.on('complete', (result) => {
-          const ids = (result.successful ?? [])
-            .map((f) => (f.meta as { photoId?: string }).photoId)
-            .filter((id): id is string => Boolean(id))
-          if (ids.length > 0) void api.confirm(shop.id, ids).then(onDone)
+        created = createPhotoUppy({
+          shopId: shop.id,
+          albumId: album.id,
+          onBatchConfirmed: onDone,
         })
         setUppy(created)
       })

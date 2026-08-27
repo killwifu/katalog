@@ -19,6 +19,7 @@
     "@uppy/dashboard": "^4.4.3",
     "@uppy/locales": "^4.8.4",
     "@uppy/react": "^4.5.2",
+    "heic2any": "^0.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "recharts": "^3.10.1"
