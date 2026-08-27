@@ -42,7 +42,7 @@ export function StatsPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-gray-900">Статистика</h1>
+        <h1 className="text-lg font-semibold text-ink">Статистика</h1>
         <div className="flex gap-1">
           {PERIODS.map((p) => (
             <button
@@ -50,8 +50,8 @@ export function StatsPage() {
               onClick={() => setDays(p.days)}
               className={`rounded px-3 py-1.5 text-sm font-medium ${
                 days === p.days
-                  ? 'bg-blue-600 text-white'
-                  : 'border border-gray-300 bg-white text-gray-700'
+                  ? 'bg-brand text-on-brand'
+                  : 'border border-line-strong bg-white text-ink-2'
               }`}
             >
               {p.label}
@@ -60,8 +60,8 @@ export function StatsPage() {
         </div>
       </div>
 
-      {stats.isPending && <p className="text-gray-500">Загрузка…</p>}
-      {stats.isError && <p className="text-red-600">Не удалось загрузить статистику.</p>}
+      {stats.isPending && <p className="text-ink-2">Загрузка…</p>}
+      {stats.isError && <p className="text-danger">Не удалось загрузить статистику.</p>}
       {stats.data && <StatsBody stats={stats.data} />}
     </div>
   )
@@ -76,8 +76,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
         <KpiTile label="Клики «написать»" value={stats.totals.lead_clicks} />
       </div>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-gray-900">Посещаемость по дням</h2>
+      <section className="rounded-lg border border-line bg-white p-4">
+        <h2 className="mb-3 text-sm font-medium text-ink">Посещаемость по дням</h2>
         {stats.daily.length === 0 ? (
           <Empty text="Пока нет данных — просмотры появляются после первого дня работы витрины." />
         ) : (
@@ -127,8 +127,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
       </section>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-medium text-gray-900">
+        <section className="rounded-lg border border-line bg-white p-4">
+          <h2 className="mb-3 text-sm font-medium text-ink">
             Клики «написать» по каналам
           </h2>
           {stats.channels.length === 0 ? (
@@ -144,8 +144,8 @@ function StatsBody({ stats }: { stats: ShopStats }) {
           )}
         </section>
 
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-medium text-gray-900">Топ-5 альбомов по просмотрам</h2>
+        <section className="rounded-lg border border-line bg-white p-4">
+          <h2 className="mb-3 text-sm font-medium text-ink">Топ-5 альбомов по просмотрам</h2>
           {stats.top_albums.length === 0 ? (
             <Empty text="Просмотров альбомов за период не было." />
           ) : (
@@ -160,12 +160,12 @@ function StatsBody({ stats }: { stats: ShopStats }) {
         </section>
       </div>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-medium text-gray-900">Топ-10 фото по кликам</h2>
+      <section className="rounded-lg border border-line bg-white p-4">
+        <h2 className="mb-3 text-sm font-medium text-ink">Топ-10 фото по кликам</h2>
         {stats.top_photos.length === 0 ? (
           <Empty text="Кликов по фото за период не было." />
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-line">
             {stats.top_photos.map((p) => (
               <li key={p.photo_id} className="flex items-center gap-3 py-2">
                 {p.thumb_url ? (
@@ -176,12 +176,12 @@ function StatsBody({ stats }: { stats: ShopStats }) {
                     className="h-12 w-12 shrink-0 rounded object-cover"
                   />
                 ) : (
-                  <div className="h-12 w-12 shrink-0 rounded bg-gray-100" />
+                  <div className="h-12 w-12 shrink-0 rounded bg-surface-alt" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">
                   {p.caption || 'Без подписи'}
                 </span>
-                <span className="shrink-0 text-sm font-medium text-gray-900">
+                <span className="shrink-0 text-sm font-medium text-ink">
                   {p.clicks}
                 </span>
               </li>
@@ -195,11 +195,11 @@ function StatsBody({ stats }: { stats: ShopStats }) {
 
 function KpiTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-2xl font-bold text-gray-900">
+    <div className="rounded-lg border border-line bg-white p-4">
+      <div className="text-2xl font-bold text-ink">
         {value.toLocaleString('ru-RU')}
       </div>
-      <div className="mt-1 text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xs text-ink-2">{label}</div>
     </div>
   )
 }
@@ -213,12 +213,12 @@ function BarList({ rows }: { rows: { key: string; label: string; value: number }
       {rows.map((r) => (
         <li key={r.key}>
           <div className="mb-0.5 flex justify-between gap-2 text-sm">
-            <span className="truncate text-gray-800">{r.label}</span>
-            <span className="shrink-0 font-medium text-gray-900">
+            <span className="truncate text-ink">{r.label}</span>
+            <span className="shrink-0 font-medium text-ink">
               {r.value.toLocaleString('ru-RU')}
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded bg-gray-100">
+          <div className="h-2 overflow-hidden rounded bg-surface-alt">
             <div
               className="h-full rounded"
               style={{ width: `${(r.value / max) * 100}%`, background: COLOR_VIEWS }}
@@ -231,7 +231,7 @@ function BarList({ rows }: { rows: { key: string; label: string; value: number }
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="text-sm text-gray-500">{text}</p>
+  return <p className="text-sm text-ink-2">{text}</p>
 }
 
 function shortDate(iso: string): string {

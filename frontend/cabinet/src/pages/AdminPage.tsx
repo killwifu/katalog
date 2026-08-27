@@ -16,7 +16,7 @@ export function AdminPage() {
   const [tab, setTab] = useState<'overview' | 'complaints' | 'flagged' | 'sellers'>('overview')
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-gray-900">Платформа</h1>
+      <h1 className="mb-4 text-lg font-semibold text-ink">Платформа</h1>
       <div className="mb-4 flex flex-wrap gap-2">
         <TabButton active={tab === 'overview'} onClick={() => setTab('overview')}>
           Сводка
@@ -52,7 +52,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={`rounded px-3 py-1.5 text-sm font-medium ${
-        active ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border border-gray-300'
+        active ? 'bg-brand text-on-brand' : 'bg-white text-ink-2 border border-line-strong'
       }`}
     >
       {children}
@@ -91,15 +91,15 @@ function ComplaintsTab() {
     onSuccess: refresh,
   })
 
-  if (complaints.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (complaints.isError) return <p className="text-red-600">Не удалось загрузить жалобы.</p>
+  if (complaints.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (complaints.isError) return <p className="text-danger">Не удалось загрузить жалобы.</p>
 
   return (
     <div>
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value)}
-        className="mb-4 rounded border border-gray-300 px-2 py-1.5 text-sm"
+        className="mb-4 rounded border border-line-strong px-2 py-1.5 text-sm"
       >
         <option value="open">Новые</option>
         <option value="in_review">В работе</option>
@@ -108,13 +108,13 @@ function ComplaintsTab() {
         <option value="">Все</option>
       </select>
 
-      {complaints.data.length === 0 && <p className="text-gray-500">Жалоб нет.</p>}
+      {complaints.data.length === 0 && <p className="text-ink-2">Жалоб нет.</p>}
 
       <ul className="space-y-3">
         {complaints.data.map((c) => (
-          <li key={c.id} className="rounded-lg border border-gray-200 bg-white p-4">
+          <li key={c.id} className="rounded-lg border border-line bg-white p-4">
             <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm font-medium text-ink">
                 {STATUS_LABELS[c.status]} ·{' '}
                 {new Date(c.created_at).toLocaleString('ru-RU')}
               </span>
@@ -123,15 +123,15 @@ function ComplaintsTab() {
                   href={`/${c.shop_slug}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-brand hover:underline"
                 >
                   /{c.shop_slug}
                 </a>
               )}
             </div>
-            <p className="mb-1 text-sm break-all text-gray-500">{c.content_url}</p>
-            <p className="mb-2 text-sm whitespace-pre-wrap text-gray-800">{c.reason}</p>
-            <p className="mb-3 text-sm text-gray-500">
+            <p className="mb-1 text-sm break-all text-ink-2">{c.content_url}</p>
+            <p className="mb-2 text-sm whitespace-pre-wrap text-ink">{c.reason}</p>
+            <p className="mb-3 text-sm text-ink-2">
               Заявитель: {c.reporter_name} &lt;{c.reporter_email}&gt;
             </p>
             <div className="flex flex-wrap gap-2 text-sm">
@@ -210,21 +210,21 @@ function FlaggedTab() {
     onSuccess: refresh,
   })
 
-  if (flagged.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (flagged.isError) return <p className="text-red-600">Не удалось загрузить список.</p>
+  if (flagged.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (flagged.isError) return <p className="text-danger">Не удалось загрузить список.</p>
   if (flagged.data.length === 0)
-    return <p className="text-gray-500">Нет фото на ручной проверке.</p>
+    return <p className="text-ink-2">Нет фото на ручной проверке.</p>
 
   return (
     <ul className="space-y-3">
       {flagged.data.map((p) => (
-        <li key={p.id} className="rounded-lg border border-gray-200 bg-white p-4">
+        <li key={p.id} className="rounded-lg border border-line bg-white p-4">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-ink-2">
               /{p.shop_slug} · статус {p.status}
             </span>
           </div>
-          <p className="mb-3 text-sm whitespace-pre-wrap text-gray-800">{p.caption}</p>
+          <p className="mb-3 text-sm whitespace-pre-wrap text-ink">{p.caption}</p>
           <div className="flex gap-2 text-sm">
             <ActionButton danger onClick={() => block.mutate(p.id)}>
               Скрыть фото
@@ -251,8 +251,8 @@ function ActionButton({
       onClick={onClick}
       className={`rounded border px-3 py-1.5 font-medium ${
         danger
-          ? 'border-red-300 text-red-700 hover:bg-red-50'
-          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+          ? 'border-line-strong text-danger'
+          : 'border-line-strong text-ink-2 hover:bg-surface-alt'
       }`}
     >
       {children}
@@ -267,8 +267,8 @@ function formatBytes(bytes: number): string {
 
 function OverviewTab() {
   const q = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => api.adminOverview() })
-  if (q.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (q.isError) return <p className="text-red-600">Не удалось загрузить сводку.</p>
+  if (q.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (q.isError) return <p className="text-danger">Не удалось загрузить сводку.</p>
 
   const cards = [
     { label: 'Активные магазины', value: String(q.data.active_shops) },
@@ -280,9 +280,9 @@ function OverviewTab() {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       {cards.map((c) => (
-        <div key={c.label} className="rounded border border-gray-200 p-4">
-          <div className="text-sm text-gray-500">{c.label}</div>
-          <div className="text-2xl font-semibold text-gray-900">{c.value}</div>
+        <div key={c.label} className="rounded border border-line p-4">
+          <div className="text-sm text-ink-2">{c.label}</div>
+          <div className="text-2xl font-semibold text-ink">{c.value}</div>
         </div>
       ))}
     </div>
@@ -293,14 +293,14 @@ function OverviewTab() {
 // единичный случай от системы, а не листать список по алфавиту.
 function SellersTab() {
   const q = useQuery({ queryKey: ['admin', 'shops'], queryFn: () => api.adminListShops() })
-  if (q.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (q.isError) return <p className="text-red-600">Не удалось загрузить продавцов.</p>
-  if (q.data.length === 0) return <p className="text-gray-500">Продавцов пока нет.</p>
+  if (q.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (q.isError) return <p className="text-danger">Не удалось загрузить продавцов.</p>
+  if (q.data.length === 0) return <p className="text-ink-2">Продавцов пока нет.</p>
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="text-left text-gray-500">
+        <thead className="text-left text-ink-2">
           <tr>
             <th className="py-2">Магазин</th>
             <th className="py-2">Почта</th>
@@ -312,20 +312,20 @@ function SellersTab() {
         </thead>
         <tbody>
           {q.data.map((s) => (
-            <tr key={s.id} className="border-t border-gray-100">
+            <tr key={s.id} className="border-t border-line">
               <td className="py-2">
-                <a href={`/${s.slug}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                <a href={`/${s.slug}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                   {s.name}
                 </a>
                 {s.billing_state === 'suspended' && (
-                  <span className="ml-2 text-xs text-amber-700">скрыт</span>
+                  <span className="ml-2 badge badge--warn">скрыт</span>
                 )}
               </td>
-              <td className="py-2 text-gray-600">{s.email}</td>
-              <td className="py-2 text-gray-600">{s.plan}</td>
-              <td className="py-2 text-gray-600">{s.photos}</td>
-              <td className="py-2 text-gray-600">{formatBytes(s.storage_used)}</td>
-              <td className={`py-2 ${s.complaints > 0 ? 'font-medium text-red-700' : 'text-gray-400'}`}>
+              <td className="py-2 text-ink-2">{s.email}</td>
+              <td className="py-2 text-ink-2">{s.plan}</td>
+              <td className="py-2 text-ink-2">{s.photos}</td>
+              <td className="py-2 text-ink-2">{formatBytes(s.storage_used)}</td>
+              <td className={`py-2 ${s.complaints > 0 ? 'font-medium text-danger' : 'text-ink-3'}`}>
                 {s.complaints}
               </td>
             </tr>

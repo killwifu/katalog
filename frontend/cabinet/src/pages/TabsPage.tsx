@@ -36,9 +36,9 @@ export function TabsPage() {
   })
 
   if (tabs.isPending || sections.isPending || albums.isPending)
-    return <p className="text-gray-500">Загрузка…</p>
+    return <p className="text-ink-2">Загрузка…</p>
   if (tabs.isError || sections.isError || albums.isError)
-    return <p className="text-red-600">Не удалось загрузить конструктор.</p>
+    return <p className="text-danger">Не удалось загрузить конструктор.</p>
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -47,8 +47,8 @@ export function TabsPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-gray-900">Вкладки и разделы</h1>
-      <p className="mb-4 text-sm text-gray-500">
+      <h1 className="mb-1 text-lg font-semibold text-ink">Вкладки и разделы</h1>
+      <p className="mb-4 text-sm text-ink-2">
         Вкладка → раздел → альбом. Пока разделов нет, витрина показывает все альбомы по дате.
       </p>
 
@@ -57,17 +57,17 @@ export function TabsPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Новая вкладка"
-          className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+          className="inp flex-1"
         />
         <button
           type="submit"
           disabled={!title.trim() || createTab.isPending}
-          className="rounded bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="btn btn--primary"
         >
           Добавить
         </button>
       </form>
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="space-y-6">
         {tabs.data.map((tab) => (
@@ -111,14 +111,14 @@ function TabBlock({
   })
 
   return (
-    <section className="rounded border border-gray-200">
-      <header className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">
-        <h2 className="flex-1 text-sm font-medium text-gray-900">{tab.title}</h2>
-        <code className="text-xs text-gray-400">/{tab.slug}</code>
+    <section className="rounded border border-line">
+      <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <h2 className="flex-1 text-sm font-medium text-ink">{tab.title}</h2>
+        <code className="text-xs text-ink-3">/{tab.slug}</code>
         {tab.is_system ? (
-          <span className="text-xs text-gray-400">системная</span>
+          <span className="text-xs text-ink-3">системная</span>
         ) : (
-          <button onClick={onDelete} className="text-xs text-gray-500 hover:text-red-600">
+          <button onClick={onDelete} className="text-xs text-ink-2 hover:text-danger">
             Удалить
           </button>
         )}
@@ -146,12 +146,12 @@ function TabBlock({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Новый раздел"
-            className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+            className="inp flex-1"
           />
           <button
             type="submit"
             disabled={!title.trim()}
-            className="rounded border border-gray-300 px-3 py-1 text-sm disabled:opacity-50"
+            className="rounded border border-line-strong px-3 py-1 text-sm disabled:opacity-50"
           >
             Добавить раздел
           </button>
@@ -192,28 +192,28 @@ function SectionBlock({
     selected.some((id, i) => section.album_ids[i] !== id)
 
   return (
-    <div className="rounded bg-gray-50 p-3">
+    <div className="rounded bg-surface-alt p-3">
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex-1 text-sm text-gray-900">{section.title}</span>
+        <span className="flex-1 text-sm text-ink">{section.title}</span>
         {dirty && (
           <button
             onClick={() => save.mutate()}
-            className="rounded bg-gray-900 px-2 py-1 text-xs text-white"
+            className="btn btn--primary btn--sm"
           >
             Сохранить
           </button>
         )}
-        <button onClick={() => remove.mutate()} className="text-xs text-gray-500 hover:text-red-600">
+        <button onClick={() => remove.mutate()} className="text-xs text-ink-2 hover:text-danger">
           Удалить
         </button>
       </div>
       {albums.length === 0 ? (
-        <p className="text-xs text-gray-500">Сначала создайте альбомы.</p>
+        <p className="text-xs text-ink-2">Сначала создайте альбомы.</p>
       ) : (
         <ul className="grid gap-1 sm:grid-cols-2">
           {albums.map((album) => (
             <li key={album.id}>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-ink-2">
                 <input
                   type="checkbox"
                   checked={selected.includes(album.id)}
@@ -221,7 +221,7 @@ function SectionBlock({
                 />
                 {album.title}
                 {selected.includes(album.id) && (
-                  <span className="text-xs text-gray-400">#{selected.indexOf(album.id) + 1}</span>
+                  <span className="text-xs text-ink-3">#{selected.indexOf(album.id) + 1}</span>
                 )}
               </label>
             </li>

@@ -39,24 +39,24 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
       <form onSubmit={(e) => void submit(e)} className="w-full max-w-sm rounded-lg bg-white p-6 shadow">
-        <h1 className="mb-4 text-xl font-semibold text-gray-900">
+        <h1 className="mb-4 text-xl font-semibold text-ink">
           {mode === 'register' ? 'Регистрация' : 'Вход'}
         </h1>
         <label className="mb-3 block">
-          <span className="mb-1 block text-sm text-gray-600">Email</span>
+          <span className="mb-1 block text-sm text-ink-2">Email</span>
           <input
             type="email"
             required
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            className="inp"
           />
         </label>
         <label className="mb-4 block">
-          <span className="mb-1 block text-sm text-gray-600">Пароль</span>
+          <span className="mb-1 block text-sm text-ink-2">Пароль</span>
           <input
             type="password"
             required
@@ -64,33 +64,33 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+            className="inp"
           />
         </label>
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-3 text-sm text-danger">{error}</p>}
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded bg-blue-600 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="btn btn--primary w-full"
         >
           {mode === 'register' ? 'Создать аккаунт' : 'Войти'}
         </button>
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-4 text-center text-sm text-ink-2">
           {mode === 'register' ? (
             <>
               Уже есть аккаунт?{' '}
-              <Link to="/login" className="text-blue-600 hover:underline">
+              <Link to="/login" className="text-brand hover:underline">
                 Войти
               </Link>
             </>
           ) : (
             <>
               Нет аккаунта?{' '}
-              <Link to="/register" className="text-blue-600 hover:underline">
+              <Link to="/register" className="text-brand hover:underline">
                 Зарегистрироваться
               </Link>
               {' · '}
-              <Link to="/forgot-password" className="text-blue-600 hover:underline">
+              <Link to="/forgot-password" className="text-brand hover:underline">
                 Забыли пароль?
               </Link>
             </>

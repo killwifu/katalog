@@ -18,11 +18,11 @@ export function CaptionsPage() {
 
   const photos = (photosQuery.data ?? []).filter((p) => p.status === 'ready')
 
-  if (photosQuery.isPending) return <p className="text-gray-500">Загрузка…</p>
-  if (photosQuery.isError) return <p className="text-red-600">Не удалось загрузить фото.</p>
+  if (photosQuery.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (photosQuery.isError) return <p className="text-danger">Не удалось загрузить фото.</p>
   if (photos.length === 0) {
     return (
-      <div className="text-center text-gray-500">
+      <div className="text-center text-ink-2">
         <p>Нет готовых фото для подписей.</p>
         <BackLink albumId={albumId} />
       </div>
@@ -47,8 +47,8 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
   if (!photo) {
     return (
       <div className="text-center">
-        <p className="mb-2 text-lg font-medium text-gray-900">Готово!</p>
-        <p className="mb-4 text-gray-500">Подписи проставлены для {photos.length} фото.</p>
+        <p className="mb-2 text-lg font-medium text-ink">Готово!</p>
+        <p className="mb-4 text-ink-2">Подписи проставлены для {photos.length} фото.</p>
         <BackLink albumId={albumId} />
       </div>
     )
@@ -77,14 +77,14 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
 
   return (
     <div className="mx-auto max-w-lg">
-      <div className="mb-3 flex items-center justify-between text-sm text-gray-500">
+      <div className="mb-3 flex items-center justify-between text-sm text-ink-2">
         <BackLink albumId={albumId} />
         <span>
           {index + 1} / {photos.length}
         </span>
       </div>
 
-      <div className="mb-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="mb-4 overflow-hidden rounded-lg border border-line bg-white">
         <img
           src={photo.urls?.medium ?? photo.urls?.thumb}
           alt=""
@@ -103,21 +103,21 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           placeholder="Название / цена / артикул — Enter для следующего"
-          className="mb-2 w-full rounded border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+          className="inp mb-2"
         />
-        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
         <div className="flex gap-2">
           <button
             type="submit"
             disabled={saving}
-            className="flex-1 rounded bg-blue-600 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="btn btn--primary flex-1"
           >
             Сохранить и дальше
           </button>
           <button
             type="button"
             onClick={() => advance(index + 1)}
-            className="rounded border border-gray-300 px-4 py-2 text-gray-600 hover:bg-gray-100"
+            className="rounded border border-line-strong px-4 py-2 text-ink-2 hover:bg-surface-alt"
           >
             Пропустить
           </button>
@@ -129,7 +129,7 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
 
 function BackLink({ albumId }: { albumId: string }) {
   return (
-    <Link to="/albums/$albumId" params={{ albumId }} className="text-sm text-blue-600 hover:underline">
+    <Link to="/albums/$albumId" params={{ albumId }} className="text-sm text-brand hover:underline">
       ← К альбому
     </Link>
   )

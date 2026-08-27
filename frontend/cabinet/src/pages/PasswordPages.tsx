@@ -8,9 +8,9 @@ import { api } from '../api'
 
 function AuthShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6">
-        <h1 className="mb-4 text-lg font-semibold text-gray-900">{title}</h1>
+    <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
+      <div className="w-full max-w-sm rounded-lg border border-line bg-white p-6">
+        <h1 className="mb-4 text-lg font-semibold text-ink">{title}</h1>
         {children}
       </div>
     </div>
@@ -18,9 +18,9 @@ function AuthShell({ title, children }: { title: string; children: React.ReactNo
 }
 
 const inputCls =
-  'w-full rounded border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none'
+  'inp'
 const buttonCls =
-  'w-full rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50'
+  'btn btn--primary w-full'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -34,7 +34,7 @@ export function ForgotPasswordPage() {
   return (
     <AuthShell title="Сброс пароля">
       {send.isSuccess ? (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-ink-2">
           Если этот email зарегистрирован, мы отправили на него ссылку для
           сброса пароля. Проверьте почту.
         </p>
@@ -52,12 +52,12 @@ export function ForgotPasswordPage() {
             Отправить ссылку
           </button>
           {send.isError && (
-            <p className="text-sm text-red-600">Не удалось отправить. Попробуйте ещё раз.</p>
+            <p className="text-sm text-danger">Не удалось отправить. Попробуйте ещё раз.</p>
           )}
         </form>
       )}
-      <p className="mt-4 text-sm text-gray-500">
-        <Link to="/login" className="text-blue-600 hover:underline">
+      <p className="mt-4 text-sm text-ink-2">
+        <Link to="/login" className="text-brand hover:underline">
           Вернуться ко входу
         </Link>
       </p>
@@ -82,7 +82,7 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <AuthShell title="Сброс пароля">
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-danger">
           Некорректная ссылка. Запросите сброс пароля заново.
         </p>
       </AuthShell>
@@ -105,7 +105,7 @@ export function ResetPasswordPage() {
           Сохранить пароль
         </button>
         {reset.isError && (
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-danger">
             Ссылка недействительна или устарела. Запросите сброс заново.
           </p>
         )}
@@ -121,16 +121,16 @@ export function VerifyEmailPage() {
   return (
     <AuthShell title="Подтверждение email">
       {verify.isSuccess ? (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-ink-2">
           Email подтверждён. Можно{' '}
-          <Link to="/" className="text-blue-600 hover:underline">
+          <Link to="/" className="text-brand hover:underline">
             перейти в кабинет
           </Link>
           .
         </p>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-2">
             Нажмите кнопку, чтобы подтвердить ваш email.
           </p>
           <button
@@ -141,7 +141,7 @@ export function VerifyEmailPage() {
             Подтвердить
           </button>
           {(verify.isError || !token) && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-danger">
               Ссылка недействительна или устарела.
             </p>
           )}

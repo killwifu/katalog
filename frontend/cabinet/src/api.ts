@@ -72,7 +72,17 @@ export type Shop = {
   storage_used: number
   storage_max: number
   max_photos: number
+  contacts: ShopContacts
   settings: ShopSettings
+}
+
+// Каналы связи продавца. Ключи совпадают с теми, что читает витрина
+// (storefront/lib/links.ts) — расхождение здесь молча ломает кнопки.
+export type ShopContacts = {
+  telegram?: string
+  whatsapp?: string
+  vk?: string
+  max?: string
 }
 
 export type ShopSettings = {
@@ -191,6 +201,8 @@ export const api = {
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),
   getShop: (shopId: string) => request<Shop>('GET', `/shops/${shopId}`),
+  updateContacts: (shopId: string, contacts: ShopContacts) =>
+    request<Shop>('PATCH', `/shops/${shopId}`, { contacts }),
   updateSettings: (shopId: string, settings: ShopSettings) =>
     request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 

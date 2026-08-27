@@ -15,6 +15,7 @@ import { CategoriesPage } from './pages/CategoriesPage'
 import { TabsPage } from './pages/TabsPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ContactsPage } from './pages/ContactsPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
 import { AdminPage } from './pages/AdminPage'
@@ -122,6 +123,12 @@ const tabsRoute = createRoute({
   component: TabsPage,
 })
 
+const contactsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/contacts',
+  component: ContactsPage,
+})
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -144,7 +151,7 @@ const statsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/stats',
   component: () => (
-    <Suspense fallback={<p className="text-gray-500">Загрузка…</p>}>
+    <Suspense fallback={<p className="text-ink-2">Загрузка…</p>}>
       <StatsPage />
     </Suspense>
   ),
@@ -157,7 +164,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
 })

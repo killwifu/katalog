@@ -1,1 +1,206 @@
 @import "tailwindcss";
+/* Шрифт самохостится пакетом, а не тянется с fonts.googleapis.com:
+   кабинет должен открываться без внешних запросов. */
+@import "@fontsource-variable/golos-text";
+
+/* ==========================================================================
+   Дизайн-система кабинета
+   --------------------------------------------------------------------------
+   Токены те же, что у витрины (storefront/app/globals.css) — одна система
+   на два фронта. Здесь они объявлены через @theme, чтобы работать и как
+   CSS-переменные, и как утилиты Tailwind (bg-brand, text-ink-2, rounded-card).
+
+   Компонентный слой ниже повторяет классы макетов (.box, .field, .badge…):
+   переписывать их набором утилит в разметке — значит потерять единый вид
+   при первой же правке.
+   ========================================================================== */
+
+@theme {
+  --color-brand: #2547CE;
+  --color-brand-hover: #1B37A6;
+  --color-brand-soft: #E9ECFB;
+  --color-brand-ink: #1B2F86;
+  --color-on-brand: #FFFFFF;
+
+  --color-page: #F6F5F3;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F1F0EC;
+  --color-ink: #1A1A18;
+  --color-ink-2: #62615C;
+  --color-ink-3: #90908A;
+  --color-line: #E4E2DC;
+  --color-line-strong: #CFCCC4;
+  --color-danger: #B00020;
+
+  --font-sans: 'Golos Text Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --text-h1: 22px;
+  --text-h3: 17px;
+  --text-body: 15px;
+  --text-sm: 13.5px;
+  --text-xs: 12.5px;
+
+  --radius-card: 16px;
+  --radius-el: 10px;
+  --radius-pill: 999px;
+}
+
+html {
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+}
+
+body { min-height: 100vh; }
+
+/* Видимый фокус — требование доступности из макетов, не украшение. */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* --- Оболочка ------------------------------------------------------------- */
+
+.app { min-height: 100vh; }
+.app__aside { display: none; }
+.app__main { min-width: 0; padding: 16px 16px 90px; }
+
+.app__bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface); position: sticky; top: 0; z-index: 10;
+}
+
+.side { padding: 18px 12px; background: var(--color-surface-alt); border-right: 1px solid var(--color-line); }
+.side__logo { font-size: 18px; font-weight: 600; padding: 0 10px; margin-bottom: 18px; }
+.side a {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 12px; border-radius: var(--radius-el);
+  font-size: var(--text-body); color: var(--color-ink-2);
+}
+.side a:hover { color: var(--color-ink); }
+.side a[aria-current="page"] { background: var(--color-brand-soft); color: var(--color-brand-ink); font-weight: 500; }
+.side__usage { margin-top: 16px; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-el); }
+.side__usage p { font-size: var(--text-xs); color: var(--color-ink-2); }
+.side__usage p + p { color: var(--color-ink-3); margin-top: 6px; }
+
+@media (min-width: 860px) {
+  .app { display: grid; grid-template-columns: 236px 1fr; }
+  .app__aside { display: block; }
+  .app__main { padding: 26px 30px 60px; }
+  .app__bar { display: none; }
+}
+
+/* --- Заголовки страниц ---------------------------------------------------- */
+
+.page__head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.page__head h1 { font-size: var(--text-h1); font-weight: 600; }
+.page__head .count { font-size: var(--text-sm); color: var(--color-ink-2); }
+.page__head .spacer { flex: 1; }
+.page__lead { font-size: var(--text-sm); line-height: 1.6; color: var(--color-ink-2); max-width: 78ch; margin-bottom: 22px; }
+
+/* --- Карточки ------------------------------------------------------------- */
+
+.box { padding: 16px; background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); margin-bottom: 14px; }
+.box--accent { border: 2px solid var(--color-brand); }
+.box h2 { font-size: var(--text-h3); font-weight: 500; margin-bottom: 14px; }
+.cols { display: grid; gap: 20px; }
+
+/* --- Поля ----------------------------------------------------------------- */
+
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; font-size: var(--text-sm); color: var(--color-ink-2); margin-bottom: 6px; }
+.hint { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: 6px; }
+
+.inp {
+  width: 100%; padding: 10px 12px; font: inherit;
+  background: var(--color-surface); color: var(--color-ink);
+  border: 1px solid var(--color-line-strong); border-radius: var(--radius-el);
+}
+.inp:focus { border-color: var(--color-brand); outline: none; box-shadow: 0 0 0 3px var(--color-brand-soft); }
+.inp:disabled { background: var(--color-surface-alt); color: var(--color-ink-3); }
+.inp::placeholder { color: var(--color-ink-3); }
+
+select.inp { appearance: auto; }
+
+/* --- Кнопки --------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 16px; min-height: 40px;
+  font: inherit; font-weight: 500; line-height: 1;
+  border: 1px solid transparent; border-radius: var(--radius-el);
+  cursor: pointer; text-align: center;
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.btn--primary { background: var(--color-brand); color: var(--color-on-brand); }
+.btn--primary:hover:not(:disabled) { background: var(--color-brand-hover); }
+.btn--ghost { background: var(--color-surface); color: var(--color-ink); border-color: var(--color-line-strong); }
+.btn--ghost:hover:not(:disabled) { border-color: var(--color-ink-3); }
+.btn--quiet { background: none; color: var(--color-ink-2); padding: 6px 8px; min-height: 0; }
+.btn--quiet:hover:not(:disabled) { color: var(--color-ink); }
+.btn--danger { background: var(--color-danger); color: #fff; }
+.btn--sm { padding: 6px 10px; min-height: 32px; font-size: var(--text-sm); }
+
+/* На телефоне кнопка — минимум 44px и во всю ширину (правило макетов). */
+@media (max-width: 859px) {
+  .btn--block-mobile { width: 100%; min-height: 44px; }
+}
+
+/* --- Метки статусов ------------------------------------------------------- */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  font-size: var(--text-xs); font-weight: 500;
+  background: var(--color-surface-alt); color: var(--color-ink-2);
+}
+.badge--live { background: #E3F3E8; color: #1E6B3A; }
+.badge--link { background: var(--color-brand-soft); color: var(--color-brand-ink); }
+.badge--draft { background: var(--color-surface-alt); color: var(--color-ink-3); }
+.badge--sys { background: var(--color-surface-alt); color: var(--color-ink-3); }
+.badge--warn { background: #FBF0DC; color: #7A5310; }
+
+/* --- Списки строк --------------------------------------------------------- */
+
+.rows { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
+.rows__row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.rows__row + .rows__row { border-top: 1px solid var(--color-line); }
+.rows__main { flex: 1; min-width: 0; }
+.rows__main b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rows__meta { font-size: var(--text-xs); color: var(--color-ink-3); }
+.rows__act { display: flex; align-items: center; gap: 8px; }
+
+/* --- Пустые состояния ----------------------------------------------------- */
+
+.emptybox {
+  padding: 40px 20px; text-align: center;
+  background: var(--color-surface); border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-card);
+}
+.emptybox__ico { font-size: 28px; margin-bottom: 10px; }
+.emptybox h3 { font-size: var(--text-h3); font-weight: 500; margin-bottom: 6px; }
+.emptybox p { font-size: var(--text-sm); color: var(--color-ink-2); max-width: 46ch; margin: 0 auto 16px; }
+
+/* --- Плашки --------------------------------------------------------------- */
+
+.alert { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius-el); font-size: var(--text-sm); margin-bottom: 14px; }
+.alert--warn { background: #FBF0DC; color: #6B4A0E; }
+.alert--danger { background: #FBE4E6; color: #7A1220; }
+.alert--info { background: var(--color-brand-soft); color: var(--color-brand-ink); }
+
+/* --- Прогресс ------------------------------------------------------------- */
+
+.prog { height: 8px; background: var(--color-surface-alt); border-radius: var(--radius-pill); overflow: hidden; }
+.prog > span { display: block; height: 100%; background: var(--color-brand); }
+.prog--warn > span { background: #C8891A; }
+
+/* --- Показатели ----------------------------------------------------------- */
+
+.stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.stat { padding: 14px; background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-card); }
+.stat--accent { border-color: var(--color-brand); }
+.stat b { display: block; font-size: 26px; font-weight: 600; line-height: 1.2; }
+.stat span { font-size: var(--text-sm); color: var(--color-ink-2); }
+.stat em { font-style: normal; font-size: var(--text-xs); color: var(--color-ink-3); }
