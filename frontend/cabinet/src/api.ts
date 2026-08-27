@@ -74,6 +74,9 @@ export type Shop = {
   max_photos: number
   contacts: ShopContacts
   settings: ShopSettings
+  // Когда адрес можно будет сменить снова; null — можно сейчас.
+  // Срок считает сервер: повторять правило здесь значит разойтись с ним.
+  slug_changeable_at: string | null
 }
 
 // Каналы связи продавца. Ключи совпадают с теми, что читает витрина
@@ -149,6 +152,8 @@ export type Album = {
   cover_photo_id: string | null
   sort_order: number
   status: AlbumStatus
+  description: string
+  category_id: string | null
   photo_count: number
 }
 
@@ -218,12 +223,16 @@ export const api = {
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),
   getShop: (shopId: string) => request<Shop>('GET', `/shops/${shopId}`),
+  updateShop: (shopId: string, patch: { name?: string; description?: string; slug?: string }) =>
+    request<Shop>('PATCH', `/shops/${shopId}`, patch),
   updateContacts: (shopId: string, contacts: ShopContacts) =>
     request<Shop>('PATCH', `/shops/${shopId}`, { contacts }),
   updateSettings: (shopId: string, settings: ShopSettings) =>
     request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
+  updateAlbum: (shopId: string, albumId: string, patch: { title?: string; description?: string }) =>
+    request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, patch),
   setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
   createAlbum: (shopId: string, title: string, parentId?: string) =>

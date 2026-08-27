@@ -19,16 +19,19 @@ type albumResponse struct {
 	CoverPhotoID *string `json:"cover_photo_id"`
 	SortOrder    int32   `json:"sort_order"`
 	Status       string  `json:"status"`
+	Description  string  `json:"description"`
+	CategoryID   *string `json:"category_id"`
 	PhotoCount   int32   `json:"photo_count"`
 }
 
 func toAlbumResponse(al db.Album) albumResponse {
 	resp := albumResponse{
-		ID:         al.ID.String(),
-		Title:      al.Title,
-		SortOrder:  al.SortOrder,
-		Status:     string(al.Status),
-		PhotoCount: al.PhotoCount,
+		ID:          al.ID.String(),
+		Title:       al.Title,
+		SortOrder:   al.SortOrder,
+		Status:      string(al.Status),
+		Description: al.Description,
+		PhotoCount:  al.PhotoCount,
 	}
 	if al.ParentID.Valid {
 		s := al.ParentID.UUID.String()
@@ -37,6 +40,10 @@ func toAlbumResponse(al db.Album) albumResponse {
 	if al.CoverPhotoID.Valid {
 		s := al.CoverPhotoID.UUID.String()
 		resp.CoverPhotoID = &s
+	}
+	if al.CategoryID.Valid {
+		s := al.CategoryID.UUID.String()
+		resp.CategoryID = &s
 	}
 	return resp
 }
@@ -148,6 +155,7 @@ type updateAlbumRequest struct {
 	Title        *string `json:"title"`
 	SortOrder    *int32  `json:"sort_order"`
 	Status       *string `json:"status"`
+	Description  *string `json:"description"`
 	CoverPhotoID *string `json:"cover_photo_id"`
 }
 
@@ -162,6 +170,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	title, sortOrder, status, cover := album.Title, album.SortOrder, album.Status, album.CoverPhotoID
+	description := album.Description
 	if req.Title != nil {
 		title = strings.TrimSpace(*req.Title)
 		if title == "" || len(title) > 200 {
@@ -180,6 +189,15 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, "invalid_status", "status must be published, unlisted or draft")
 			return
 		}
+	}
+	if req.Description != nil {
+		// Описание длинное по назначению: там условия отправки и оплаты.
+		// Ограничиваем разумной длиной, чтобы не превратить его в статью.
+		if len(*req.Description) > 2000 {
+			apiError(w, http.StatusBadRequest, "invalid_description", "description must be at most 2000 characters")
+			return
+		}
+		description = *req.Description
 	}
 	if req.CoverPhotoID != nil {
 		if *req.CoverPhotoID == "" {
@@ -217,6 +235,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		SortOrder:    sortOrder,
 		Status:       status,
 		CoverPhotoID: cover,
+		Description:  description,
 	})
 	if err != nil {
 		a.internalError(w, "update album", err)

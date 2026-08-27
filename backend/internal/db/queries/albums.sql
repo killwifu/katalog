@@ -19,6 +19,7 @@ SET title          = $3,
     sort_order     = $4,
     status         = $5,
     cover_photo_id = $6,
+    description    = $7,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
 RETURNING *;

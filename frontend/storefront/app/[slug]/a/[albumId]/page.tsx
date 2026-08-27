@@ -21,7 +21,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const cover = data.photos[0]?.urls
   return {
     title: `${data.album.title} — ${data.shop.name}`,
-    description: `${data.album.title}: ${data.album.photo_count} фото в каталоге ${data.shop.name}`,
+    description:
+      data.album.description?.slice(0, 160) ||
+      `${data.album.title}: ${data.album.photo_count} фото в каталоге ${data.shop.name}`,
     openGraph: {
       title: `${data.album.title} — ${data.shop.name}`,
       type: 'website',
@@ -49,6 +51,10 @@ export default async function AlbumPage({ params, searchParams }: Props) {
         </nav>
         <h1>{album.title}</h1>
         <p className="album-count">{album.photo_count} фото</p>
+        {/* Условия отправки и оплаты — здесь, до фотографий: покупатель
+            должен прочитать их прежде, чем писать продавцу.
+            whiteSpace сохраняет переносы, которые продавец расставил сам. */}
+        {album.description && <p className="albumdesc">{album.description}</p>}
         <SearchForm slug={slug} />
       </header>
       <PhotoGrid photos={photos} shop={shop} />

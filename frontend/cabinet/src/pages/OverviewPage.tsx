@@ -11,9 +11,11 @@ import { useShop } from './AppLayout'
 // отвечают на вопрос «работает ли витрина» и оправдывают подписку.
 export function OverviewPage() {
   const shop = useShop()
+  // Берём 14 дней и делим пополам: так дельта к прошлой неделе считается
+  // из одного ответа, без второго запроса и без правок бэкенда.
   const stats = useQuery({
-    queryKey: ['stats', shop.id, 30],
-    queryFn: () => api.getStats(shop.id, 30),
+    queryKey: ['stats', shop.id, 14],
+    queryFn: () => api.getStats(shop.id, 14),
   })
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const downgrade = useQuery({ queryKey: ['downgrade', shop.id], queryFn: () => api.getDowngrade(shop.id) })
@@ -26,7 +28,11 @@ export function OverviewPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const totals = stats.data?.totals
+  const daily = stats.data?.daily ?? []
+  const week = daily.slice(-7)
+  const prevWeek = daily.slice(-14, -7)
+  const sum = (rows: typeof daily, key: 'views' | 'unique_visitors' | 'lead_clicks') =>
+    rows.reduce((n, d) => n + d[key], 0)
   const drafts = albums.data?.filter((a) => a.status === 'draft').length ?? 0
   const empty = albums.data?.filter((a) => a.photo_count === 0).length ?? 0
 
@@ -71,13 +77,33 @@ export function OverviewPage() {
       <section className="stats mb-6">
         <Metric
           label="Переходы в мессенджер"
-          value={totals?.lead_clicks}
-          hint="за 30 дней"
+          value={sum(week, 'lead_clicks')}
+          prev={sum(prevWeek, 'lead_clicks')}
           accent
         />
-        <Metric label="Просмотры" value={totals?.views} hint="за 30 дней" />
-        <Metric label="Уникальные посетители" value={totals?.unique_visitors} hint="за 30 дней" />
+        <Metric label="Просмотры" value={sum(week, 'views')} prev={sum(prevWeek, 'views')} />
+        <Metric
+          label="Уникальные посетители"
+          value={sum(week, 'unique_visitors')}
+          prev={sum(prevWeek, 'unique_visitors')}
+        />
       </section>
+
+      {(stats.data?.top_albums.length ?? 0) > 0 && (
+        <section className="box">
+          <h2>Что смотрят чаще всего</h2>
+          <ul className="rows !border-0">
+            {stats.data!.top_albums.slice(0, 5).map((a) => (
+              <li key={a.album_id} className="rows__row !px-0">
+                <span className="rows__main">
+                  <b>{a.title}</b>
+                </span>
+                <span className="text-sm text-ink-2">{a.views}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {(drafts > 0 || empty > 0) && (
         <section className="box">
@@ -103,22 +129,31 @@ export function OverviewPage() {
   )
 }
 
+// Дельта к прошлой неделе отвечает на вопрос «стало лучше или хуже» —
+// само по себе число просмотров на него не отвечает.
+function delta(value: number, prev: number): string {
+  if (prev === 0) return value > 0 ? 'новые за неделю' : 'пока пусто'
+  const pct = Math.round(((value - prev) / prev) * 100)
+  if (pct === 0) return 'столько же'
+  return `${pct > 0 ? '+' : ''}${pct}% к прошлой неделе`
+}
+
 function Metric({
   label,
   value,
-  hint,
+  prev,
   accent,
 }: {
   label: string
-  value: number | undefined
-  hint: string
+  value: number
+  prev: number
   accent?: boolean
 }) {
   return (
     <div className={`stat ${accent ? 'stat--accent' : ''}`}>
       <span>{label}</span>
-      <b>{value ?? '—'}</b>
-      <em>{hint}</em>
+      <b>{value.toLocaleString('ru-RU')}</b>
+      <em>{delta(value, prev)}</em>
     </div>
   )
 }

@@ -129,7 +129,7 @@ func (q *Queries) ListCategoriesByShop(ctx context.Context, shopID uuid.UUID) ([
 }
 
 const listPublicAlbumsByCategory = `-- name: ListPublicAlbumsByCategory :many
-SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan FROM albums a
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description FROM albums a
 JOIN categories c ON c.id = a.category_id
 WHERE a.shop_id = $1
   AND a.status = 'published' AND NOT a.hidden_by_plan
@@ -165,6 +165,7 @@ func (q *Queries) ListPublicAlbumsByCategory(ctx context.Context, arg ListPublic
 			&i.CategoryID,
 			&i.Status,
 			&i.HiddenByPlan,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -253,7 +254,7 @@ const setAlbumCategory = `-- name: SetAlbumCategory :one
 UPDATE albums
 SET category_id = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
 `
 
 type SetAlbumCategoryParams struct {
@@ -279,6 +280,7 @@ func (q *Queries) SetAlbumCategory(ctx context.Context, arg SetAlbumCategoryPara
 		&i.CategoryID,
 		&i.Status,
 		&i.HiddenByPlan,
+		&i.Description,
 	)
 	return i, err
 }

@@ -672,3 +672,14 @@ img {
     box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
   }
 }
+
+/* Описание альбома: условия отправки и оплаты над фотографиями.
+   Переносы строк расставляет продавец — сохраняем их как есть. */
+.albumdesc {
+  max-width: 68ch;
+  margin-top: 10px;
+  white-space: pre-line;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--text-2);
+}
