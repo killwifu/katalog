@@ -40,7 +40,16 @@ export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   if (shops.isPending) {
-    return <div className="app__main text-ink-2">Загрузка…</div>
+    // Каркас, а не голый текст: без него первые секунды выглядят как
+    // пустая страница, и продавец решает, что кабинет не открылся.
+    return (
+      <div className="app">
+        <aside className="app__aside side">
+          <div className="side__logo">Katalog</div>
+        </aside>
+        <div className="app__main text-ink-2">Загрузка…</div>
+      </div>
+    )
   }
   if (shops.isError) {
     return <div className="app__main text-danger">Не удалось загрузить данные. Обновите страницу.</div>

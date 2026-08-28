@@ -46,17 +46,13 @@ export default async function TabPage({ params }: Props) {
       {/* Системная вкладка «Альбомы» — все альбомы по дате, без секций. */}
       {tabSlug === 'albums' ? (
         <AlbumGrid shopSlug={slug} albums={data.albums.filter((a) => !a.parent_id)} />
-      ) : sections.length === 0 ? (
+      ) : sections.every((s) => s.albums.length === 0) ? (
         <p className="empty">В этом разделе пока ничего нет.</p>
       ) : (
-        sections.map((section) => (
+        sections.filter((s) => s.albums.length > 0).map((section) => (
           <section key={section.title} className="section">
             <h2 className="section__head">{section.title}</h2>
-            {section.albums.length === 0 ? (
-              <p className="empty">Раздел пока пуст.</p>
-            ) : (
-              <AlbumGrid shopSlug={slug} albums={section.albums} />
-            )}
+            <AlbumGrid shopSlug={slug} albums={section.albums} />
           </section>
         ))
       )}

@@ -246,9 +246,25 @@ func (a *API) handleListPhotos(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	shopID := shopFromCtx(r).ID
+	// Страницами, как и на витрине: альбом на тарифе «Продавец» вмещает
+	// до 5000 фотографий, и выдача целиком вешала кабинет на секунды.
+	page := queryInt(r, "page", 1, 1, 1_000_000)
+	perPage := queryInt(r, "per_page", cabinetPhotosPerPage, 1, cabinetPhotosPerPageMax)
+
+	total, err := a.Q.CountPhotosByAlbum(r.Context(), db.CountPhotosByAlbumParams{
+		AlbumID: album.ID,
+		ShopID:  shopID,
+	})
+	if err != nil {
+		a.internalError(w, "count photos", err)
+		return
+	}
 	photos, err := a.Q.ListPhotosByAlbum(r.Context(), db.ListPhotosByAlbumParams{
 		AlbumID: album.ID,
-		ShopID:  shopFromCtx(r).ID,
+		ShopID:  shopID,
+		Limit:   int32(perPage),
+		Offset:  int32((page - 1) * perPage),
 	})
 	if err != nil {
 		a.internalError(w, "list photos", err)
@@ -258,8 +274,18 @@ func (a *API) handleListPhotos(w http.ResponseWriter, r *http.Request) {
 	for _, p := range photos {
 		out = append(out, a.toPhotoResponse(p))
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"photos":   out,
+		"page":     page,
+		"per_page": perPage,
+		"total":    total,
+	})
 }
+
+const (
+	cabinetPhotosPerPage    = 100
+	cabinetPhotosPerPageMax = 500
+)
 
 type updatePhotoRequest struct {
 	Caption *string `json:"caption"`

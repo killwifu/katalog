@@ -690,3 +690,43 @@ img {
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
+
+/* --- Вкладки витрины ------------------------------------------------------
+   Разметка ShopTabs использовала эти классы, а правил для них не было —
+   ссылки слипались в одну строку. Стили из макетов.
+   -------------------------------------------------------------------------- */
+
+.shop-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 18px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--border);
+  /* На телефоне вкладок может не поместиться — прокручиваем, а не переносим:
+     перенос ломает подчёркивание активной вкладки. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shop-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.shop-tab {
+  padding: 10px 0;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+
+.shop-tab:hover {
+  color: var(--text);
+}
+
+.shop-tab[aria-current='page'] {
+  color: var(--text);
+  font-weight: 500;
+  border-bottom-color: var(--brand);
+}

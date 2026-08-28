@@ -16,7 +16,7 @@ export function CaptionsPage() {
     staleTime: Infinity,
   })
 
-  const photos = (photosQuery.data ?? []).filter((p) => p.status === 'ready')
+  const photos = (photosQuery.data?.photos ?? []).filter((p) => p.status === 'ready')
 
   if (photosQuery.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (photosQuery.isError) return <p className="text-danger">Не удалось загрузить фото.</p>

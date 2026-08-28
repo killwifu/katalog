@@ -1,6 +1,31 @@
 // Типизированный клиент REST API /api/v1 (контракт: api/openapi.yaml).
 const API = '/api/v1'
 
+// Человеческие тексты для машинных кодов бэкенда. Сообщения самого API
+// приходят по-английски: показывать их продавцу нельзя, кабинет русский.
+export const API_ERRORS: Record<string, string> = {
+  slug_taken: 'Этот адрес уже занят',
+  invalid_slug: 'Адрес: 3–63 символа, латиница, цифры и одиночные дефисы',
+  invalid_name: 'Укажите название',
+  invalid_title: 'Укажите название (до 200 символов)',
+  invalid_parent: 'Неверная родительская категория',
+  too_deep: 'Больше двух уровней вложенности нельзя',
+  slug_change_too_soon: 'Адрес можно менять не чаще раза в полгода',
+  invalid_status: 'Неизвестный статус',
+  invalid_description: 'Описание слишком длинное',
+  photo_quota_exceeded: 'Достигнут лимит фотографий на тарифе',
+  quota_exceeded: 'Закончилось место в хранилище',
+  subscription_inactive: 'Подписка неактивна',
+  not_found: 'Не найдено',
+}
+
+// errorText — текст для показа продавцу. Незнакомый код лучше показать
+// как есть, чем проглотить: иначе диагностировать станет нечем.
+export function errorText(e: unknown): string {
+  if (e instanceof ApiError) return API_ERRORS[e.code] ?? e.message
+  return e instanceof Error ? e.message : 'Что-то пошло не так'
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -199,6 +224,13 @@ export type Photo = {
   urls?: { thumb: string; medium: string; large: string }
 }
 
+export type PhotoPage = {
+  photos: Photo[]
+  page: number
+  per_page: number
+  total: number
+}
+
 export type ConfirmResult = { photo_id: string; status: string; error?: string }
 
 export type ShopStats = {
@@ -243,8 +275,10 @@ export const api = {
       title,
       ...(parentId ? { parent_id: parentId } : {}),
     }),
-  listPhotos: (shopId: string, albumId: string) =>
-    request<Photo[]>('GET', `/shops/${shopId}/albums/${albumId}/photos`),
+  // Страницами: альбом может содержать тысячи фото, выдача целиком
+  // вешала кабинет.
+  listPhotos: (shopId: string, albumId: string, page = 1) =>
+    request<PhotoPage>('GET', `/shops/${shopId}/albums/${albumId}/photos?page=${page}`),
 
   listTabs: (shopId: string) => request<Tab[]>('GET', `/shops/${shopId}/tabs`),
   createTab: (shopId: string, title: string, slug: string) =>

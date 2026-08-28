@@ -12,10 +12,18 @@ WHERE id = $1;
 SELECT * FROM photos
 WHERE id = $1 AND shop_id = $2;
 
+-- Страницами: альбом на тарифе «Продавец» — до 5000 фото, и выдача целиком
+-- вешала кабинет на несколько секунд. У витрины пагинация была с самого
+-- начала, у кабинета её не было.
 -- name: ListPhotosByAlbum :many
 SELECT * FROM photos
 WHERE album_id = $1 AND shop_id = $2
-ORDER BY sort_order, created_at;
+ORDER BY sort_order, created_at
+LIMIT $3 OFFSET $4;
+
+-- name: CountPhotosByAlbum :one
+SELECT count(*) FROM photos
+WHERE album_id = $1 AND shop_id = $2;
 
 -- Переход uploading -> processing после подтверждения загрузки в S3.
 -- name: SetPhotoProcessing :one

@@ -13,12 +13,13 @@ export function AlbumPage() {
   const { albumId } = useParams({ from: '/app/albums/$albumId' })
   const queryClient = useQueryClient()
 
+  const [page, setPage] = useState(1)
   const photos = useQuery({
-    queryKey: ['photos', shop.id, albumId],
-    queryFn: () => api.listPhotos(shop.id, albumId),
+    queryKey: ['photos', shop.id, albumId, page],
+    queryFn: () => api.listPhotos(shop.id, albumId, page),
     // Пока есть необработанные фото — опрашиваем статусы.
     refetchInterval: (query) =>
-      query.state.data?.some((p) => p.status === 'processing' || p.status === 'uploading')
+      query.state.data?.photos.some((p) => p.status === 'processing' || p.status === 'uploading')
         ? 2000
         : false,
   })
@@ -111,15 +112,39 @@ export function AlbumPage() {
       {photos.isPending && <p className="text-ink-2">Загрузка…</p>}
       {photos.isError && <p className="text-danger">Не удалось загрузить фото.</p>}
 
-      {photos.data && photos.data.length === 0 && (
+      {photos.data && photos.data.total === 0 && (
         <p className="text-ink-2">В альбоме пока нет фото — загрузите пачку выше.</p>
       )}
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-        {photos.data?.map((p) => (
+        {photos.data?.photos.map((p) => (
           <PhotoTile key={p.id} photo={p} onDelete={() => remove.mutate(p.id)} />
         ))}
       </div>
+
+      {/* Пагинация: альбом может содержать тысячи фотографий, и грузить их
+          одной страницей — несколько секунд пустых плиток. */}
+      {photos.data && photos.data.total > photos.data.per_page && (
+        <nav className="mt-4 flex items-center justify-center gap-3" aria-label="Страницы фотографий">
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Назад
+          </button>
+          <span className="text-sm text-ink-2">
+            {page} из {Math.ceil(photos.data.total / photos.data.per_page)}
+          </span>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= Math.ceil(photos.data.total / photos.data.per_page)}
+          >
+            Дальше
+          </button>
+        </nav>
+      )}
     </div>
   )
 }

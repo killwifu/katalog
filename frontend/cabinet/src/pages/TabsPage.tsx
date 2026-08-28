@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { api, type Section, type Tab } from '../api'
+import { api, type Section, type Tab, errorText} from '../api'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 import { slugify } from './CategoriesPage'
 
@@ -27,7 +28,7 @@ export function TabsPage() {
       setError('')
       refresh()
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => setError(errorText(e)),
   })
 
   const deleteTab = useMutation({
@@ -238,6 +239,7 @@ function SectionBlock({
   const dirty =
     selected.length !== section.album_ids.length ||
     selected.some((id, i) => section.album_ids[i] !== id)
+  useUnsavedGuard(dirty)
 
   return (
     <div className="rounded bg-surface-alt p-3">

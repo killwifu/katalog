@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { api, type Category } from '../api'
+import { api, type Category, errorText} from '../api'
 import { useShop } from './AppLayout'
 
 // Слаг из названия: кириллица транслитом, всё прочее — в дефис.
@@ -48,7 +48,7 @@ export function CategoriesPage() {
       setError('')
       void refresh()
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => setError(errorText(e)),
   })
 
   const remove = useMutation({
@@ -175,7 +175,7 @@ function Row({
           <select
             value={moveTo}
             onChange={(e) => setMoveTo(e.target.value)}
-            className="inp"
+            className="inp !w-auto max-w-64"
           >
             <option value="">Оставить без категории</option>
             {targets.map((c) => (

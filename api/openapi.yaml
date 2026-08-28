@@ -481,16 +481,33 @@ paths:
       - $ref: "#/components/parameters/AlbumID"
     get:
       operationId: listPhotos
-      summary: Фото альбома (со статусами обработки)
+      summary: Фото альбома со статусами обработки, страницами
+      description: >
+        Альбом на тарифе «Продавец» вмещает до 5000 фотографий, поэтому
+        выдача постраничная — как и на витрине.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Photo"
+                type: object
+                required: [photos, page, per_page, total]
+                properties:
+                  photos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Photo"
+                  page: { type: integer }
+                  per_page: { type: integer }
+                  total: { type: integer }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { ApiError, api, type ShopSettings } from '../api'
+import { api, type ShopSettings, errorText } from '../api'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
 export function SettingsPage() {
@@ -22,6 +23,7 @@ export function SettingsPage() {
   const wm = settingsValue.watermark ?? { enabled: false, text: '', opacity: 0.55 }
 
   const dirty = name !== null || description !== null || slug !== null || settings !== null
+  useUnsavedGuard(dirty)
   const slugLocked = Boolean(data?.slug_changeable_at)
 
   const save = useMutation({
@@ -44,14 +46,7 @@ export function SettingsPage() {
       void queryClient.invalidateQueries({ queryKey: ['shop', shop.id] })
       void queryClient.invalidateQueries({ queryKey: ['shops'] })
     },
-    onError: (e: Error) => {
-      const messages: Record<string, string> = {
-        slug_taken: 'Этот адрес уже занят',
-        invalid_slug: 'Адрес: 3–63 символа, латиница, цифры и одиночные дефисы',
-        invalid_name: 'Укажите название (до 200 символов)',
-      }
-      setError(e instanceof ApiError ? (messages[e.code] ?? e.message) : e.message)
-    },
+    onError: (e: Error) => setError(errorText(e)),
   })
 
   if (current.isPending) return <p className="text-ink-2">Загрузка…</p>

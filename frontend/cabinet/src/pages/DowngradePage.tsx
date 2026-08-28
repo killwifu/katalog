@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, type DowngradeAlbum } from '../api'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
 type Strategy = 'viewed' | 'recent' | 'manual'
@@ -52,6 +53,10 @@ export function DowngradePage() {
   const selectedPhotos = albums
     .filter((a) => selected.includes(a.id))
     .reduce((n, a) => n + a.photo_count, 0)
+
+  // Ручной выбор — это несколько минут работы при большом числе альбомов,
+  // терять его при случайном переходе нельзя.
+  useUnsavedGuard(manual !== null)
 
   const toggle = (id: string) =>
     setManual((prev) => {

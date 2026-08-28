@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPhotosByAlbum = `-- name: CountPhotosByAlbum :one
+SELECT count(*) FROM photos
+WHERE album_id = $1 AND shop_id = $2
+`
+
+type CountPhotosByAlbumParams struct {
+	AlbumID uuid.UUID `json:"album_id"`
+	ShopID  uuid.UUID `json:"shop_id"`
+}
+
+func (q *Queries) CountPhotosByAlbum(ctx context.Context, arg CountPhotosByAlbumParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPhotosByAlbum, arg.AlbumID, arg.ShopID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photos (album_id, shop_id, orig_size, source, sort_order)
 VALUES ($1, $2, $3, $4, $5)
@@ -139,15 +156,26 @@ const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
 SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE album_id = $1 AND shop_id = $2
 ORDER BY sort_order, created_at
+LIMIT $3 OFFSET $4
 `
 
 type ListPhotosByAlbumParams struct {
 	AlbumID uuid.UUID `json:"album_id"`
 	ShopID  uuid.UUID `json:"shop_id"`
+	Limit   int32     `json:"limit"`
+	Offset  int32     `json:"offset"`
 }
 
+// Страницами: альбом на тарифе «Продавец» — до 5000 фото, и выдача целиком
+// вешала кабинет на несколько секунд. У витрины пагинация была с самого
+// начала, у кабинета её не было.
 func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumParams) ([]Photo, error) {
-	rows, err := q.db.Query(ctx, listPhotosByAlbum, arg.AlbumID, arg.ShopID)
+	rows, err := q.db.Query(ctx, listPhotosByAlbum,
+		arg.AlbumID,
+		arg.ShopID,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
