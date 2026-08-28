@@ -12,5 +12,5 @@ dist/
 backend/bin/
 
 # Артефакты e2e/CI
-seed.json
+seed*.json
 frontend/storefront/.lighthouseci/
