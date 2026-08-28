@@ -61,6 +61,11 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  # Вход и выход выставляют две cookie: httpOnly-сессию katalog_session
+  # и открытый скрипту маркер katalog_signed="1". Маркер нужен статической
+  # главной витрины: она отдаётся из кеша всем одинаково и о сессии знать
+  # не может, поэтому шапка читает маркер, чтобы написать «Кабинет».
+  # Авторизацией маркер не является — доступ проверяется только сессией.
   /api/v1/auth/logout:
     post:
       operationId: logout

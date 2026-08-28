@@ -2,7 +2,10 @@ package integration
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestAuthFlow(t *testing.T) {
@@ -98,5 +101,46 @@ func TestUnauthenticatedAccess(t *testing.T) {
 		if status != http.StatusUnauthorized {
 			t.Errorf("%s %s without session: status %d, want 401", p.method, p.path, status)
 		}
+	}
+}
+
+// TestSignedHintCookie: статическая главная витрины не знает о сессии —
+// она отдаётся из кеша всем одинаково. Рядом с httpOnly-сессией кладём
+// булев маркер, доступный скрипту, чтобы шапка написала «Кабинет».
+// Маркер авторизацией не является: доступ по-прежнему проверяется сессией.
+func TestSignedHintCookie(t *testing.T) {
+	body := strings.NewReader(`{"email":"hint-` + uuid.NewString() + `@example.com","password":"Test12345!"}`)
+	resp, err := http.Post(env.srv.URL+"/api/v1/auth/register", "application/json", body)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var session, hint *http.Cookie
+	for _, ck := range resp.Cookies() {
+		switch ck.Name {
+		case "katalog_session":
+			session = ck
+		case "katalog_signed":
+			hint = ck
+		}
+	}
+
+	if session == nil {
+		t.Fatal("сессионная cookie не выставлена")
+	}
+	if !session.HttpOnly {
+		t.Error("сессия обязана оставаться httpOnly")
+	}
+	if hint == nil || hint.Value != "1" {
+		t.Fatalf("маркер входа не выставлен: %+v", hint)
+	}
+	// Маркер должен быть читаем скриптом, иначе шапка его не увидит.
+	if hint.HttpOnly {
+		t.Error("маркер httpOnly — скрипт шапки его не прочитает")
+	}
+	// В маркере не должно быть ничего, кроме признака: это не токен.
+	if hint.Value != "1" {
+		t.Errorf("в маркере лишнее значение %q", hint.Value)
 	}
 }

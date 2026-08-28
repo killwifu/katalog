@@ -14,7 +14,16 @@ import (
 
 const (
 	SessionCookie = "katalog_session"
-	sessionPrefix = "sess:"
+	// SignedHintCookie — подсказка «сессия есть» для публичных страниц.
+	// Сама сессия httpOnly и из JS не читается, а статическая главная
+	// не может знать о ней на сервере: она отдаётся из кеша всем одинаково.
+	// Поэтому рядом кладём булев маркер, доступный скрипту.
+	//
+	// Секретов в нём нет и авторизацией он не является: доступ по-прежнему
+	// проверяется по httpOnly-сессии на сервере. Маркер лишь решает,
+	// написать в шапке «Кабинет» или «Войти».
+	SignedHintCookie = "katalog_signed"
+	sessionPrefix    = "sess:"
 )
 
 var ErrNoSession = errors.New("auth: session not found")
