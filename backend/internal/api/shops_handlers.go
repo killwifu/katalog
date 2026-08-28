@@ -246,6 +246,10 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		contacts = *req.Contacts
 	}
 	if req.Settings != nil {
+		if msg := validateSettings(*req.Settings); msg != "" {
+			apiError(w, http.StatusBadRequest, "invalid_settings", msg)
+			return
+		}
 		settings = *req.Settings
 	}
 

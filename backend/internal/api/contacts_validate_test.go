@@ -44,3 +44,28 @@ func str(n int) string {
 	}
 	return string(b)
 }
+
+func TestValidateSettings(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr bool
+	}{
+		{"знак с амперсандом", `{"watermark":{"enabled":true,"text":"Обувь & сумки","opacity":0.5}}`, false},
+		{"пустые настройки", `{}`, false},
+		{"без водяного знака", `{"msg_template":"привет"}`, false},
+
+		{"слишком длинный знак", `{"watermark":{"text":"` + str(65) + `"}}`, true},
+		{"перенос строки в знаке", `{"watermark":{"text":"верх\nниз"}}`, true},
+		{"прозрачность больше единицы", `{"watermark":{"text":"x","opacity":5}}`, true},
+		{"отрицательная прозрачность", `{"watermark":{"text":"x","opacity":-1}}`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validateSettings(json.RawMessage(tt.raw))
+			if (got != "") != tt.wantErr {
+				t.Fatalf("validateSettings(%s) = %q, wantErr %v", tt.raw, got, tt.wantErr)
+			}
+		})
+	}
+}

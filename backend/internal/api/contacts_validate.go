@@ -20,6 +20,38 @@ var contactHosts = map[string][]string{
 // раздуть публичную выдачу магазина.
 const maxContactValue = 200
 
+// maxWatermarkText — знак должен помещаться поперёк кадра; всё длиннее
+// нечитаемо и только тормозит отрисовку.
+const maxWatermarkText = 64
+
+// validateSettings проверяет настройки магазина. Пока это только водяной
+// знак — единственное поле settings, которое доезжает до обработки фото.
+func validateSettings(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var settings struct {
+		Watermark struct {
+			Text    string  `json:"text"`
+			Opacity float64 `json:"opacity"`
+		} `json:"watermark"`
+	}
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return "settings must be an object"
+	}
+	wm := settings.Watermark
+	if len([]rune(wm.Text)) > maxWatermarkText {
+		return fmt.Sprintf("watermark.text must be at most %d characters", maxWatermarkText)
+	}
+	if strings.ContainsAny(wm.Text, "\n\r") {
+		return "watermark.text must be a single line"
+	}
+	if wm.Opacity < 0 || wm.Opacity > 1 {
+		return "watermark.opacity must be between 0 and 1"
+	}
+	return ""
+}
+
 // validateContacts проверяет каналы связи магазина. Пустая строка означает
 // «канал не заполнен» и допустима: так продавец его убирает.
 func validateContacts(raw json.RawMessage) string {

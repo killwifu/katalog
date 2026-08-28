@@ -6,6 +6,7 @@ package imaging
 import (
 	"bytes"
 	"fmt"
+	"html"
 
 	"github.com/davidbyttow/govips/v2/vips"
 
@@ -194,7 +195,11 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 		opacity = 1
 	}
 	return img.Label(&vips.LabelParams{
-		Text:      wm.Text,
+		// libvips отдаёт текст в Pango как разметку: «Обувь & сумки» или
+		// «цена < 5000» — это невалидный markup, и знак не просто не
+		// рисуется, а роняет обработку. Один амперсанд в настройках
+		// навсегда останавливал загрузку фотографий магазина.
+		Text:      html.EscapeString(wm.Text),
 		Font:      fmt.Sprintf("sans %d", fontSize),
 		Width:     vips.Scalar{Value: 0.92, Relative: true},
 		Height:    vips.Scalar{Value: 0.92, Relative: true},
