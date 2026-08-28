@@ -219,12 +219,14 @@ func (c *client) waitReady(shopID, albumID string, ids []string, timeout time.Du
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		var photos []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+		var page struct {
+			Photos []struct {
+				ID     string `json:"id"`
+				Status string `json:"status"`
+			} `json:"photos"`
 		}
-		c.must("GET", "/api/v1/shops/"+shopID+"/albums/"+albumID+"/photos", nil, &photos)
-		for _, p := range photos {
+		c.must("GET", "/api/v1/shops/"+shopID+"/albums/"+albumID+"/photos", nil, &page)
+		for _, p := range page.Photos {
 			switch p.Status {
 			case "ready":
 				delete(pending, p.ID)

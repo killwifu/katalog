@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { api, type Photo } from '../api'
@@ -10,13 +10,29 @@ export function CaptionsPage() {
   const shop = useShop()
   const { albumId } = useParams({ from: '/app/albums/$albumId/captions' })
 
-  const photosQuery = useQuery({
+  // Страницами: альбом на старшем тарифе вмещает до 5000 фото, а выдача
+  // отдаёт по сотне. Одной страницей проход по подписям молча обрывался
+  // на сотом фото, и продавец считал, что подписал весь альбом.
+  const photosQuery = useInfiniteQuery({
     queryKey: ['captions-photos', shop.id, albumId],
-    queryFn: () => api.listPhotos(shop.id, albumId),
+    queryFn: ({ pageParam }) => api.listPhotos(shop.id, albumId, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (last) =>
+      last.page * last.per_page < last.total ? last.page + 1 : undefined,
     staleTime: Infinity,
   })
 
-  const photos = (photosQuery.data?.photos ?? []).filter((p) => p.status === 'ready')
+  const photos = (photosQuery.data?.pages ?? [])
+    .flatMap((p) => p.photos)
+    .filter((p) => p.status === 'ready')
+
+  // Следующая страница подтягивается, когда продавец подходит к концу
+  // загруженной: ждать её на последнем фото — заметная пауза.
+  const loadMore = () => {
+    if (photosQuery.hasNextPage && !photosQuery.isFetchingNextPage) {
+      void photosQuery.fetchNextPage()
+    }
+  }
 
   if (photosQuery.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (photosQuery.isError) return <p className="text-danger">Не удалось загрузить фото.</p>
@@ -28,22 +44,43 @@ export function CaptionsPage() {
       </div>
     )
   }
-  return <CaptionWalker photos={photos} albumId={albumId} />
+  return (
+    <CaptionWalker
+      photos={photos}
+      albumId={albumId}
+      hasMore={photosQuery.hasNextPage}
+      onNearEnd={loadMore}
+    />
+  )
 }
 
-function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }) {
+const PREFETCH_MARGIN = 20
+
+function CaptionWalker({
+  photos,
+  albumId,
+  hasMore,
+  onNearEnd,
+}: {
+  photos: Photo[]
+  albumId: string
+  hasMore: boolean
+  onNearEnd: () => void
+}) {
   const [index, setIndex] = useState(0)
   const [caption, setCaption] = useState(photos[0].caption)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const done = index >= photos.length
-  const photo = done ? null : photos[index]
+  const photo = index < photos.length ? photos[index] : null
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [index])
 
+  if (!photo && hasMore) {
+    return <p className="text-center text-ink-2">Загружаем следующие фото…</p>
+  }
   if (!photo) {
     return (
       <div className="text-center">
@@ -57,6 +94,7 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
   const advance = (nextIndex: number) => {
     setIndex(nextIndex)
     if (nextIndex < photos.length) setCaption(photos[nextIndex].caption)
+    if (nextIndex >= photos.length - PREFETCH_MARGIN) onNearEnd()
     setError('')
   }
 
@@ -65,8 +103,7 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
     setSaving(true)
     setError('')
     try {
-      const updated = await api.updateCaption(photo.id, caption)
-      photos[index] = updated
+      await api.updateCaption(photo.id, caption)
       advance(index + 1)
     } catch {
       setError('Не удалось сохранить, попробуйте ещё раз')
@@ -81,6 +118,7 @@ function CaptionWalker({ photos, albumId }: { photos: Photo[]; albumId: string }
         <BackLink albumId={albumId} />
         <span>
           {index + 1} / {photos.length}
+          {hasMore && '+'}
         </span>
       </div>
 
