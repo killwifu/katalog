@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getAlbumPage, loadOrUnavailable } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { PhotoGrid } from '@/components/PhotoGrid'
@@ -48,6 +48,10 @@ export default async function AlbumPage({ params, searchParams }: Props) {
   const { shop, album, photos, per_page: perPage, total } = data
   const totalPages = Math.max(1, Math.ceil(total / perPage))
   const base = `/${encodeURIComponent(slug)}/a/${album.id}`
+  // Ссылка на страницу за пределами альбома — не редкость: продавец удалил
+  // часть фото, а покупатель вернулся по старой ссылке или из выдачи.
+  // Пустая сетка без навигации читается как «в магазине ничего нет».
+  if (page > totalPages) redirect(base)
 
   return (
     <main className="page">
