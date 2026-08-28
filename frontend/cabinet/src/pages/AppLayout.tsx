@@ -31,6 +31,12 @@ export function AppLayout() {
   const queryClient = useQueryClient()
   const shops = useQuery({ queryKey: ['shops'], queryFn: api.listShops })
   const me = useQuery({ queryKey: ['me'], queryFn: api.me })
+  const shopId = shops.data?.[0]?.id
+  const billing = useQuery({
+    queryKey: ['billing', shopId],
+    queryFn: () => api.getBilling(shopId!),
+    enabled: Boolean(shopId),
+  })
   const [menuOpen, setMenuOpen] = useState(false)
 
   if (shops.isPending) {
@@ -50,9 +56,13 @@ export function AppLayout() {
   }
 
   const isAdmin = me.data?.role === 'admin'
+  // Лимит тарифа продавец считает в фотографиях, поэтому в меню они,
+  // а место — второй строкой.
+  const photos = billing.data?.usage.photos
+  const maxPhotos = shop.max_photos
   const usedMB = Math.round(shop.storage_used / 1024 / 1024)
   const maxMB = Math.round(shop.storage_max / 1024 / 1024)
-  const usedPct = shop.storage_max > 0 ? Math.min(100, (shop.storage_used / shop.storage_max) * 100) : 0
+  const usedPct = maxPhotos > 0 && photos !== undefined ? Math.min(100, (photos / maxPhotos) * 100) : 0
 
   const nav = (
     <nav className="flex flex-col gap-0.5" onClick={() => setMenuOpen(false)}>
@@ -73,12 +83,15 @@ export function AppLayout() {
           {nav}
           <div className="side__usage">
             <p>
-              {usedMB} из {maxMB} МБ
+              {photos === undefined ? '…' : photos.toLocaleString('ru-RU')} из{' '}
+              {maxPhotos.toLocaleString('ru-RU')} фото
             </p>
             <div className="prog mt-2" aria-hidden="true">
               <span style={{ width: `${usedPct}%` }} />
             </div>
-            <p>Тариф «{shop.plan}»</p>
+            <p>
+              {usedMB} из {maxMB} МБ · тариф «{shop.plan}»
+            </p>
           </div>
           <button onClick={() => void logout()} className="btn btn--quiet mt-4">
             Выйти

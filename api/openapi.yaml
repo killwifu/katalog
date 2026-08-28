@@ -1650,6 +1650,13 @@ components:
           type: string
           maxLength: 200
           description: Текст для мессенджера, подстановка {caption}
+        reply_time:
+          type: string
+          maxLength: 100
+          description: >
+            Когда продавец отвечает. Показывается покупателю рядом
+            с кнопками связи — единственная настройка помимо msg_template,
+            которая уходит наружу.
         watermark:
           type: object
           description: >

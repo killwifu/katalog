@@ -11,6 +11,8 @@ export type ShopPublic = {
   description: string
   contacts: Record<string, string>
   msg_template: string
+  // Время ответа продавца — показывается рядом с кнопками связи.
+  reply_time?: string
 }
 
 export type AlbumPublic = {

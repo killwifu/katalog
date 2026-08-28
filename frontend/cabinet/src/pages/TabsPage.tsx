@@ -35,6 +35,23 @@ export function TabsPage() {
     onSuccess: refresh,
   })
 
+  // ponytail: порядок меняется кнопками, а не перетаскиванием — dnd-kit
+  // ради переупорядочивания пяти вкладок не окупается. Если вкладок станет
+  // много и порядок начнут менять часто, тогда и библиотека.
+  const move = useMutation({
+    mutationFn: async ({ index, dir }: { index: number; dir: -1 | 1 }) => {
+      const list = [...(tabs.data ?? [])]
+      const target = index + dir
+      if (target < 0 || target >= list.length) return
+      const [a, b] = [list[index], list[target]]
+      // Меняем местами именно порядковые номера: так соседи не разъезжаются,
+      // даже если в базе они шли не подряд.
+      await api.reorderTab(shop.id, a.id, a.title, b.sort_order)
+      await api.reorderTab(shop.id, b.id, b.title, a.sort_order)
+    },
+    onSuccess: refresh,
+  })
+
   if (tabs.isPending || sections.isPending || albums.isPending)
     return <p className="text-ink-2">Загрузка…</p>
   if (tabs.isError || sections.isError || albums.isError)
@@ -72,10 +89,13 @@ export function TabsPage() {
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       <div className="space-y-6">
-        {tabs.data.map((tab) => (
+        {tabs.data.map((tab, i) => (
           <TabBlock
             key={tab.id}
             tab={tab}
+            index={i}
+            total={tabs.data.length}
+            onMove={(dir) => move.mutate({ index: i, dir })}
             sections={sections.data.filter((s) => s.tab_id === tab.id)}
             albums={albums.data}
             shopId={shop.id}
@@ -90,18 +110,24 @@ export function TabsPage() {
 
 function TabBlock({
   tab,
+  index,
+  total,
   sections,
   albums,
   shopId,
   onChanged,
   onDelete,
+  onMove,
 }: {
   tab: Tab
+  index: number
+  total: number
   sections: Section[]
   albums: { id: string; title: string }[]
   shopId: string
   onChanged: () => void
   onDelete: () => void
+  onMove: (dir: -1 | 1) => void
 }) {
   const [title, setTitle] = useState('')
   const create = useMutation({
@@ -115,6 +141,26 @@ function TabBlock({
   return (
     <section className="rounded border border-line">
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <span className="flex gap-1">
+          <button
+            type="button"
+            className="btn btn--quiet"
+            onClick={() => onMove(-1)}
+            disabled={index === 0}
+            aria-label={`Поднять вкладку «${tab.title}»`}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="btn btn--quiet"
+            onClick={() => onMove(1)}
+            disabled={index === total - 1}
+            aria-label={`Опустить вкладку «${tab.title}»`}
+          >
+            ↓
+          </button>
+        </span>
         <h2 className="flex-1 text-sm font-medium text-ink">{tab.title}</h2>
         <code className="text-xs text-ink-3">/{tab.slug}</code>
         {tab.is_system ? (

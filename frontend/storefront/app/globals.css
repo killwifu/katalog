@@ -683,3 +683,10 @@ img {
   line-height: 1.6;
   color: var(--text-2);
 }
+
+/* Время ответа продавца под кнопками связи. */
+.reply-time {
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
