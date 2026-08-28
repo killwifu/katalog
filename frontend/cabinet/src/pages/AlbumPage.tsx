@@ -91,8 +91,9 @@ export function AlbumPage() {
       {outcome && (
         <div className="alert alert--warn">
           <span className="flex-1">
-            Поместилось {outcome.uploaded} из {outcome.total}
-            {outcome.reason ? `: ${outcome.reason}` : ''}.{' '}
+            {outcome.confirmFailed
+              ? `Не удалось подтвердить ${outcome.confirmFailed} из ${outcome.total} — файлы загружены, но обработка не начата. Загрузите их заново.`
+              : `Поместилось ${outcome.uploaded} из ${outcome.total}${outcome.reason ? `: ${outcome.reason}` : ''}.`}{' '}
             {outcome.reason && (
               <Link to="/billing" className="underline">
                 Посмотреть тарифы

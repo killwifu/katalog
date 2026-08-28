@@ -17,6 +17,7 @@ export const API_ERRORS: Record<string, string> = {
   quota_exceeded: 'Закончилось место в хранилище',
   subscription_inactive: 'Подписка неактивна',
   not_found: 'Не найдено',
+  billing_unavailable: 'Оплата тарифов пока недоступна — платёжный провайдер не подключён',
 }
 
 // errorText — текст для показа продавцу. Незнакомый код лучше показать

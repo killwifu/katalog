@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type Plan, type PlanInfo } from '../api'
+import { api, type Plan, type PlanInfo, errorText } from '../api'
 import { useShop } from './AppLayout'
 
 const PLAN_NAMES: Record<Plan, string> = {
@@ -118,10 +118,11 @@ export function BillingPage() {
           />
         ))}
       </div>
+      {/* Причину называем словами: «попробуйте ещё раз» при отключённых
+          платежах отправляет продавца в бесконечный цикл — повтор
+          не поможет никогда. */}
       {subscribe.isError && (
-        <p className="mt-4 text-sm text-danger">
-          Не удалось начать оплату. Попробуйте ещё раз.
-        </p>
+        <p className="mt-4 text-sm text-danger">{errorText(subscribe.error)}</p>
       )}
       <p className="mt-4 text-sm text-ink-2">
         Оплата проходит через ЮKassa. Тариф активируется автоматически после
