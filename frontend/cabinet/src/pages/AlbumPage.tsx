@@ -97,14 +97,14 @@ export function AlbumPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <Link to="/albums" className="text-sm text-brand hover:underline">
             ← Альбомы
           </Link>
           <h1 className="text-h1 font-semibold">{album?.title ?? 'Альбом'}</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Три статуса: «по ссылке» не показывает альбом в списках витрины,
               но прямая ссылка работает — её можно разослать до публикации. */}
           <select

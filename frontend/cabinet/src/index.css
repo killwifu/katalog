@@ -50,6 +50,11 @@ html {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: var(--text-body);
+  /* Без этого Safari на iPhone раздувает текст по своему усмотрению:
+     строки с кнопками перестают помещаться, и страница начинает
+     таскаться вбок, хотя смотреть там нечего. У витрины эта строка
+     была с самого начала — кабинет её просто не получил. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body { min-height: 100vh; }
@@ -165,12 +170,16 @@ select.inp { appearance: auto; }
 /* --- Списки строк --------------------------------------------------------- */
 
 .rows { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
-.rows__row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+/* Строки переносятся: заголовок альбома, метка статуса и кнопки не
+   обязаны уместиться в одну линию на узком экране. */
+.rows__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; }
 .rows__row + .rows__row { border-top: 1px solid var(--color-line); }
-.rows__main { flex: 1; min-width: 0; display: block; color: inherit; }
+.rows__main { flex: 1 1 60%; min-width: 0; display: block; color: inherit; }
 .rows__main b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Длинный адрес или подпись не должны распирать строку. */
+.rows__meta { overflow-wrap: anywhere; }
 .rows__meta { font-size: var(--text-xs); color: var(--color-ink-3); }
-.rows__act { display: flex; align-items: center; gap: 8px; }
+.rows__act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* --- Пустые состояния ----------------------------------------------------- */
 
