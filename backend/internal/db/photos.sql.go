@@ -32,7 +32,7 @@ func (q *Queries) CountPhotosByAlbum(ctx context.Context, arg CountPhotosByAlbum
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photos (album_id, shop_id, orig_size, source, sort_order)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
 `
 
 type CreatePhotoParams struct {
@@ -68,6 +68,7 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Flagged,
+		&i.DrvSize,
 	)
 	return i, err
 }
@@ -159,7 +160,7 @@ func (q *Queries) FailStaleProcessing(ctx context.Context, dollar_1 int32) ([]uu
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
 WHERE id = $1
 `
 
@@ -182,12 +183,13 @@ func (q *Queries) GetPhoto(ctx context.Context, id uuid.UUID) (Photo, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Flagged,
+		&i.DrvSize,
 	)
 	return i, err
 }
 
 const getPhotoForShop = `-- name: GetPhotoForShop :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -216,12 +218,46 @@ func (q *Queries) GetPhotoForShop(ctx context.Context, arg GetPhotoForShopParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Flagged,
+		&i.DrvSize,
 	)
 	return i, err
 }
 
+const listAlbumTreePhotos = `-- name: ListAlbumTreePhotos :many
+SELECT id, (orig_size + drv_size)::bigint AS bytes FROM photos
+WHERE album_id = $1 OR album_id IN (SELECT id FROM albums WHERE parent_id = $1)
+`
+
+type ListAlbumTreePhotosRow struct {
+	ID    uuid.UUID `json:"id"`
+	Bytes int64     `json:"bytes"`
+}
+
+// Фото удаляемого альбома (вместе с подальбомами: parent_id — один уровень).
+// Нужны и размеры для возврата квоты, и id для уборки объектов в S3:
+// каскад по FK снесёт строки, но об S3 и storage_used он не знает.
+func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([]ListAlbumTreePhotosRow, error) {
+	rows, err := q.db.Query(ctx, listAlbumTreePhotos, albumID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlbumTreePhotosRow
+	for rows.Next() {
+		var i ListAlbumTreePhotosRow
+		if err := rows.Scan(&i.ID, &i.Bytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
 WHERE album_id = $1 AND shop_id = $2
 ORDER BY sort_order, created_at
 LIMIT $3 OFFSET $4
@@ -267,6 +303,7 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Flagged,
+			&i.DrvSize,
 		); err != nil {
 			return nil, err
 		}
@@ -293,7 +330,7 @@ const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
 SET status = 'processing', orig_size = $2, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
 `
 
 type SetPhotoProcessingParams struct {
@@ -321,21 +358,23 @@ func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessing
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Flagged,
+		&i.DrvSize,
 	)
 	return i, err
 }
 
 const setPhotoReady = `-- name: SetPhotoReady :exec
 UPDATE photos
-SET status = 'ready', width = $2, height = $3, phash = $4, updated_at = now()
+SET status = 'ready', width = $2, height = $3, phash = $4, drv_size = $5, updated_at = now()
 WHERE id = $1
 `
 
 type SetPhotoReadyParams struct {
-	ID     uuid.UUID   `json:"id"`
-	Width  int32       `json:"width"`
-	Height int32       `json:"height"`
-	Phash  pgtype.Int8 `json:"phash"`
+	ID      uuid.UUID   `json:"id"`
+	Width   int32       `json:"width"`
+	Height  int32       `json:"height"`
+	Phash   pgtype.Int8 `json:"phash"`
+	DrvSize int64       `json:"drv_size"`
 }
 
 func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) error {
@@ -344,6 +383,7 @@ func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) er
 		arg.Width,
 		arg.Height,
 		arg.Phash,
+		arg.DrvSize,
 	)
 	return err
 }
@@ -352,7 +392,7 @@ const updatePhotoCaption = `-- name: UpdatePhotoCaption :one
 UPDATE photos
 SET caption = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
 `
 
 type UpdatePhotoCaptionParams struct {
@@ -380,6 +420,7 @@ func (q *Queries) UpdatePhotoCaption(ctx context.Context, arg UpdatePhotoCaption
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Flagged,
+		&i.DrvSize,
 	)
 	return i, err
 }

@@ -34,7 +34,7 @@ RETURNING *;
 
 -- name: SetPhotoReady :exec
 UPDATE photos
-SET status = 'ready', width = $2, height = $3, phash = $4, updated_at = now()
+SET status = 'ready', width = $2, height = $3, phash = $4, drv_size = $5, updated_at = now()
 WHERE id = $1;
 
 -- name: SetPhotoFailed :exec
@@ -72,3 +72,10 @@ SET status = 'failed', updated_at = now()
 WHERE status = 'processing'
   AND updated_at < now() - make_interval(hours => $1::int)
 RETURNING id;
+
+-- Фото удаляемого альбома (вместе с подальбомами: parent_id — один уровень).
+-- Нужны и размеры для возврата квоты, и id для уборки объектов в S3:
+-- каскад по FK снесёт строки, но об S3 и storage_used он не знает.
+-- name: ListAlbumTreePhotos :many
+SELECT id, (orig_size + drv_size)::bigint AS bytes FROM photos
+WHERE album_id = $1 OR album_id IN (SELECT id FROM albums WHERE parent_id = $1);

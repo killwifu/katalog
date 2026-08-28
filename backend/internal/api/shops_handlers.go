@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/tasks"
 )
 
 // slugPattern: строчные латинские буквы/цифры/дефис, 3-63 символа,
@@ -299,6 +300,21 @@ func (a *API) handleDeleteShop(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "shop not found")
 		return
 	}
+	a.purgeStorage(r, shopFromCtx(r).ID, nil)
 	a.Revalidate.Shop(shopFromCtx(r).Slug)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// purgeStorage ставит задачу на уборку объектов S3 после каскадного удаления
+// строк. Пустой список фото — весь магазин. Ошибку только логируем: строки
+// уже удалены, откатывать нечего, а мусор в хранилище — не повод отдать 500.
+func (a *API) purgeStorage(r *http.Request, shopID uuid.UUID, photoIDs []uuid.UUID) {
+	task, err := tasks.NewStoragePurge(shopID, photoIDs)
+	if err != nil {
+		a.Log.Error("purge: build task failed", "error", err)
+		return
+	}
+	if _, err := a.Tasks.EnqueueContext(r.Context(), task); err != nil {
+		a.Log.Error("purge: enqueue failed", "shop_id", shopID, "error", err)
+	}
 }

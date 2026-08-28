@@ -2,11 +2,14 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hibiken/asynq"
 
+	"katalog/backend/internal/imagingmeta"
 	"katalog/backend/internal/storage"
+	"katalog/backend/internal/tasks"
 )
 
 // staleUploadHours — через сколько часов незавершённая загрузка считается
@@ -66,5 +69,31 @@ func (p *Processor) failStaleProcessing(ctx context.Context) error {
 	if len(ids) > 0 {
 		p.Log.Warn("stale processing photos marked failed", "photos", len(ids))
 	}
+	return nil
+}
+
+// HandleStoragePurge убирает объекты S3, осиротевшие после удаления альбома
+// или магазина: строки снёс каскад по внешнему ключу, а о хранилище он
+// ничего не знает. Пустой список фото означает весь магазин.
+func (p *Processor) HandleStoragePurge(ctx context.Context, t *asynq.Task) error {
+	var payload tasks.StoragePurgePayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal payload: %v: %w", err, asynq.SkipRetry)
+	}
+
+	if len(payload.PhotoIDs) == 0 {
+		if err := p.Store.RemoveShop(ctx, payload.ShopID); err != nil {
+			return fmt.Errorf("purge shop %s: %w", payload.ShopID, err)
+		}
+		p.Log.Info("shop storage purged", "shop_id", payload.ShopID)
+		return nil
+	}
+
+	for _, id := range payload.PhotoIDs {
+		if err := p.Store.RemovePhoto(ctx, payload.ShopID, id, imagingmeta.DerivativeSizes); err != nil {
+			return fmt.Errorf("purge photo %s: %w", id, err)
+		}
+	}
+	p.Log.Info("photo storage purged", "shop_id", payload.ShopID, "photos", len(payload.PhotoIDs))
 	return nil
 }

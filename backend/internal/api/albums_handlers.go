@@ -250,9 +250,20 @@ func (a *API) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	shop := shopFromCtx(r)
+
+	// Каскад по внешнему ключу снесёт и фото альбома, и подальбомы с их фото,
+	// но ни квоту магазина, ни объекты в S3 он не вернёт. Собираем список
+	// до удаления — после него взять его будет уже неоткуда.
+	doomed, err := a.Q.ListAlbumTreePhotos(r.Context(), album.ID)
+	if err != nil {
+		a.internalError(w, "list album photos", err)
+		return
+	}
+
 	n, err := a.Q.DeleteAlbum(r.Context(), db.DeleteAlbumParams{
 		ID:     album.ID,
-		ShopID: shopFromCtx(r).ID,
+		ShopID: shop.ID,
 	})
 	if err != nil {
 		a.internalError(w, "delete album", err)
@@ -261,6 +272,22 @@ func (a *API) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {
 	if n == 0 {
 		apiError(w, http.StatusNotFound, "not_found", "album not found")
 		return
+	}
+
+	if len(doomed) > 0 {
+		var freed int64
+		ids := make([]uuid.UUID, 0, len(doomed))
+		for _, ph := range doomed {
+			freed += ph.Bytes
+			ids = append(ids, ph.ID)
+		}
+		if err := a.Q.AddShopStorageUsed(r.Context(), db.AddShopStorageUsedParams{
+			ID:          shop.ID,
+			StorageUsed: -freed,
+		}); err != nil {
+			a.Log.Error("delete album: release storage failed", "error", err)
+		}
+		a.purgeStorage(r, shop.ID, ids)
 	}
 	a.Revalidate.Shop(shopFromCtx(r).Slug)
 	w.WriteHeader(http.StatusNoContent)

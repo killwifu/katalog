@@ -90,10 +90,11 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	}
 
 	err = p.Q.SetPhotoReady(ctx, db.SetPhotoReadyParams{
-		ID:     photo.ID,
-		Width:  int32(res.Width),
-		Height: int32(res.Height),
-		Phash:  pgtype.Int8{Int64: res.PHash, Valid: true},
+		ID:      photo.ID,
+		Width:   int32(res.Width),
+		Height:  int32(res.Height),
+		Phash:   pgtype.Int8{Int64: res.PHash, Valid: true},
+		DrvSize: drvBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("mark photo ready: %w", err)

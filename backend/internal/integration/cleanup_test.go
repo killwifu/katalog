@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/minio/minio-go/v7"
 )
 
 // TestCleanupStaleUploads: фото, застрявшее в uploading (confirm не дошёл),
@@ -93,5 +95,51 @@ func backdate(t *testing.T, photoID, interval string) {
 		`UPDATE photos SET created_at = now() - $2::interval WHERE id = $1`, photoID, interval)
 	if err != nil {
 		t.Fatalf("backdate photo: %v", err)
+	}
+}
+
+// TestDeleteAlbumReleasesQuota: удаление альбома возвращает квоту магазина
+// и убирает объекты из S3. Каскад по внешнему ключу сносит только строки,
+// поэтому без явного учёта storage_used растёт до потолка тарифа
+// и продавец больше не может грузить фото.
+func TestDeleteAlbumReleasesQuota(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	photoID := uploadPhoto(c, shop.ID, album.ID, makeJPEG(t, 400, 300))
+	waitPhotoStatus(c, shop.ID, album.ID, photoID, "ready", 30*time.Second)
+
+	var used int64
+	if err := env.pool.QueryRow(ctx, `SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&used); err != nil {
+		t.Fatalf("read storage_used: %v", err)
+	}
+	if used == 0 {
+		t.Fatal("storage_used not accounted after upload")
+	}
+
+	c.mustJSON("DELETE", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID, nil, http.StatusNoContent, nil)
+
+	if err := env.pool.QueryRow(ctx, `SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&used); err != nil {
+		t.Fatalf("read storage_used: %v", err)
+	}
+	if used != 0 {
+		t.Fatalf("quota not released after album delete: storage_used = %d, want 0", used)
+	}
+
+	// Уборка S3 идёт задачей — ждём, пока оригинал исчезнет.
+	origKey := "orig/" + shop.ID + "/" + photoID
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		_, err := env.mc.StatObject(ctx, testBucket, origKey, minio.StatObjectOptions{})
+		if err != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("original still in S3 after album delete")
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 }

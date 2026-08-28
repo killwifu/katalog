@@ -358,7 +358,7 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.Q.AddShopStorageUsed(r.Context(), db.AddShopStorageUsedParams{
 		ID:          photo.ShopID,
-		StorageUsed: -photo.OrigSize,
+		StorageUsed: -(photo.OrigSize + photo.DrvSize),
 	}); err != nil {
 		a.Log.Error("delete: release storage failed", "error", err)
 	}

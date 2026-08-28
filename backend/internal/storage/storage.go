@@ -129,6 +129,24 @@ func (c *Client) Upload(ctx context.Context, key string, data []byte, contentTyp
 	return nil
 }
 
+// RemoveShop удаляет все объекты магазина — оригиналы и деривативы.
+// Используется при удалении магазина, когда перечислить фото уже негде:
+// строки снёс каскад по внешнему ключу.
+func (c *Client) RemoveShop(ctx context.Context, shopID uuid.UUID) error {
+	for _, prefix := range []string{
+		fmt.Sprintf("orig/%s/", shopID),
+		fmt.Sprintf("drv/%s/", shopID),
+	} {
+		objects := c.ops.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{
+			Prefix: prefix, Recursive: true,
+		})
+		for err := range c.ops.RemoveObjects(ctx, c.bucket, objects, minio.RemoveObjectsOptions{}) {
+			return fmt.Errorf("remove %s: %w", err.ObjectName, err.Err)
+		}
+	}
+	return nil
+}
+
 // RemoveDerivatives удаляет только деривативы (drv/), оригинал остаётся.
 // Используется при модераторской блокировке: CDN перестаёт отдавать контент,
 // но оригинал сохраняется как доказательство/для разблокировки.
