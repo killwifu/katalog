@@ -2,8 +2,9 @@ import { Dashboard } from '@uppy/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { api, type AlbumStatus, type Photo } from '../api'
+import { api, errorText, type AlbumStatus, type Photo } from '../api'
 import { createPhotoUppy, type UploadOutcome } from '../lib/uppy'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 import '@uppy/core/dist/style.min.css'
 import '@uppy/dashboard/dist/style.min.css'
@@ -48,6 +49,28 @@ export function AlbumPage() {
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const album = albums.data?.find((a) => a.id === albumId)
 
+  // Название и описание: описание показывается покупателю над фотографиями
+  // и это единственное место, где продавец объясняет условия покупки.
+  const [title, setTitle] = useState<string | null>(null)
+  const [description, setDescription] = useState<string | null>(null)
+  const titleValue = title ?? album?.title ?? ''
+  const descValue = description ?? album?.description ?? ''
+  const infoDirty = title !== null || description !== null
+  useUnsavedGuard(infoDirty)
+
+  const saveInfo = useMutation({
+    mutationFn: () =>
+      api.updateAlbum(shop.id, albumId, {
+        ...(title !== null ? { title: titleValue.trim() } : {}),
+        ...(description !== null ? { description: descValue } : {}),
+      }),
+    onSuccess: () => {
+      setTitle(null)
+      setDescription(null)
+      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
+    },
+  })
+
   const setStatus = useMutation({
     mutationFn: (status: AlbumStatus) => api.setAlbumStatus(shop.id, albumId, status),
     onSuccess: () => {
@@ -71,7 +94,7 @@ export function AlbumPage() {
             value={album?.status ?? 'published'}
             onChange={(e) => setStatus.mutate(e.target.value as AlbumStatus)}
             disabled={!album || setStatus.isPending}
-            className="rounded border border-line-strong px-2 py-2 text-sm"
+            className="inp !w-auto"
             aria-label="Видимость альбома"
           >
             <option value="published">Опубликован</option>
@@ -87,6 +110,40 @@ export function AlbumPage() {
           </Link>
         </div>
       </div>
+
+      <section className="box">
+        <label className="field">
+          <span>Название альбома</span>
+          <input
+            className="inp"
+            value={titleValue}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={200}
+          />
+        </label>
+        <label className="field !mb-2">
+          <span>Описание — покажется покупателю над фотографиями</span>
+          <textarea
+            className="inp"
+            rows={3}
+            value={descValue}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={2000}
+            placeholder="Размеры, цена, условия отправки"
+          />
+          <p className="hint">Переносы строк сохранятся.</p>
+        </label>
+        {infoDirty && (
+          <button
+            className="btn btn--primary btn--sm"
+            onClick={() => saveInfo.mutate()}
+            disabled={saveInfo.isPending || !titleValue.trim()}
+          >
+            {saveInfo.isPending ? 'Сохраняю…' : 'Сохранить'}
+          </button>
+        )}
+        {saveInfo.isError && <p className="hint text-danger">{errorText(saveInfo.error)}</p>}
+      </section>
 
       {outcome && (
         <div className="alert alert--warn">

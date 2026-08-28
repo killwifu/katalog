@@ -90,6 +90,7 @@ func run(logger *slog.Logger) error {
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
 	mux.HandleFunc(tasks.TypeStatsDigest, processor.HandleStatsDigest)
 	mux.HandleFunc(tasks.TypeTrafficAlert, processor.HandleTrafficAlert)
+	mux.HandleFunc(tasks.TypeUploadsCleanup, processor.HandleUploadsCleanup)
 
 	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
 	scheduler := asynq.NewScheduler(redisOpt, &asynq.SchedulerOpts{Logger: asynqLogger{logger}})
@@ -107,6 +108,10 @@ func run(logger *slog.Logger) error {
 	}
 	if _, err := scheduler.Register("0 1 * * *", tasks.NewBillingRenew()); err != nil {
 		return fmt.Errorf("register billing renew cron: %w", err)
+	}
+	// Уборка зависших загрузок (02:30 UTC): освобождает квоту продавца.
+	if _, err := scheduler.Register("30 2 * * *", tasks.NewUploadsCleanup()); err != nil {
+		return fmt.Errorf("register uploads cleanup cron: %w", err)
 	}
 	// Алерт на аномальный трафик — после ночной агрегации daily_stats.
 	alertTask, err := tasks.NewTrafficAlert("")

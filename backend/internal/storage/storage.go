@@ -94,6 +94,19 @@ func (c *Client) StatSize(ctx context.Context, key string) (int64, bool, error) 
 	return info.Size, true, nil
 }
 
+// Delete удаляет объект. Отсутствие объекта ошибкой не считается: вызывающий
+// код убирает мусор, а не проверяет наличие.
+func (c *Client) Delete(ctx context.Context, key string) error {
+	if err := c.ops.RemoveObject(ctx, c.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		resp := minio.ToErrorResponse(err)
+		if resp.Code == "NoSuchKey" || resp.StatusCode == 404 {
+			return nil
+		}
+		return fmt.Errorf("delete %s: %w", key, err)
+	}
+	return nil
+}
+
 func (c *Client) Download(ctx context.Context, key string) ([]byte, error) {
 	obj, err := c.ops.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
 	if err != nil {

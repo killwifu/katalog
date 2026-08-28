@@ -13,6 +13,7 @@ import (
 const (
 	TypePhotoProcess     = "photo:process"
 	TypeStatsAggregate   = "stats:aggregate"
+	TypeUploadsCleanup   = "uploads:cleanup"
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
 	TypeEmailSend        = "email:send"
@@ -97,6 +98,16 @@ func NewStatsAggregate(date string) (*asynq.Task, error) {
 // (ok -> grace -> suspended). Без payload, идемпотентна.
 func NewBillingLifecycle() *asynq.Task {
 	return asynq.NewTask(TypeBillingLifecycle, nil,
+		asynq.MaxRetry(3),
+		asynq.Timeout(10*time.Minute),
+	)
+}
+
+// NewUploadsCleanup — уборка зависших загрузок: фото, оставшихся в статусе
+// uploading, потому что confirm до сервера не дошёл. Они занимают квоту
+// продавца и место в S3, а вернуть их уже нечем.
+func NewUploadsCleanup() *asynq.Task {
+	return asynq.NewTask(TypeUploadsCleanup, nil,
 		asynq.MaxRetry(3),
 		asynq.Timeout(10*time.Minute),
 	)

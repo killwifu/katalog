@@ -1,0 +1,97 @@
+package integration
+
+import (
+	"context"
+	"net/http"
+	"testing"
+	"time"
+)
+
+// TestCleanupStaleUploads: фото, застрявшее в uploading (confirm не дошёл),
+// удаляется ночной уборкой и перестаёт занимать квоту продавца.
+func TestCleanupStaleUploads(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	// presign без confirm — ровно то, что происходит при обрыве связи.
+	var pre presignJSON
+	c.mustJSON("POST", "/api/v1/uploads/presign",
+		map[string]any{"shop_id": shop.ID, "album_id": album.ID, "size": 1024},
+		http.StatusOK, &pre)
+
+	before := countShopPhotos(t, shop.ID)
+	if before != 1 {
+		t.Fatalf("uploading photo not counted in quota: got %d, want 1", before)
+	}
+
+	// Свежая загрузка уборку переживает: продавец может грузить прямо сейчас.
+	if err := env.processor.HandleUploadsCleanup(ctx, nil); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if got := countShopPhotos(t, shop.ID); got != 1 {
+		t.Fatalf("fresh upload removed by cleanup: got %d, want 1", got)
+	}
+
+	backdate(t, pre.PhotoID, "2 days")
+	if err := env.processor.HandleUploadsCleanup(ctx, nil); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if got := countShopPhotos(t, shop.ID); got != 0 {
+		t.Fatalf("stale upload survived cleanup: got %d, want 0", got)
+	}
+}
+
+// TestCleanupStaleProcessing: фото без задачи в очереди (Redis сброшен,
+// ретраи исчерпаны) не висит вечно со спиннером, а получает статус failed.
+func TestCleanupStaleProcessing(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	photoID := uploadPhoto(c, shop.ID, album.ID, makeJPEG(t, 64, 64))
+	waitPhotoStatus(c, shop.ID, album.ID, photoID, "ready", 30*time.Second)
+
+	// Возвращаем в processing и состариваем — воспроизводим потерянную задачу.
+	if _, err := env.pool.Exec(ctx,
+		`UPDATE photos SET status = 'processing', updated_at = now() - interval '12 hours' WHERE id = $1`,
+		photoID); err != nil {
+		t.Fatalf("backdate processing: %v", err)
+	}
+
+	if err := env.processor.HandleUploadsCleanup(ctx, nil); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+
+	var status string
+	if err := env.pool.QueryRow(ctx, `SELECT status FROM photos WHERE id = $1`, photoID).Scan(&status); err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("stale processing photo: status %q, want failed", status)
+	}
+}
+
+func countShopPhotos(t *testing.T, shopID string) int64 {
+	t.Helper()
+	var n int64
+	err := env.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM photos WHERE shop_id = $1 AND status != 'failed'`, shopID).Scan(&n)
+	if err != nil {
+		t.Fatalf("count photos: %v", err)
+	}
+	return n
+}
+
+func backdate(t *testing.T, photoID, interval string) {
+	t.Helper()
+	_, err := env.pool.Exec(context.Background(),
+		`UPDATE photos SET created_at = now() - $2::interval WHERE id = $1`, photoID, interval)
+	if err != nil {
+		t.Fatalf("backdate photo: %v", err)
+	}
+}

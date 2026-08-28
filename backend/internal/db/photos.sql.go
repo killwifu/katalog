@@ -90,6 +90,74 @@ func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const deleteStaleUploads = `-- name: DeleteStaleUploads :many
+DELETE FROM photos
+WHERE status = 'uploading'
+  AND created_at < now() - make_interval(hours => $1::int)
+RETURNING id, shop_id
+`
+
+type DeleteStaleUploadsRow struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Уборка зависших загрузок. Фото попадает в uploading при выдаче presign
+// и выходит из него на confirm. Если confirm не дошёл — строка остаётся
+// навсегда и продолжает занимать квоту (CountShopPhotos считает всё, кроме
+// failed). На боевом стенде таких накопилось шесть штук за неделю.
+func (q *Queries) DeleteStaleUploads(ctx context.Context, dollar_1 int32) ([]DeleteStaleUploadsRow, error) {
+	rows, err := q.db.Query(ctx, deleteStaleUploads, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteStaleUploadsRow
+	for rows.Next() {
+		var i DeleteStaleUploadsRow
+		if err := rows.Scan(&i.ID, &i.ShopID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const failStaleProcessing = `-- name: FailStaleProcessing :many
+UPDATE photos
+SET status = 'failed', updated_at = now()
+WHERE status = 'processing'
+  AND updated_at < now() - make_interval(hours => $1::int)
+RETURNING id
+`
+
+// Фото, застрявшее в processing: задача потерялась (сброс Redis) либо
+// исчерпала ретраи и ушла в архив asynq — статус в БД при этом не меняется.
+// Такое фото навсегда висит в кабинете со спиннером и занимает квоту.
+// Оригинал в S3 не трогаем: поведение то же, что у обычного failed.
+func (q *Queries) FailStaleProcessing(ctx context.Context, dollar_1 int32) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, failStaleProcessing, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPhoto = `-- name: GetPhoto :one
 SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged FROM photos
 WHERE id = $1

@@ -51,3 +51,24 @@ RETURNING *;
 -- name: DeletePhoto :execrows
 DELETE FROM photos
 WHERE id = $1 AND shop_id = $2;
+
+-- Уборка зависших загрузок. Фото попадает в uploading при выдаче presign
+-- и выходит из него на confirm. Если confirm не дошёл — строка остаётся
+-- навсегда и продолжает занимать квоту (CountShopPhotos считает всё, кроме
+-- failed). На боевом стенде таких накопилось шесть штук за неделю.
+-- name: DeleteStaleUploads :many
+DELETE FROM photos
+WHERE status = 'uploading'
+  AND created_at < now() - make_interval(hours => $1::int)
+RETURNING id, shop_id;
+
+-- Фото, застрявшее в processing: задача потерялась (сброс Redis) либо
+-- исчерпала ретраи и ушла в архив asynq — статус в БД при этом не меняется.
+-- Такое фото навсегда висит в кабинете со спиннером и занимает квоту.
+-- Оригинал в S3 не трогаем: поведение то же, что у обычного failed.
+-- name: FailStaleProcessing :many
+UPDATE photos
+SET status = 'failed', updated_at = now()
+WHERE status = 'processing'
+  AND updated_at < now() - make_interval(hours => $1::int)
+RETURNING id;
