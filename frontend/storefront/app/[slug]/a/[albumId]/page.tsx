@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { getAlbumPage } from '@/lib/api'
+import { notFound, redirect } from 'next/navigation'
+import { getAlbumPage, loadOrUnavailable } from '@/lib/api'
+import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
@@ -16,7 +17,9 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, albumId } = params
-  const data = await getAlbumPage(slug, albumId, 1)
+  const res = await loadOrUnavailable(() => getAlbumPage(slug, albumId, 1))
+  if (!res.ok) return { title: `${res.payload.shop.name} — каталог временно недоступен` }
+  const data = res.data
   if (!data) return { title: 'Альбом не найден' }
   const cover = data.photos[0]?.urls
   return {
@@ -36,11 +39,19 @@ export default async function AlbumPage({ params, searchParams }: Props) {
   const { slug, albumId } = params
   const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1)
 
-  const data = await getAlbumPage(slug, albumId, page)
+  // Прямая ссылка на альбом — обычный вход покупателя из мессенджера,
+  // и неоплаченная витрина должна встретить его контактами продавца.
+  const res = await loadOrUnavailable(() => getAlbumPage(slug, albumId, page))
+  if (!res.ok) return <ShopUnavailable payload={res.payload} />
+  const data = res.data
   if (!data) notFound()
   const { shop, album, photos, per_page: perPage, total } = data
   const totalPages = Math.max(1, Math.ceil(total / perPage))
   const base = `/${encodeURIComponent(slug)}/a/${album.id}`
+  // Ссылка на страницу за пределами альбома — не редкость: продавец удалил
+  // часть фото, а покупатель вернулся по старой ссылке или из выдачи.
+  // Пустая сетка без навигации читается как «в магазине ничего нет».
+  if (page > totalPages) redirect(base)
 
   return (
     <main className="page">

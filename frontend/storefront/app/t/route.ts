@@ -30,7 +30,10 @@ export async function POST(req: Request): Promise<Response> {
   const isNewVisitor = visitorId === ''
   if (isNewVisitor) visitorId = randomUUID()
 
-  const ip = (headers().get('x-forwarded-for') ?? '').split(',')[0].trim()
+  // Последний адрес в цепочке — тот, что дописал наш Caddy. Первый шлёт
+  // клиент, и по нему уникальные посетители накручивались заголовком.
+  const xff = (headers().get('x-forwarded-for') ?? '').split(',')
+  const ip = (xff[xff.length - 1] ?? '').trim()
   const visitorHash = createHash('sha256')
     .update(`${visitorId}|${ip}`)
     .digest('hex')

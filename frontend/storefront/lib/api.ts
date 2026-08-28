@@ -76,6 +76,21 @@ export class ShopUnavailableError extends Error {
   }
 }
 
+// loadOrUnavailable — 410 приходит на любой запрос к магазину, а не только
+// к его корню. Покупатель чаще всего заходит по прямой ссылке на альбом
+// из мессенджера, и без разбора этой ошибки на вложенных страницах он
+// видел бы служебный экран Next вместо контактов продавца.
+export async function loadOrUnavailable<T>(
+  load: () => Promise<T>,
+): Promise<{ ok: true; data: T } | { ok: false; payload: ShopUnavailable }> {
+  try {
+    return { ok: true, data: await load() }
+  } catch (e) {
+    if (e instanceof ShopUnavailableError) return { ok: false, payload: e.payload }
+    throw e
+  }
+}
+
 async function getJSON<T>(path: string, slug: string): Promise<T | null> {
   const res = await fetch(`${API_URL}${path}`, {
     next: { revalidate: 60, tags: [`shop:${slug}`] },

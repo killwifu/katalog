@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -85,6 +86,28 @@ func TestAuthRateLimit(t *testing.T) {
 	if !limited {
 		t.Fatal("rate limit did not trigger after 35 attempts (limit is 30/min)")
 	}
+}
+
+// TestAuthRateLimitSpoofedXFF: подделанный X-Forwarded-For не даёт обойти
+// лимит. Caddy дописывает адрес пира к тому, что прислал клиент, поэтому
+// доверять можно только последнему адресу в списке — по первому перебор
+// пароля обходился одним заголовком со случайным IP на каждый запрос.
+func TestAuthRateLimitSpoofedXFF(t *testing.T) {
+	c := newClient(t)
+	body := map[string]string{"email": "spoof@test.local", "password": "wrong"}
+
+	for i := 0; i < 35; i++ {
+		// Каждый раз новый «клиентский» адрес слева, реальный — справа.
+		status, _ := c.doWithXFF("POST", "/api/v1/auth/login", body,
+			fmt.Sprintf("203.0.113.%d, %s", i%256, c.ip))
+		if status == http.StatusTooManyRequests {
+			return
+		}
+		if status != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: unexpected status %d", i, status)
+		}
+	}
+	t.Fatal("rate limit bypassed via spoofed X-Forwarded-For")
 }
 
 func TestUnauthenticatedAccess(t *testing.T) {

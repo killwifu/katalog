@@ -94,6 +94,19 @@ func (c *Client) StatSize(ctx context.Context, key string) (int64, bool, error) 
 	return info.Size, true, nil
 }
 
+// Delete удаляет объект. Отсутствие объекта ошибкой не считается: вызывающий
+// код убирает мусор, а не проверяет наличие.
+func (c *Client) Delete(ctx context.Context, key string) error {
+	if err := c.ops.RemoveObject(ctx, c.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		resp := minio.ToErrorResponse(err)
+		if resp.Code == "NoSuchKey" || resp.StatusCode == 404 {
+			return nil
+		}
+		return fmt.Errorf("delete %s: %w", key, err)
+	}
+	return nil
+}
+
 func (c *Client) Download(ctx context.Context, key string) ([]byte, error) {
 	obj, err := c.ops.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -112,6 +125,32 @@ func (c *Client) Upload(ctx context.Context, key string, data []byte, contentTyp
 		minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
 		return fmt.Errorf("put %s: %w", key, err)
+	}
+	return nil
+}
+
+// RemoveShop удаляет все объекты магазина — оригиналы и деривативы.
+// Используется при удалении магазина, когда перечислить фото уже негде:
+// строки снёс каскад по внешнему ключу.
+func (c *Client) RemoveShop(ctx context.Context, shopID uuid.UUID) error {
+	for _, prefix := range []string{
+		fmt.Sprintf("orig/%s/", shopID),
+		fmt.Sprintf("drv/%s/", shopID),
+	} {
+		objects := c.ops.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{
+			Prefix: prefix, Recursive: true,
+		})
+		// Канал ошибок дочитываем до конца даже после первой: бросить его
+		// значит подвесить горутину minio-go, которая в него пишет.
+		var firstErr error
+		for err := range c.ops.RemoveObjects(ctx, c.bucket, objects, minio.RemoveObjectsOptions{}) {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("remove %s: %w", err.ObjectName, err.Err)
+			}
+		}
+		if firstErr != nil {
+			return firstErr
+		}
 	}
 	return nil
 }

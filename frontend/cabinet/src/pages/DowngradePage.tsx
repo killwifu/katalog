@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, type DowngradeAlbum } from '../api'
+import { api, errorText, type DowngradeAlbum } from '../api'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
 type Strategy = 'viewed' | 'recent' | 'manual'
@@ -26,6 +27,10 @@ export function DowngradePage() {
 
   const [strategy, setStrategy] = useState<Strategy>('viewed')
   const [manual, setManual] = useState<string[] | null>(null)
+  // Ручной выбор — это несколько минут работы при большом числе альбомов,
+  // терять его при случайном переходе нельзя. Хук стоит до ранних return
+  // ниже: порядок хуков обязан совпадать на всех рендерах (React #310).
+  useUnsavedGuard(manual !== null)
 
   const save = useMutation({
     mutationFn: (ids: string[]) => api.applyDowngrade(shop.id, ids),
@@ -71,11 +76,19 @@ export function DowngradePage() {
           из {total_photos} — остальные скроются, но сохранятся в кабинете.
         </div>
       ) : (
-        <div className="alert alert--info">
-          Все {total_photos} фотографий помещаются в тариф. Выбирать ничего не нужно.
-        </div>
+        <>
+          <div className="alert alert--info">
+            Все фотографии помещаются в тариф — выбирать ничего не нужно.
+          </div>
+          <p className="page__lead">
+            Экран пригодится, если фотографий станет больше лимита: тогда здесь
+            можно будет отметить, что покупатели продолжат видеть.
+          </p>
+        </>
       )}
 
+      {!over_limit ? null : (
+      <>
       <p className="page__lead">
         Ничего не удаляем — выбираете только то, что покупатели продолжат видеть.
         Остальное вернётся, как только продлите подписку.
@@ -146,6 +159,9 @@ export function DowngradePage() {
         </Link>
       </div>
       {save.isSuccess && <p className="hint">Выбор сохранён. Изменить можно в любой момент.</p>}
+      {save.isError && <p className="hint text-danger">{errorText(save.error)}</p>}
+      </>
+      )}
 
       <div className="box mt-6">
         <h2>Что останется без изменений</h2>

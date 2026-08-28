@@ -255,6 +255,7 @@ func run(m *testing.M) int {
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
+	mux.HandleFunc(tasks.TypeStoragePurge, processor.HandleStoragePurge)
 	if err := asynqSrv.Start(mux); err != nil {
 		log.Printf("start asynq server: %v", err)
 		return 1

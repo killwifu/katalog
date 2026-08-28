@@ -13,6 +13,8 @@ import (
 const (
 	TypePhotoProcess     = "photo:process"
 	TypeStatsAggregate   = "stats:aggregate"
+	TypeUploadsCleanup   = "uploads:cleanup"
+	TypeStoragePurge     = "storage:purge"
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
 	TypeEmailSend        = "email:send"
@@ -102,6 +104,16 @@ func NewBillingLifecycle() *asynq.Task {
 	)
 }
 
+// NewUploadsCleanup — уборка зависших загрузок: фото, оставшихся в статусе
+// uploading, потому что confirm до сервера не дошёл. Они занимают квоту
+// продавца и место в S3, а вернуть их уже нечем.
+func NewUploadsCleanup() *asynq.Task {
+	return asynq.NewTask(TypeUploadsCleanup, nil,
+		asynq.MaxRetry(3),
+		asynq.Timeout(10*time.Minute),
+	)
+}
+
 // NewBillingRenew — ежедневные рекуррентные списания по истекающим подпискам.
 func NewBillingRenew() *asynq.Task {
 	return asynq.NewTask(TypeBillingRenew, nil,
@@ -118,5 +130,27 @@ func NewPhotoProcess(photoID uuid.UUID) (*asynq.Task, error) {
 	return asynq.NewTask(TypePhotoProcess, payload,
 		asynq.MaxRetry(5),
 		asynq.Timeout(2*time.Minute),
+	), nil
+}
+
+// StoragePurgePayload — объекты, оставшиеся в S3 после каскадного удаления
+// строк. Пустой PhotoIDs означает «весь магазин»: при удалении магазина
+// перечислять фото уже негде.
+type StoragePurgePayload struct {
+	ShopID   uuid.UUID   `json:"shop_id"`
+	PhotoIDs []uuid.UUID `json:"photo_ids"`
+}
+
+// NewStoragePurge — уборка объектов S3 после удаления альбома или магазина.
+// Отдельной задачей, потому что альбом на тысячу фото — это тысячи запросов
+// к хранилищу, и держать на них HTTP-соединение продавца нельзя.
+func NewStoragePurge(shopID uuid.UUID, photoIDs []uuid.UUID) (*asynq.Task, error) {
+	payload, err := json.Marshal(StoragePurgePayload{ShopID: shopID, PhotoIDs: photoIDs})
+	if err != nil {
+		return nil, fmt.Errorf("marshal storage:purge payload: %w", err)
+	}
+	return asynq.NewTask(TypeStoragePurge, payload,
+		asynq.MaxRetry(5),
+		asynq.Timeout(30*time.Minute),
 	), nil
 }

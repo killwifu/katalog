@@ -28,6 +28,17 @@ export function AlbumsPage() {
     },
   })
 
+  // Удаление уносит и фотографии альбома: их место и место в квоте
+  // возвращает сервер, поэтому обновляем и счётчики в меню.
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteAlbum(shop.id, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
+      void queryClient.invalidateQueries({ queryKey: ['shops'] })
+      void queryClient.invalidateQueries({ queryKey: ['billing', shop.id] })
+    },
+  })
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (title.trim()) create.mutate(title.trim())
@@ -133,12 +144,12 @@ export function AlbumsPage() {
       <ul className="rows">
         {roots.map((album) => (
           <li key={album.id}>
-            <AlbumRow album={album} />
+            <AlbumRow album={album} onDelete={remove.mutate} />
             {children(album.id).length > 0 && (
               <ul className="border-t border-line bg-surface-alt pl-6">
                 {children(album.id).map((child) => (
                   <li key={child.id}>
-                    <AlbumRow album={child} />
+                    <AlbumRow album={child} onDelete={remove.mutate} />
                   </li>
                 ))}
               </ul>
@@ -146,6 +157,7 @@ export function AlbumsPage() {
           </li>
         ))}
       </ul>
+      {remove.isError && <p className="mt-3 text-sm text-danger">Не удалось удалить альбом.</p>}
     </div>
   )
 }
@@ -158,15 +170,43 @@ const STATUS: Record<Album['status'], { label: string; cls: string }> = {
   draft: { label: 'Черновик', cls: 'badge badge--draft' },
 }
 
-function AlbumRow({ album }: { album: Album }) {
+// Удаление в два шага и прямо в строке: отдельного экрана альбом не
+// заслуживает, а нативный confirm() не скажет, сколько фотографий уйдёт.
+function AlbumRow({ album, onDelete }: { album: Album; onDelete: (id: string) => void }) {
   const status = STATUS[album.status] ?? STATUS.draft
+  const [confirming, setConfirming] = useState(false)
+
   return (
-    <Link to="/albums/$albumId" params={{ albumId: album.id }} className="rows__row">
-      <span className="rows__main">
+    <div className="rows__row">
+      <Link to="/albums/$albumId" params={{ albumId: album.id }} className="rows__main">
         <b>{album.title}</b>
         <span className="rows__meta">{album.photo_count} фото</span>
-      </span>
-      <span className={status.cls}>{status.label}</span>
-    </Link>
+      </Link>
+      {confirming ? (
+        <span className="rows__act">
+          <span className="rows__meta">
+            {album.photo_count > 0
+              ? `Удалить вместе с ${album.photo_count} фото?`
+              : 'Удалить альбом?'}
+          </span>
+          <button onClick={() => onDelete(album.id)} className="btn btn--danger btn--sm">
+            Удалить
+          </button>
+          <button onClick={() => setConfirming(false)} className="text-xs text-ink-2">
+            Отмена
+          </button>
+        </span>
+      ) : (
+        <span className="rows__act">
+          <span className={status.cls}>{status.label}</span>
+          <button
+            onClick={() => setConfirming(true)}
+            className="text-xs text-ink-2 hover:text-danger"
+          >
+            Удалить
+          </button>
+        </span>
+      )}
+    </div>
   )
 }

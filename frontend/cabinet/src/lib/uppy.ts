@@ -12,7 +12,14 @@ export const QUOTA_REASONS: Record<string, string> = {
   subscription_inactive: 'подписка неактивна, загрузка приостановлена',
 }
 
-export type UploadOutcome = { uploaded: number; total: number; reason?: string }
+export type UploadOutcome = {
+  uploaded: number
+  total: number
+  reason?: string
+  // confirmFailed — файлы доехали в S3, но подтвердить их не удалось.
+  // Молчать здесь нельзя: место уже занято, а обработка не начата.
+  confirmFailed?: number
+}
 
 type Options = {
   shopId: string
@@ -68,7 +75,29 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
       .map((f) => (f.meta as { photoId?: string }).photoId)
       .filter((id): id is string => Boolean(id))
     if (ids.length === 0) return
-    void api.confirm(shopId, ids).then(onBatchConfirmed)
+
+    void api
+      .confirm(shopId, ids)
+      .then((res) => {
+        onBatchConfirmed()
+        // Подтверждение частичное: у каждого фото свой статус. Молча
+        // потерять несколько из пачки — худший исход: продавец считает,
+        // что загрузил всё.
+        const failed = (res.results ?? []).filter((r) => r.status !== 'processing')
+        if (failed.length > 0) {
+          onOutcome?.({
+            uploaded: ids.length - failed.length,
+            total: ids.length,
+            confirmFailed: failed.length,
+          })
+        }
+      })
+      .catch(() => {
+        // Файлы уже в S3 и занимают место, но обработка не запущена.
+        // Без этой ветки они навсегда оставались в статусе uploading —
+        // на боевом стенде таких накопилось шесть штук за неделю.
+        onOutcome?.({ uploaded: 0, total: ids.length, confirmFailed: ids.length })
+      })
   })
 
   return uppy

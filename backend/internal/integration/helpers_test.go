@@ -42,6 +42,13 @@ func newClient(t *testing.T) *client {
 
 func (c *client) do(method, path string, body any) (int, []byte) {
 	c.t.Helper()
+	return c.doWithXFF(method, path, body, c.ip)
+}
+
+// doWithXFF — запрос с заданным X-Forwarded-For целиком: нужен, чтобы
+// проверить разбор цепочки прокси, а не только одиночный адрес.
+func (c *client) doWithXFF(method, path string, body any, xff string) (int, []byte) {
+	c.t.Helper()
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -57,7 +64,7 @@ func (c *client) do(method, path string, body any) (int, []byte) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("X-Forwarded-For", c.ip)
+	req.Header.Set("X-Forwarded-For", xff)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.t.Fatalf("%s %s: %v", method, path, err)
@@ -198,8 +205,11 @@ func waitPhotoStatus(c *client, shopID, albumID, photoID, want string, timeout t
 	deadline := time.Now().Add(timeout)
 	var last photoJSON
 	for time.Now().Before(deadline) {
-		var photos []photoJSON
-		c.mustJSON("GET", "/api/v1/shops/"+shopID+"/albums/"+albumID+"/photos", nil, http.StatusOK, &photos)
+		var page struct {
+			Photos []photoJSON `json:"photos"`
+		}
+		c.mustJSON("GET", "/api/v1/shops/"+shopID+"/albums/"+albumID+"/photos", nil, http.StatusOK, &page)
+		photos := page.Photos
 		for _, p := range photos {
 			if p.ID == photoID {
 				last = p

@@ -639,6 +639,7 @@ type Photo struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	Flagged    bool               `json:"flagged"`
+	DrvSize    int64              `json:"drv_size"`
 }
 
 type Section struct {

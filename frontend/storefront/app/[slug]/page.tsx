@@ -82,8 +82,11 @@ export default async function ShopPage({ params }: Props) {
       )}
       {/* Есть секции — показываем выкладку продавца; нет — все альбомы
           по дате, как и раньше (kit). */}
-      {data.sections.length > 0 ? (
-        data.sections.map((section) => (
+      {data.sections.some((s) => s.albums.length > 0) ? (
+        // Пустую секцию покупателю не показываем: для него это заголовок
+        // без содержимого. Продавец видит её в кабинете и понимает, что
+        // раздел создан, но пуст.
+        data.sections.filter((s) => s.albums.length > 0).map((section) => (
           <section key={section.title} className="section">
             <h2 className="section__head">{section.title}</h2>
             <AlbumGrid shopSlug={slug} albums={section.albums} />

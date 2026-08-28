@@ -343,8 +343,11 @@ func TestBillingLifecycle(t *testing.T) {
 	}
 
 	// Контент не удалён: фото на месте, кабинет работает.
-	var photos []photoJSON
-	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID+"/photos", nil, http.StatusOK, &photos)
+	var photoPage struct {
+		Photos []photoJSON `json:"photos"`
+	}
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID+"/photos", nil, http.StatusOK, &photoPage)
+	photos := photoPage.Photos
 	if len(photos) != 1 || photos[0].Status != "ready" {
 		t.Fatalf("content after suspension: %+v", photos)
 	}

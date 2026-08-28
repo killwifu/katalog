@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { api, type ShopContacts, type ShopSettings } from '../api'
+import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
 // Каналы в том же порядке, в каком витрина рисует кнопки покупателю.
@@ -34,6 +35,11 @@ export function ContactsPage() {
     },
   })
 
+  // Хук до ранних return: иначе на втором рендере порядок хуков меняется
+  // и страница падает целиком (React #310).
+  const dirty = draft !== null || settingsDraft !== null
+  useUnsavedGuard(dirty)
+
   if (current.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (current.isError) return <p className="text-danger">Не удалось загрузить контакты.</p>
 
@@ -53,11 +59,14 @@ export function ContactsPage() {
         без него каталог не приводит заявок, а значит не работает.
       </p>
 
-      {filled.length === 0 && (
-        <div className="alert alert--warn">
-          Ни один канал не заполнен: на витрине кнопок связи сейчас нет.
-        </div>
-      )}
+      {/* Плашка не исчезает при вводе, а меняет тон: иначе форма прыгает
+          вверх под курсором ровно в тот момент, когда продавец целится
+          в следующее поле. */}
+      <div className={`alert ${filled.length === 0 ? 'alert--warn' : 'alert--info'}`}>
+        {filled.length === 0
+          ? 'Ни один канал не заполнен: на витрине кнопок связи сейчас нет.'
+          : `Каналов заполнено: ${filled.length}. Не забудьте сохранить.`}
+      </div>
 
       <div className="cols md:grid-cols-2">
         <div>

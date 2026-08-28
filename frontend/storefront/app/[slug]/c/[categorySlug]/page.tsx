@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getCategories, getCategoryAlbums, getShopPage } from '@/lib/api'
+import { getCategories, getCategoryAlbums, getShopPage, loadOrUnavailable } from '@/lib/api'
+import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { ShopHeader } from '@/components/ShopHeader'
 import { CategoryMenu } from '@/components/CategoryMenu'
 
@@ -16,7 +17,11 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, categorySlug } = params
-  const [data, categories] = await Promise.all([getShopPage(slug), getCategories(slug)])
+  const meta = await loadOrUnavailable(() =>
+    Promise.all([getShopPage(slug), getCategories(slug)]),
+  )
+  if (!meta.ok) return { title: `${meta.payload.shop.name} — каталог временно недоступен` }
+  const [data, categories] = meta.data
   const category = categories?.find((c) => c.slug === categorySlug)
   if (!data || !category) return { title: 'Категория не найдена' }
   return {
@@ -27,11 +32,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug, categorySlug } = params
-  const [data, categories, albums] = await Promise.all([
-    getShopPage(slug),
-    getCategories(slug),
-    getCategoryAlbums(slug, categorySlug),
-  ])
+  const res = await loadOrUnavailable(() =>
+    Promise.all([getShopPage(slug), getCategories(slug), getCategoryAlbums(slug, categorySlug)]),
+  )
+  if (!res.ok) return <ShopUnavailable payload={res.payload} />
+  const [data, categories, albums] = res.data
   if (!data || !categories || !albums) notFound()
   const category = categories.find((c) => c.slug === categorySlug)
   if (!category) notFound()

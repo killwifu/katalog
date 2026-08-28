@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -282,6 +283,10 @@ func (a *API) handleDeleteSection(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// maxSectionAlbums — потолок на размер секции. Каждый альбом — отдельный
+// INSERT, так что без потолка один запрос может занять соединение надолго.
+const maxSectionAlbums = 500
+
 // handleSetSectionAlbums задаёт состав секции целиком: редактор перетаскивания
 // всё равно сохраняет и порядок, а замена списка проще пары add/remove.
 // Порядок в секции ручной, не по дате (kit).
@@ -306,7 +311,23 @@ func (a *API) handleSetSectionAlbums(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.Q.ClearSectionAlbums(r.Context(), id); err != nil {
+	if len(req.AlbumIDs) > maxSectionAlbums {
+		apiError(w, http.StatusBadRequest, "too_many_albums",
+			fmt.Sprintf("section holds at most %d albums", maxSectionAlbums))
+		return
+	}
+
+	// Транзакция: без неё ошибка на середине списка оставляет секцию
+	// наполовину очищенной, и продавец теряет раскладку витрины.
+	tx, err := a.Pool.Begin(r.Context())
+	if err != nil {
+		a.internalError(w, "begin tx", err)
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	q := a.Q.WithTx(tx)
+
+	if err := q.ClearSectionAlbums(r.Context(), id); err != nil {
 		a.internalError(w, "clear section", err)
 		return
 	}
@@ -318,7 +339,7 @@ func (a *API) handleSetSectionAlbums(w http.ResponseWriter, r *http.Request) {
 		}
 		// Запрос сам отсекает чужие альбомы: вставка идёт SELECT'ом
 		// с условием shop_id, чужой id просто не даст строки.
-		if err := a.Q.AddAlbumToSection(r.Context(), db.AddAlbumToSectionParams{
+		if err := q.AddAlbumToSection(r.Context(), db.AddAlbumToSectionParams{
 			ID:        albumID,
 			SectionID: id,
 			SortOrder: int32(i),
@@ -327,6 +348,10 @@ func (a *API) handleSetSectionAlbums(w http.ResponseWriter, r *http.Request) {
 			a.internalError(w, "add album to section", err)
 			return
 		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		a.internalError(w, "commit section albums", err)
+		return
 	}
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)

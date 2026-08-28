@@ -24,6 +24,7 @@ import { AdminPage } from './pages/AdminPage'
 import { AuthPage } from './pages/AuthPage'
 import { BillingPage } from './pages/BillingPage'
 import { CaptionsPage } from './pages/CaptionsPage'
+import { ErrorPage, NotFoundPage } from './pages/ErrorPage'
 import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
 
 // Recharts тяжёлый — страница статистики грузится отдельным чанком.
@@ -175,6 +176,8 @@ const router = createRouter({
     appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, downgradeRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
   ]),
   basepath: '/app',
+  defaultErrorComponent: ({ error }) => <ErrorPage error={error} />,
+  defaultNotFoundComponent: NotFoundPage,
 })
 
 declare module '@tanstack/react-router' {
