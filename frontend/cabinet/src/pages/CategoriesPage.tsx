@@ -57,6 +57,18 @@ export function CategoriesPage() {
     onSuccess: () => void refresh(),
   })
 
+  // Переименование: опечатку в названии иначе можно было исправить только
+  // удалением категории — а это ещё и перекладывание всех её альбомов.
+  const rename = useMutation({
+    mutationFn: ({ id, title, slug }: { id: string; title: string; slug: string }) =>
+      api.updateCategory(shop.id, id, title, slug),
+    onSuccess: () => {
+      setError('')
+      void refresh()
+    },
+    onError: (e: Error) => setError(errorText(e)),
+  })
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (title.trim()) create.mutate()
@@ -127,12 +139,12 @@ export function CategoriesPage() {
         <ul className="divide-y divide-line rounded border border-line">
           {roots.map((c) => (
             <li key={c.id}>
-              <Row category={c} all={categories.data} count={albumCount(c.id)} onDelete={remove.mutate} />
+              <Row category={c} all={categories.data} count={albumCount(c.id)} onDelete={remove.mutate} onRename={rename.mutate} />
               {children(c.id).length > 0 && (
                 <ul className="border-t border-line bg-surface-alt pl-6">
                   {children(c.id).map((sub) => (
                     <li key={sub.id}>
-                      <Row category={sub} all={categories.data} count={albumCount(sub.id)} onDelete={remove.mutate} />
+                      <Row category={sub} all={categories.data} count={albumCount(sub.id)} onDelete={remove.mutate} onRename={rename.mutate} />
                     </li>
                   ))}
                 </ul>
@@ -152,15 +164,53 @@ function Row({
   all,
   count,
   onDelete,
+  onRename,
 }: {
   category: Category
   all: Category[]
   count: number
   onDelete: (v: { id: string; moveTo?: string }) => void
+  onRename: (v: { id: string; title: string; slug: string }) => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const [moveTo, setMoveTo] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
   const targets = all.filter((c) => c.id !== category.id && !c.parent_id)
+
+  // Адрес категории при переименовании не трогаем: по нему уже могли
+  // разойтись ссылки, и менять его молча нельзя.
+  const submitRename = () => {
+    const title = (editing ?? '').trim()
+    if (title && title !== category.title) {
+      onRename({ id: category.id, title, slug: category.slug })
+    }
+    setEditing(null)
+  }
+
+  if (editing !== null) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <input
+          autoFocus
+          value={editing}
+          onChange={(e) => setEditing(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitRename()
+            if (e.key === 'Escape') setEditing(null)
+          }}
+          maxLength={100}
+          className="inp flex-1"
+          aria-label="Название категории"
+        />
+        <button onClick={submitRename} className="btn btn--primary btn--sm">
+          Сохранить
+        </button>
+        <button onClick={() => setEditing(null)} className="text-xs text-ink-2">
+          Отмена
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
@@ -195,9 +245,14 @@ function Row({
           </button>
         </>
       ) : (
-        <button onClick={() => setConfirming(true)} className="text-xs text-ink-2 hover:text-danger">
-          Удалить
-        </button>
+        <>
+          <button onClick={() => setEditing(category.title)} className="text-xs text-ink-2">
+            Переименовать
+          </button>
+          <button onClick={() => setConfirming(true)} className="text-xs text-ink-2 hover:text-danger">
+            Удалить
+          </button>
+        </>
       )}
     </div>
   )
