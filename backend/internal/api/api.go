@@ -184,11 +184,14 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-// clientIP: за Caddy берём первый адрес из X-Forwarded-For.
+// clientIP: последний адрес в X-Forwarded-For — тот, что дописал наш Caddy.
+// Именно последний, а не первый: Caddy добавляет адрес пира к тому, что
+// прислал клиент, а клиент может прислать что угодно. По первому адресу
+// rate-limit на /auth обходился одним заголовком.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
+		if i := strings.LastIndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[i+1:])
 		}
 		return strings.TrimSpace(xff)
 	}
