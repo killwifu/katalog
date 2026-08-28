@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -166,4 +167,64 @@ func TestSignedHintCookie(t *testing.T) {
 	if hint.Value != "1" {
 		t.Errorf("в маркере лишнее значение %q", hint.Value)
 	}
+}
+
+// TestResetPasswordRevokesSessions: смена пароля закрывает прежние сессии.
+// Сброс запрашивают в том числе когда подозревают чужой доступ, и cookie
+// злоумышленника должна перестать работать сразу, а не по истечении TTL.
+func TestResetPasswordRevokesSessions(t *testing.T) {
+	ctx := context.Background()
+	email := uniqueEmail()
+
+	// Две сессии одного пользователя: «своя» и «угнанная».
+	owner := newClient(t)
+	owner.mustJSON("POST", "/api/v1/auth/register",
+		map[string]string{"email": email, "password": "password123"}, http.StatusCreated, nil)
+	intruder := newClient(t)
+	intruder.mustJSON("POST", "/api/v1/auth/login",
+		map[string]string{"email": email, "password": "password123"}, http.StatusOK, nil)
+
+	if status, _ := intruder.do("GET", "/api/v1/auth/me", nil); status != http.StatusOK {
+		t.Fatalf("intruder session not established: status %d", status)
+	}
+
+	owner.mustJSON("POST", "/api/v1/auth/password/forgot",
+		map[string]string{"email": email}, http.StatusNoContent, nil)
+
+	// Токен сброса читаем прямо из Redis: письмо тут не нужно.
+	token := resetTokenFor(t, ctx, email)
+	c := newClient(t)
+	c.mustJSON("POST", "/api/v1/auth/password/reset",
+		map[string]string{"token": token, "password": "newpassword456"}, http.StatusNoContent, nil)
+
+	for name, cl := range map[string]*client{"owner": owner, "intruder": intruder} {
+		if status, _ := cl.do("GET", "/api/v1/auth/me", nil); status != http.StatusUnauthorized {
+			t.Fatalf("%s session survived password reset: status %d, want 401", name, status)
+		}
+	}
+
+	// Новый пароль работает.
+	fresh := newClient(t)
+	fresh.mustJSON("POST", "/api/v1/auth/login",
+		map[string]string{"email": email, "password": "newpassword456"}, http.StatusOK, nil)
+}
+
+// resetTokenFor находит выданный токен сброса в Redis по user_id.
+func resetTokenFor(t *testing.T, ctx context.Context, email string) string {
+	t.Helper()
+	var uid string
+	if err := env.pool.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&uid); err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+	keys, err := env.rdb.Keys(ctx, "tok:pwreset:*").Result()
+	if err != nil {
+		t.Fatalf("scan tokens: %v", err)
+	}
+	for _, k := range keys {
+		if v, err := env.rdb.Get(ctx, k).Result(); err == nil && v == uid {
+			return strings.TrimPrefix(k, "tok:pwreset:")
+		}
+	}
+	t.Fatalf("reset token for %s not found", email)
+	return ""
 }

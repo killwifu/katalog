@@ -24,6 +24,10 @@ const (
 	// написать в шапке «Кабинет» или «Войти».
 	SignedHintCookie = "katalog_signed"
 	sessionPrefix    = "sess:"
+	// userSessionsPrefix — обратный индекс «пользователь -> его токены».
+	// Без него сессию можно только дождаться по TTL: смена пароля не
+	// выгоняет того, кто уже вошёл с угнанной cookie.
+	userSessionsPrefix = "usess:"
 )
 
 var ErrNoSession = errors.New("auth: session not found")
@@ -44,7 +48,14 @@ func (s *Sessions) Create(ctx context.Context, userID uuid.UUID) (string, error)
 		return "", fmt.Errorf("generate session token: %w", err)
 	}
 	token := hex.EncodeToString(raw)
-	if err := s.rdb.Set(ctx, sessionPrefix+token, userID.String(), s.ttl).Err(); err != nil {
+	idx := userSessionsPrefix + userID.String()
+	pipe := s.rdb.TxPipeline()
+	pipe.Set(ctx, sessionPrefix+token, userID.String(), s.ttl)
+	pipe.SAdd(ctx, idx, token)
+	// Индекс живёт не меньше самой долгой сессии в нём; протухшие токены
+	// в наборе безвредны — DEL по несуществующему ключу ничего не делает.
+	pipe.Expire(ctx, idx, s.ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
 		return "", fmt.Errorf("store session: %w", err)
 	}
 	return token, nil
@@ -68,8 +79,32 @@ func (s *Sessions) Get(ctx context.Context, token string) (uuid.UUID, error) {
 }
 
 func (s *Sessions) Delete(ctx context.Context, token string) error {
+	// Владельца читаем до удаления, чтобы вычистить и обратный индекс.
+	if uid, err := s.rdb.Get(ctx, sessionPrefix+token).Result(); err == nil {
+		s.rdb.SRem(ctx, userSessionsPrefix+uid, token)
+	}
 	if err := s.rdb.Del(ctx, sessionPrefix+token).Err(); err != nil {
 		return fmt.Errorf("delete session: %w", err)
+	}
+	return nil
+}
+
+// DeleteAllForUser закрывает все сессии пользователя. Вызывается при смене
+// пароля: человек меняет его как раз тогда, когда подозревает чужой доступ,
+// и оставлять чужую сессию живой до истечения TTL нельзя.
+func (s *Sessions) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
+	idx := userSessionsPrefix + userID.String()
+	tokens, err := s.rdb.SMembers(ctx, idx).Result()
+	if err != nil {
+		return fmt.Errorf("list user sessions: %w", err)
+	}
+	keys := make([]string, 0, len(tokens)+1)
+	for _, t := range tokens {
+		keys = append(keys, sessionPrefix+t)
+	}
+	keys = append(keys, idx)
+	if err := s.rdb.Del(ctx, keys...).Err(); err != nil {
+		return fmt.Errorf("delete user sessions: %w", err)
 	}
 	return nil
 }

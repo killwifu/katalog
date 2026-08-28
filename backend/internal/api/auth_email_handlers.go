@@ -132,6 +132,12 @@ func (a *API) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update password", err)
 		return
 	}
+	// Все прежние сессии закрываем: сброс пароля запрашивают в том числе
+	// когда подозревают чужой доступ, и чужая cookie должна перестать
+	// работать сразу, а не по истечении TTL.
+	if err := a.Sessions.DeleteAllForUser(r.Context(), uid); err != nil {
+		a.Log.Error("reset: revoke sessions failed", "user_id", uid, "error", err)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
