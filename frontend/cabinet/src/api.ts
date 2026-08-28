@@ -313,6 +313,9 @@ export const api = {
       sort_order: sortOrder,
     }),
   // moveTo пустой — альбомы останутся без категории, но не удалятся.
+  deleteAlbum: (shopId: string, id: string) =>
+    request<void>('DELETE', `/shops/${shopId}/albums/${id}`),
+
   deleteCategory: (shopId: string, id: string, moveTo?: string) =>
     request<void>('DELETE', `/shops/${shopId}/categories/${id}${moveTo ? `?move_to=${moveTo}` : ''}`),
   setAlbumCategory: (shopId: string, albumId: string, categoryId: string | null) =>

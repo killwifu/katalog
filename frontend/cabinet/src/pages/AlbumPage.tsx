@@ -25,15 +25,21 @@ export function AlbumPage() {
         : false,
   })
 
+  // Счётчики квоты живут в двух запросах: мегабайты приходят из shops,
+  // а число фотографий — из billing. Обновлять надо оба, иначе продавец
+  // у лимита видит вчерашнее число и не понимает, почему загрузка встала.
+  const refreshQuota = () => {
+    void queryClient.invalidateQueries({ queryKey: ['photos', shop.id, albumId] })
+    void queryClient.invalidateQueries({ queryKey: ['shops'] })
+    void queryClient.invalidateQueries({ queryKey: ['billing', shop.id] })
+  }
+
   const [outcome, setOutcome] = useState<UploadOutcome | null>(null)
   const [uppy] = useState(() =>
     createPhotoUppy({
       shopId: shop.id,
       albumId,
-      onBatchConfirmed: () => {
-        void queryClient.invalidateQueries({ queryKey: ['photos', shop.id, albumId] })
-        void queryClient.invalidateQueries({ queryKey: ['shops'] })
-      },
+      onBatchConfirmed: refreshQuota,
       onOutcome: setOutcome,
     }),
   )
@@ -41,9 +47,7 @@ export function AlbumPage() {
 
   const remove = useMutation({
     mutationFn: (photoId: string) => api.deletePhoto(photoId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['photos', shop.id, albumId] })
-    },
+    onSuccess: refreshQuota,
   })
 
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
