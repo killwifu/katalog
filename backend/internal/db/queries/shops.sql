@@ -45,3 +45,6 @@ WHERE id = $1 AND owner_id = $2;
 UPDATE shops
 SET storage_used = greatest(storage_used + $2, 0), updated_at = now()
 WHERE id = $1;
+
+-- name: CountShopsByOwner :one
+SELECT count(*) FROM shops WHERE owner_id = $1;

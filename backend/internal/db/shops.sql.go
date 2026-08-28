@@ -27,6 +27,17 @@ func (q *Queries) AddShopStorageUsed(ctx context.Context, arg AddShopStorageUsed
 	return err
 }
 
+const countShopsByOwner = `-- name: CountShopsByOwner :one
+SELECT count(*) FROM shops WHERE owner_id = $1
+`
+
+func (q *Queries) CountShopsByOwner(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countShopsByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)

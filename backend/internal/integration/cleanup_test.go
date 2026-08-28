@@ -143,3 +143,20 @@ func TestDeleteAlbumReleasesQuota(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 }
+
+// TestShopLimitPerOwner: один аккаунт не может занять произвольное число
+// адресов витрин. Приватные ручки rate-limit не покрывает, так что без
+// потолка скрипт с одной сессией скупал бы корень домена целиком.
+func TestShopLimitPerOwner(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+
+	for i := 0; i < 5; i++ {
+		createShop(c)
+	}
+	status, raw := c.do("POST", "/api/v1/shops",
+		map[string]any{"slug": uniqueSlug(), "name": "Sixth"})
+	if status != http.StatusConflict {
+		t.Fatalf("sixth shop: status %d, want 409; body: %s", status, raw)
+	}
+}

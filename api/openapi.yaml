@@ -152,6 +152,9 @@ paths:
     post:
       operationId: createShop
       summary: Создать магазин (slug валидируется, системные слова запрещены)
+      description: >
+        409 отдаётся и на занятый slug (slug_taken), и на превышение
+        потолка в пять магазинов на владельца (shop_limit).
       requestBody:
         required: true
         content:

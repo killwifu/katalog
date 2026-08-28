@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -92,6 +93,9 @@ func (a *API) toShopResponse(s db.Shop) shopResponse {
 	return resp
 }
 
+// maxShopsPerOwner — см. handleCreateShop.
+const maxShopsPerOwner = 5
+
 type createShopRequest struct {
 	Slug        string          `json:"slug"`
 	Name        string          `json:"name"`
@@ -117,6 +121,22 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	contacts := req.Contacts
 	if len(contacts) == 0 {
 		contacts = json.RawMessage(`{}`)
+	}
+
+	// Потолок на число магазинов у одного владельца. Адрес витрины — это
+	// весь корень домена (/{slug}), и без потолка один аккаунт мог занять
+	// сколько угодно адресов: приватные ручки rate-limit не покрывает.
+	// Кабинет всё равно работает с одним магазином, так что пять — заведомо
+	// больше любого честного сценария.
+	count, err := a.Q.CountShopsByOwner(r.Context(), userID(r))
+	if err != nil {
+		a.internalError(w, "count shops", err)
+		return
+	}
+	if count >= maxShopsPerOwner {
+		apiError(w, http.StatusConflict, "shop_limit",
+			fmt.Sprintf("one account holds at most %d shops", maxShopsPerOwner))
+		return
 	}
 
 	shop, err := a.Q.CreateShop(r.Context(), db.CreateShopParams{
