@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCategoryChildren = `-- name: CountCategoryChildren :one
+SELECT count(*) FROM categories WHERE parent_id = $1
+`
+
+// Есть ли у категории дети: родителем можно назначить только ту,
+// у которой их нет, иначе получится третий уровень.
+func (q *Queries) CountCategoryChildren(ctx context.Context, parentID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCategoryChildren, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCategory = `-- name: CreateCategory :one
 INSERT INTO categories (shop_id, parent_id, title, slug, sort_order)
 VALUES ($1, $2, $3, $4, $5)
@@ -290,17 +303,19 @@ UPDATE categories
 SET title      = $3,
     slug       = $4,
     sort_order = $5,
+    parent_id  = $6,
     updated_at = now()
 WHERE id = $1 AND shop_id = $2
 RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at
 `
 
 type UpdateCategoryParams struct {
-	ID        uuid.UUID `json:"id"`
-	ShopID    uuid.UUID `json:"shop_id"`
-	Title     string    `json:"title"`
-	Slug      string    `json:"slug"`
-	SortOrder int32     `json:"sort_order"`
+	ID        uuid.UUID     `json:"id"`
+	ShopID    uuid.UUID     `json:"shop_id"`
+	Title     string        `json:"title"`
+	Slug      string        `json:"slug"`
+	SortOrder int32         `json:"sort_order"`
+	ParentID  uuid.NullUUID `json:"parent_id"`
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
@@ -310,6 +325,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		arg.Title,
 		arg.Slug,
 		arg.SortOrder,
+		arg.ParentID,
 	)
 	var i Category
 	err := row.Scan(

@@ -126,3 +126,58 @@ func TestCategories(t *testing.T) {
 		}
 	})
 }
+
+// TestCategoryReparent: смена родителя категории применяется, а не молча
+// теряется, и не даёт построить третий уровень или цикл.
+func TestCategoryReparent(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	mk := func(title, slug string, parent *string) categoryResp {
+		t.Helper()
+		body := map[string]any{"title": title, "slug": slug}
+		if parent != nil {
+			body["parent_id"] = *parent
+		}
+		var out categoryResp
+		c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/categories", body, http.StatusCreated, &out)
+		return out
+	}
+	patch := func(id string, body map[string]any, want int) {
+		t.Helper()
+		status, raw := c.do("PATCH", "/api/v1/shops/"+shop.ID+"/categories/"+id, body)
+		if status != want {
+			t.Fatalf("PATCH %s: status %d, want %d; body: %s", id, status, want, raw)
+		}
+	}
+
+	top := mk("Верх", "top-cat", nil)
+	other := mk("Другой верх", "other-top", nil)
+	child := mk("Ребёнок", "child-cat", &top.ID)
+
+	// Перенос под другого родителя действительно применяется.
+	patch(child.ID, map[string]any{"title": "Ребёнок", "slug": "child-cat", "parent_id": other.ID}, http.StatusOK)
+	var list []categoryResp
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/categories", nil, http.StatusOK, &list)
+	for _, cat := range list {
+		if cat.ID != child.ID {
+			continue
+		}
+		if cat.ParentID == nil || *cat.ParentID != other.ID {
+			t.Fatalf("родитель не сменился: %v", cat.ParentID)
+		}
+	}
+
+	// Сама себе родитель — цикл.
+	patch(top.ID, map[string]any{"title": "Верх", "slug": "top-cat", "parent_id": top.ID}, http.StatusBadRequest)
+
+	// Категория с детьми не может уехать на второй уровень: дети окажутся
+	// на третьем.
+	grand := mk("Внук", "grand-cat", &other.ID)
+	_ = grand
+	patch(other.ID, map[string]any{"title": "Другой верх", "slug": "other-top", "parent_id": top.ID}, http.StatusBadRequest)
+
+	// Родителем не может стать вложенная категория.
+	patch(top.ID, map[string]any{"title": "Верх", "slug": "top-cat", "parent_id": child.ID}, http.StatusBadRequest)
+}

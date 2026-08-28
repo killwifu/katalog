@@ -86,31 +86,9 @@ func (a *API) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parentID uuid.NullUUID
-	if req.ParentID != nil && *req.ParentID != "" {
-		pid, err := uuid.Parse(*req.ParentID)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, "invalid_parent", "invalid parent_id")
-			return
-		}
-		parent, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{
-			ID:     pid,
-			ShopID: shop.ID,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			apiError(w, http.StatusNotFound, "not_found", "parent category not found")
-			return
-		}
-		if err != nil {
-			a.internalError(w, "load parent category", err)
-			return
-		}
-		// Максимум 2 уровня — как у альбомов: родитель сам не может быть вложенным.
-		if parent.ParentID.Valid {
-			apiError(w, http.StatusBadRequest, "too_deep", "categories can be nested at most 2 levels")
-			return
-		}
-		parentID = uuid.NullUUID{UUID: pid, Valid: true}
+	parentID, ok := a.resolveCategoryParent(w, r, req.ParentID, uuid.Nil)
+	if !ok {
+		return
 	}
 
 	cat, err := a.Q.CreateCategory(r.Context(), db.CreateCategoryParams{
@@ -130,6 +108,58 @@ func (a *API) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusCreated, toCategoryResponse(cat))
+}
+
+// resolveCategoryParent разбирает parent_id из запроса. self — id категории,
+// которую правим (uuid.Nil при создании): она не может стать ни собственным
+// родителем, ни, будучи родителем сама, уехать на второй уровень — иначе
+// её дети окажутся на третьем.
+func (a *API) resolveCategoryParent(
+	w http.ResponseWriter, r *http.Request, raw *string, self uuid.UUID,
+) (uuid.NullUUID, bool) {
+	if raw == nil || *raw == "" {
+		return uuid.NullUUID{}, true
+	}
+	shop := shopFromCtx(r)
+	pid, err := uuid.Parse(*raw)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, "invalid_parent", "invalid parent_id")
+		return uuid.NullUUID{}, false
+	}
+	if self != uuid.Nil && pid == self {
+		apiError(w, http.StatusBadRequest, "invalid_parent", "category cannot be its own parent")
+		return uuid.NullUUID{}, false
+	}
+	parent, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{
+		ID:     pid,
+		ShopID: shop.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		apiError(w, http.StatusNotFound, "not_found", "parent category not found")
+		return uuid.NullUUID{}, false
+	}
+	if err != nil {
+		a.internalError(w, "load parent category", err)
+		return uuid.NullUUID{}, false
+	}
+	// Максимум 2 уровня — как у альбомов: родитель сам не может быть вложенным.
+	if parent.ParentID.Valid {
+		apiError(w, http.StatusBadRequest, "too_deep", "categories can be nested at most 2 levels")
+		return uuid.NullUUID{}, false
+	}
+	if self != uuid.Nil {
+		children, err := a.Q.CountCategoryChildren(r.Context(), uuid.NullUUID{UUID: self, Valid: true})
+		if err != nil {
+			a.internalError(w, "count category children", err)
+			return uuid.NullUUID{}, false
+		}
+		if children > 0 {
+			apiError(w, http.StatusBadRequest, "too_deep",
+				"category has subcategories and cannot itself be nested")
+			return uuid.NullUUID{}, false
+		}
+	}
+	return uuid.NullUUID{UUID: pid, Valid: true}, true
 }
 
 func (a *API) handleListCategories(w http.ResponseWriter, r *http.Request) {
@@ -158,12 +188,17 @@ func (a *API) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 	if !validateCategory(w, &req) {
 		return
 	}
+	parentID, ok := a.resolveCategoryParent(w, r, req.ParentID, id)
+	if !ok {
+		return
+	}
 	cat, err := a.Q.UpdateCategory(r.Context(), db.UpdateCategoryParams{
 		ID:        id,
 		ShopID:    shop.ID,
 		Title:     req.Title,
 		Slug:      req.Slug,
 		SortOrder: req.SortOrder,
+		ParentID:  parentID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusNotFound, "not_found", "category not found")

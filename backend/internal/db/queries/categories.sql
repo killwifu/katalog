@@ -18,9 +18,15 @@ UPDATE categories
 SET title      = $3,
     slug       = $4,
     sort_order = $5,
+    parent_id  = $6,
     updated_at = now()
 WHERE id = $1 AND shop_id = $2
 RETURNING *;
+
+-- Есть ли у категории дети: родителем можно назначить только ту,
+-- у которой их нет, иначе получится третий уровень.
+-- name: CountCategoryChildren :one
+SELECT count(*) FROM categories WHERE parent_id = $1;
 
 -- name: DeleteCategory :execrows
 DELETE FROM categories

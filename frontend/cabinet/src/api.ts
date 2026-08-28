@@ -278,7 +278,11 @@ export const api = {
     request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
-  updateAlbum: (shopId: string, albumId: string, patch: { title?: string; description?: string }) =>
+  updateAlbum: (
+    shopId: string,
+    albumId: string,
+    patch: { title?: string; description?: string; cover_photo_id?: string },
+  ) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, patch),
   setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
@@ -317,11 +321,22 @@ export const api = {
       slug,
       ...(parentId ? { parent_id: parentId } : {}),
     }),
-  updateCategory: (shopId: string, id: string, title: string, slug: string, sortOrder = 0) =>
+  // parentId: null — вынести на верхний уровень, undefined — не трогать
+  // (сервер трактует отсутствующее поле как «без родителя», поэтому шлём
+  // текущее значение явно).
+  updateCategory: (
+    shopId: string,
+    id: string,
+    title: string,
+    slug: string,
+    parentId: string | null = null,
+    sortOrder = 0,
+  ) =>
     request<Category>('PATCH', `/shops/${shopId}/categories/${id}`, {
       title,
       slug,
       sort_order: sortOrder,
+      ...(parentId ? { parent_id: parentId } : {}),
     }),
   // moveTo пустой — альбомы останутся без категории, но не удалятся.
   deleteAlbum: (shopId: string, id: string) =>

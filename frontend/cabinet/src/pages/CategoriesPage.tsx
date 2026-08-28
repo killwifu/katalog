@@ -60,8 +60,8 @@ export function CategoriesPage() {
   // Переименование: опечатку в названии иначе можно было исправить только
   // удалением категории — а это ещё и перекладывание всех её альбомов.
   const rename = useMutation({
-    mutationFn: ({ id, title, slug }: { id: string; title: string; slug: string }) =>
-      api.updateCategory(shop.id, id, title, slug),
+    mutationFn: ({ id, title, slug, parentId }: { id: string; title: string; slug: string; parentId: string | null }) =>
+      api.updateCategory(shop.id, id, title, slug, parentId),
     onSuccess: () => {
       setError('')
       void refresh()
@@ -170,19 +170,22 @@ function Row({
   all: Category[]
   count: number
   onDelete: (v: { id: string; moveTo?: string }) => void
-  onRename: (v: { id: string; title: string; slug: string }) => void
+  onRename: (v: { id: string; title: string; slug: string; parentId: string | null }) => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const [moveTo, setMoveTo] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
+  const [editParent, setEditParent] = useState<string>(category.parent_id ?? '')
   const targets = all.filter((c) => c.id !== category.id && !c.parent_id)
+  const hasChildren = all.some((c) => c.parent_id === category.id)
 
   // Адрес категории при переименовании не трогаем: по нему уже могли
   // разойтись ссылки, и менять его молча нельзя.
   const submitRename = () => {
     const title = (editing ?? '').trim()
-    if (title && title !== category.title) {
-      onRename({ id: category.id, title, slug: category.slug })
+    const parentId = editParent || null
+    if (title && (title !== category.title || parentId !== (category.parent_id ?? null))) {
+      onRename({ id: category.id, title, slug: category.slug, parentId })
     }
     setEditing(null)
   }
@@ -199,9 +202,28 @@ function Row({
             if (e.key === 'Escape') setEditing(null)
           }}
           maxLength={100}
-          className="inp flex-1"
+          /* basis, а не просто flex-1: иначе на узком экране поле сжимается
+             до пары букв, вместо того чтобы уехать на свою строку. */
+          className="inp flex-1 basis-48"
           aria-label="Название категории"
         />
+        {/* Категорию с подкатегориями вложить нельзя — дети окажутся
+            на третьем уровне, а их всего два. */}
+        {!hasChildren && (
+          <select
+            value={editParent}
+            onChange={(e) => setEditParent(e.target.value)}
+            className="inp !w-auto max-w-56"
+            aria-label="Родительская категория"
+          >
+            <option value="">Верхний уровень</option>
+            {targets.map((c) => (
+              <option key={c.id} value={c.id}>
+                Внутри «{c.title}»
+              </option>
+            ))}
+          </select>
+        )}
         <button onClick={submitRename} className="btn btn--primary btn--sm">
           Сохранить
         </button>
