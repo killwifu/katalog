@@ -88,6 +88,14 @@ export function AlbumPage() {
     },
   })
 
+  const setCover = useMutation({
+    mutationFn: (photoId: string) =>
+      api.updateAlbum(shop.id, albumId, { cover_photo_id: photoId }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
+    },
+  })
+
   const setStatus = useMutation({
     mutationFn: (status: AlbumStatus) => api.setAlbumStatus(shop.id, albumId, status),
     onSuccess: () => {
@@ -224,7 +232,13 @@ export function AlbumPage() {
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
         {photos.data?.photos.map((p) => (
-          <PhotoTile key={p.id} photo={p} onDelete={() => remove.mutate(p.id)} />
+          <PhotoTile
+            key={p.id}
+            photo={p}
+            isCover={album?.cover_photo_id === p.id}
+            onSetCover={() => setCover.mutate(p.id)}
+            onDelete={() => remove.mutate(p.id)}
+          />
         ))}
       </div>
 
@@ -255,7 +269,17 @@ export function AlbumPage() {
   )
 }
 
-function PhotoTile({ photo, onDelete }: { photo: Photo; onDelete: () => void }) {
+function PhotoTile({
+  photo,
+  onDelete,
+  onSetCover,
+  isCover,
+}: {
+  photo: Photo
+  onDelete: () => void
+  onSetCover: () => void
+  isCover: boolean
+}) {
   return (
     <figure className="group relative overflow-hidden rounded-lg border border-line bg-white">
       <div className="aspect-square bg-surface-alt">
@@ -277,10 +301,22 @@ function PhotoTile({ photo, onDelete }: { photo: Photo; onDelete: () => void }) 
       {photo.caption && (
         <figcaption className="truncate px-2 py-1 text-xs text-ink-2">{photo.caption}</figcaption>
       )}
+      {/* Обложка — то, что покупатель видит в сетке альбомов. Без выбора
+          ею всегда оказывалось первое загруженное фото. */}
+      {photo.status === 'ready' && (
+        <button
+          onClick={onSetCover}
+          title={isCover ? 'Это обложка альбома' : 'Сделать обложкой'}
+          disabled={isCover}
+          className="photo-tile__act absolute top-1 left-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block disabled:opacity-100"
+        >
+          {isCover ? '★' : '☆'}
+        </button>
+      )}
       <button
         onClick={onDelete}
         title="Удалить"
-        className="absolute top-1 right-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block"
+        className="photo-tile__act absolute top-1 right-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block"
       >
         ✕
       </button>

@@ -157,7 +157,7 @@ select.inp { appearance: auto; }
      цель не попадает, а промах рядом с удалением стоит альбома.
      Растёт область нажатия, вид кнопки не меняется.
      Внутренности Uppy не трогаем: у дашборда своя раскладка. */
-  .app button:not([class*="uppy"]) {
+  .app button:not([class*="uppy"]):not(.hidden) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -169,6 +169,12 @@ select.inp { appearance: auto; }
      зоне загрузки: input[type=file] скрыт, а перетаскивать на телефоне
      нечем. Выходила 138×17 при зоне 408×260. Массовая загрузка с
      телефона — ядро продукта, мимо этой кнопки промахиваться нельзя. */
+  /* Действия на плитке фото открываются по наведению, а на телефоне
+     наводить нечем — там показываем их всегда. */
+  .photo-tile__act {
+    display: inline-flex !important;
+  }
+
   .app .uppy-Dashboard-browse {
     display: inline-flex;
     align-items: center;

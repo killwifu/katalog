@@ -278,7 +278,11 @@ export const api = {
     request<Shop>('PATCH', `/shops/${shopId}`, { settings }),
 
   listAlbums: (shopId: string) => request<Album[]>('GET', `/shops/${shopId}/albums`),
-  updateAlbum: (shopId: string, albumId: string, patch: { title?: string; description?: string }) =>
+  updateAlbum: (
+    shopId: string,
+    albumId: string,
+    patch: { title?: string; description?: string; cover_photo_id?: string },
+  ) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, patch),
   setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
