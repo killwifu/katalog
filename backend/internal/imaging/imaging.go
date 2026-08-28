@@ -194,6 +194,17 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 	if opacity > 1 {
 		opacity = 1
 	}
+	// Геометрия подписи обязана уместиться в кадр. Внутри govips маска
+	// текста встраивается в холст размером (текст + смещение), а затем
+	// ifthenelse берёт наибольший из входов: если смещение плюс высота
+	// текста вылезают за картинку, растёт сама картинка. С Height 0.92
+	// и OffsetY 0.88 квадрат 400×400 превращался в 400×626 — покупатель
+	// видел пустую полосу под фотографией, а вёрстка ехала на неверном
+	// соотношении сторон.
+	//
+	// Держим сумму меньше единицы по обеим осям. Заодно Height задаёт
+	// autofit в vips_text: текст масштабируется под коробку, поэтому
+	// именно он, а не Font, определяет итоговый размер букв.
 	return img.Label(&vips.LabelParams{
 		// libvips отдаёт текст в Pango как разметку: «Обувь & сумки» или
 		// «цена < 5000» — это невалидный markup, и знак не просто не
@@ -201,12 +212,21 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 		// навсегда останавливал загрузку фотографий магазина.
 		Text:      html.EscapeString(wm.Text),
 		Font:      fmt.Sprintf("sans %d", fontSize),
-		Width:     vips.Scalar{Value: 0.92, Relative: true},
-		Height:    vips.Scalar{Value: 0.92, Relative: true},
-		OffsetX:   vips.Scalar{Value: 0.04, Relative: true},
-		OffsetY:   vips.Scalar{Value: 0.88, Relative: true},
+		Width:     vips.Scalar{Value: watermarkBoxW, Relative: true},
+		Height:    vips.Scalar{Value: watermarkBoxH, Relative: true},
+		OffsetX:   vips.Scalar{Value: watermarkOffsetX, Relative: true},
+		OffsetY:   vips.Scalar{Value: watermarkOffsetY, Relative: true},
 		Opacity:   float32(opacity),
 		Color:     vips.Color{R: 255, G: 255, B: 255},
 		Alignment: vips.AlignLow,
 	})
 }
+
+// Коробка подписи и её смещение, в долях стороны кадра.
+// Инварианты: offsetX+boxW <= 1 и offsetY+boxH <= 1.
+const (
+	watermarkBoxW    = 0.92
+	watermarkBoxH    = 0.08
+	watermarkOffsetX = 0.04
+	watermarkOffsetY = 0.88
+)
