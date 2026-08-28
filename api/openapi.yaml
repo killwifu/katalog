@@ -935,6 +935,11 @@ paths:
   /api/v1/shops/{shopID}/categories/{categoryID}:
     patch:
       operationId: updateCategory
+      summary: Переименовать категорию или сменить родителя
+      description: >
+        parent_id применяется: отсутствующее или пустое поле означает верхний
+        уровень. 400 (too_deep), если родитель сам вложен или у категории есть
+        подкатегории — уровней всего два.
       parameters:
         - $ref: "#/components/parameters/ShopID"
         - name: categoryID
@@ -952,6 +957,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: slug уже занят в этом магазине
