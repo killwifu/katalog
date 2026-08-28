@@ -171,7 +171,14 @@ paths:
                 slug: { type: string, minLength: 3, maxLength: 63 }
                 name: { type: string, maxLength: 200 }
                 description: { type: string }
-                contacts: { type: object }
+                contacts:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: >
+                    Каналы связи: telegram, whatsapp, vk, max. Значение —
+                    ник или, для vk и max, полная ссылка на сам мессенджер
+                    (vk.me, vk.com, m.vk.com / max.ru, m.max.ru). Ссылка на
+                    любой другой хост отклоняется (invalid_contacts).
       responses:
         "201":
           description: Магазин создан
