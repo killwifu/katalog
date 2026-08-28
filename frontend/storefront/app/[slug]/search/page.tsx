@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getShopPage, searchPhotos } from '@/lib/api'
+import { getShopPage, loadOrUnavailable, searchPhotos } from '@/lib/api'
+import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
@@ -51,7 +52,9 @@ export default async function SearchPage({ params, searchParams }: Props) {
   const { slug } = params
   const q = (searchParams.q ?? '').trim().slice(0, 100)
 
-  const shopData = await getShopPage(slug)
+  const res = await loadOrUnavailable(() => getShopPage(slug))
+  if (!res.ok) return <ShopUnavailable payload={res.payload} />
+  const shopData = res.data
   if (!shopData) notFound()
   const { shop } = shopData
 

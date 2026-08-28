@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getShopPage, getTabSections } from '@/lib/api'
+import { getShopPage, getTabSections, loadOrUnavailable } from '@/lib/api'
+import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { ShopHeader } from '@/components/ShopHeader'
 import { ShopTabs } from '@/components/ShopTabs'
 import { AlbumGrid } from '@/components/AlbumGrid'
@@ -17,7 +18,9 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, tabSlug } = params
-  const data = await getShopPage(slug)
+  const res = await loadOrUnavailable(() => getShopPage(slug))
+  if (!res.ok) return { title: `${res.payload.shop.name} — каталог временно недоступен` }
+  const data = res.data
   const tab = data?.tabs.find((t) => t.slug === tabSlug)
   if (!data || !tab) return { title: 'Раздел не найден' }
   return {
@@ -28,7 +31,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function TabPage({ params }: Props) {
   const { slug, tabSlug } = params
-  const [data, sections] = await Promise.all([getShopPage(slug), getTabSections(slug, tabSlug)])
+  const res = await loadOrUnavailable(() =>
+    Promise.all([getShopPage(slug), getTabSections(slug, tabSlug)]),
+  )
+  if (!res.ok) return <ShopUnavailable payload={res.payload} />
+  const [data, sections] = res.data
   if (!data || !sections) notFound()
   const tab = data.tabs.find((t) => t.slug === tabSlug)
   if (!tab) notFound()
