@@ -35,11 +35,13 @@ export function ContactsPage() {
     },
   })
 
-  if (current.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (current.isError) return <p className="text-danger">Не удалось загрузить контакты.</p>
-
+  // Хук до ранних return: иначе на втором рендере порядок хуков меняется
+  // и страница падает целиком (React #310).
   const dirty = draft !== null || settingsDraft !== null
   useUnsavedGuard(dirty)
+
+  if (current.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (current.isError) return <p className="text-danger">Не удалось загрузить контакты.</p>
 
   const filled = CHANNELS.filter((c) => (contacts[c.key] ?? '').trim())
   const submit = (e: FormEvent) => {

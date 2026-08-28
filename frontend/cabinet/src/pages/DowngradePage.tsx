@@ -27,6 +27,10 @@ export function DowngradePage() {
 
   const [strategy, setStrategy] = useState<Strategy>('viewed')
   const [manual, setManual] = useState<string[] | null>(null)
+  // Ручной выбор — это несколько минут работы при большом числе альбомов,
+  // терять его при случайном переходе нельзя. Хук стоит до ранних return
+  // ниже: порядок хуков обязан совпадать на всех рендерах (React #310).
+  useUnsavedGuard(manual !== null)
 
   const save = useMutation({
     mutationFn: (ids: string[]) => api.applyDowngrade(shop.id, ids),
@@ -53,10 +57,6 @@ export function DowngradePage() {
   const selectedPhotos = albums
     .filter((a) => selected.includes(a.id))
     .reduce((n, a) => n + a.photo_count, 0)
-
-  // Ручной выбор — это несколько минут работы при большом числе альбомов,
-  // терять его при случайном переходе нельзя.
-  useUnsavedGuard(manual !== null)
 
   const toggle = (id: string) =>
     setManual((prev) => {
