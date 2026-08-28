@@ -44,6 +44,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
+  // Сессия могла кончиться на уже открытой странице: beforeLoad маршрута
+  // отрабатывает только при переходе, а запросы после этого возвращают 401
+  // и продавец остаётся на экране «Не удалось загрузить данные», не понимая,
+  // что его просто разлогинило. Формы входа это не касается — там 401
+  // означает неверный пароль.
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    // Подсказка «сессия есть» не httpOnly и живёт своим сроком: без
+    // сброса публичные страницы продолжат звать в кабинет.
+    document.cookie = 'katalog_signed=; Path=/; Max-Age=0'
+    location.assign('/app/login')
+  }
   if (res.status === 204) return undefined as T
   const data: unknown = await res.json().catch(() => ({}))
   if (!res.ok) {
