@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import styles from './site.module.css'
 
 // Шапка публичных страниц. Активный пункт определяется по пути,
@@ -17,6 +17,16 @@ const NAV = [
 export function SiteHeader() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  // Страница статическая и отдаётся из кеша всем одинаково, поэтому о сессии
+  // она узнать не может. Читаем маркер, который сервер кладёт рядом с сессией
+  // при входе и снимает при выходе, — запроса к API это не стоит.
+  //
+  // Значение по умолчанию «не вошёл»: до гидратации разметка совпадает
+  // с серверной, иначе React ругнётся на несовпадение.
+  const [signedIn, setSignedIn] = useState(false)
+  useEffect(() => {
+    setSignedIn(document.cookie.split('; ').some((c) => c.startsWith('katalog_signed=')))
+  }, [])
 
   return (
     <header className={styles.head}>
@@ -50,12 +60,20 @@ export function SiteHeader() {
         </nav>
 
         <div className={styles.right}>
-          <a className={styles.login} href="/app/login">
-            Войти
-          </a>
-          <a className="btn btn--light btn--sm" href="/app/register">
-            Создать витрину
-          </a>
+          {signedIn ? (
+            <a className="btn btn--light btn--sm" href="/app/">
+              Кабинет
+            </a>
+          ) : (
+            <>
+              <a className={styles.login} href="/app/login">
+                Войти
+              </a>
+              <a className="btn btn--light btn--sm" href="/app/register">
+                Создать витрину
+              </a>
+            </>
+          )}
         </div>
       </div>
 
@@ -69,8 +87,14 @@ export function SiteHeader() {
             {item.label}
           </a>
         ))}
-        <a href="/app/login">Войти</a>
-        <a href="/app/register">Создать витрину</a>
+        {signedIn ? (
+          <a href="/app/">Кабинет</a>
+        ) : (
+          <>
+            <a href="/app/login">Войти</a>
+            <a href="/app/register">Создать витрину</a>
+          </>
+        )}
       </nav>
     </header>
   )

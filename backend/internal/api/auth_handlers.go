@@ -117,6 +117,7 @@ func (a *API) handleLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.SetCookie(w, a.sessionCookie("", -1))
+	http.SetCookie(w, a.signedHintCookie("", -1))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -136,6 +137,7 @@ func (a *API) startSession(w http.ResponseWriter, r *http.Request, user db.User)
 		return false
 	}
 	http.SetCookie(w, a.sessionCookie(token, int(a.Cfg.SessionTTL.Seconds())))
+	http.SetCookie(w, a.signedHintCookie("1", int(a.Cfg.SessionTTL.Seconds())))
 	return true
 }
 
@@ -146,6 +148,20 @@ func (a *API) sessionCookie(value string, maxAge int) *http.Cookie {
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
+		Secure:   a.Cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+// signedHintCookie — маркер для публичных страниц: httpOnly у него нет
+// намеренно, иначе скрипт шапки его не прочитает. Значение — просто "1".
+func (a *API) signedHintCookie(value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     auth.SignedHintCookie,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: false,
 		Secure:   a.Cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	}
