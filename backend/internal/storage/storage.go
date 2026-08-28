@@ -140,8 +140,16 @@ func (c *Client) RemoveShop(ctx context.Context, shopID uuid.UUID) error {
 		objects := c.ops.ListObjects(ctx, c.bucket, minio.ListObjectsOptions{
 			Prefix: prefix, Recursive: true,
 		})
+		// Канал ошибок дочитываем до конца даже после первой: бросить его
+		// значит подвесить горутину minio-go, которая в него пишет.
+		var firstErr error
 		for err := range c.ops.RemoveObjects(ctx, c.bucket, objects, minio.RemoveObjectsOptions{}) {
-			return fmt.Errorf("remove %s: %w", err.ObjectName, err.Err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("remove %s: %w", err.ObjectName, err.Err)
+			}
+		}
+		if firstErr != nil {
+			return firstErr
 		}
 	}
 	return nil
