@@ -40,6 +40,7 @@ type publicShopResponse struct {
 	Description string          `json:"description"`
 	Contacts    json.RawMessage `json:"contacts"`
 	MsgTemplate string          `json:"msg_template"`
+	ReplyTime   string          `json:"reply_time,omitempty"`
 }
 
 type publicAlbumResponse struct {
@@ -80,9 +81,11 @@ func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
 }
 
 func toPublicShopResponse(s db.Shop) publicShopResponse {
-	// Из settings наружу уходит ТОЛЬКО шаблон сообщения.
+	// Из settings наружу уходит ТОЛЬКО то, что рисует витрина: шаблон
+	// сообщения и время ответа. Остальное — внутренние настройки продавца.
 	var settings struct {
 		MsgTemplate string `json:"msg_template"`
+		ReplyTime   string `json:"reply_time"`
 	}
 	_ = json.Unmarshal(s.Settings, &settings)
 	return publicShopResponse{
@@ -92,6 +95,7 @@ func toPublicShopResponse(s db.Shop) publicShopResponse {
 		Description: s.Description,
 		Contacts:    json.RawMessage(s.Contacts),
 		MsgTemplate: settings.MsgTemplate,
+		ReplyTime:   settings.ReplyTime,
 	}
 }
 

@@ -29,6 +29,11 @@ export function ShopHeader({ shop, showSearch = true }: { shop: ShopPublic; show
           ))}
         </div>
       )}
+      {/* Время ответа рядом с кнопками: покупатель не ждёт ответа ночью
+          и не считает, что продавец его игнорирует. */}
+      {channels.length > 0 && shop.reply_time && (
+        <p className="reply-time">{shop.reply_time}</p>
+      )}
       {showSearch && <SearchForm slug={shop.slug} />}
     </header>
   )

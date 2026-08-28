@@ -26,6 +26,7 @@ export function slugify(title: string): string {
 export function CategoriesPage() {
   const shop = useShop()
   const queryClient = useQueryClient()
+  const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const categories = useQuery({
     queryKey: ['categories', shop.id],
     queryFn: () => api.listCategories(shop.id),
@@ -64,6 +65,8 @@ export function CategoriesPage() {
   if (categories.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (categories.isError) return <p className="text-danger">Не удалось загрузить категории.</p>
 
+  const albumCount = (categoryId: string) =>
+    (albums.data ?? []).filter((a) => a.category_id === categoryId).length
   const roots = categories.data.filter((c) => !c.parent_id)
   const children = (id: string) => categories.data.filter((c) => c.parent_id === id)
 
@@ -124,12 +127,12 @@ export function CategoriesPage() {
         <ul className="divide-y divide-line rounded border border-line">
           {roots.map((c) => (
             <li key={c.id}>
-              <Row category={c} all={categories.data} onDelete={remove.mutate} />
+              <Row category={c} all={categories.data} count={albumCount(c.id)} onDelete={remove.mutate} />
               {children(c.id).length > 0 && (
                 <ul className="border-t border-line bg-surface-alt pl-6">
                   {children(c.id).map((sub) => (
                     <li key={sub.id}>
-                      <Row category={sub} all={categories.data} onDelete={remove.mutate} />
+                      <Row category={sub} all={categories.data} count={albumCount(sub.id)} onDelete={remove.mutate} />
                     </li>
                   ))}
                 </ul>
@@ -147,10 +150,12 @@ export function CategoriesPage() {
 function Row({
   category,
   all,
+  count,
   onDelete,
 }: {
   category: Category
   all: Category[]
+  count: number
   onDelete: (v: { id: string; moveTo?: string }) => void
 }) {
   const [confirming, setConfirming] = useState(false)
@@ -159,8 +164,12 @@ function Row({
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-      <span className="flex-1 text-sm text-ink">{category.title}</span>
-      <code className="text-xs text-ink-3">/{category.slug}</code>
+      <span className="rows__main">
+        <b>{category.title}</b>
+        <span className="rows__meta">
+          /{category.slug} · {count} {count === 1 ? 'альбом' : 'альбомов'}
+        </span>
+      </span>
       {confirming ? (
         <>
           <select

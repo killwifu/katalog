@@ -305,3 +305,35 @@ func TestPublicSitemap(t *testing.T) {
 		t.Errorf("sitemap does not contain %s", shop.Slug)
 	}
 }
+
+// TestReplyTimeVisibility: время ответа — единственная настройка помимо
+// шаблона сообщения, которая уходит покупателю. Проверяем, что она доезжает
+// и что вместе с ней не утекает остальное содержимое settings.
+func TestReplyTimeVisibility(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID, map[string]any{
+		"settings": map[string]any{
+			"reply_time":   "Отвечаю с 10:00 до 22:00",
+			"msg_template": "Интересует {caption}",
+			"watermark":    map[string]any{"enabled": true, "text": "@secret"},
+		},
+	}, http.StatusOK, &struct{}{})
+
+	var page struct {
+		Shop map[string]any `json:"shop"`
+	}
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug, nil, http.StatusOK, &page)
+
+	if page.Shop["reply_time"] != "Отвечаю с 10:00 до 22:00" {
+		t.Errorf("время ответа не доехало: %v", page.Shop["reply_time"])
+	}
+	// Водяной знак — внутренняя настройка продавца, наружу ей нечего делать.
+	for _, leaked := range []string{"watermark", "settings"} {
+		if _, ok := page.Shop[leaked]; ok {
+			t.Errorf("наружу утекло %q: %v", leaked, page.Shop)
+		}
+	}
+}

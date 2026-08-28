@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { api, type ShopContacts } from '../api'
+import { api, type ShopContacts, type ShopSettings } from '../api'
 import { useShop } from './AppLayout'
 
 // Каналы в том же порядке, в каком витрина рисует кнопки покупателю.
@@ -17,12 +17,18 @@ export function ContactsPage() {
   const current = useQuery({ queryKey: ['shop', shop.id], queryFn: () => api.getShop(shop.id) })
 
   const [draft, setDraft] = useState<ShopContacts | null>(null)
+  const [settingsDraft, setSettingsDraft] = useState<ShopSettings | null>(null)
   const contacts = draft ?? current.data?.contacts ?? {}
+  const settings = settingsDraft ?? current.data?.settings ?? {}
 
   const save = useMutation({
-    mutationFn: () => api.updateContacts(shop.id, contacts),
+    mutationFn: async () => {
+      if (draft !== null) await api.updateContacts(shop.id, contacts)
+      if (settingsDraft !== null) await api.updateSettings(shop.id, settings)
+    },
     onSuccess: () => {
       setDraft(null)
+      setSettingsDraft(null)
       void queryClient.invalidateQueries({ queryKey: ['shop', shop.id] })
       void queryClient.invalidateQueries({ queryKey: ['shops'] })
     },
@@ -69,7 +75,25 @@ export function ContactsPage() {
             </label>
           ))}
 
-          <button type="submit" className="btn btn--primary btn--block-mobile" disabled={draft === null || save.isPending}>
+          <label className="field">
+            <span>Когда отвечаете</span>
+            <input
+              className="inp"
+              value={settings.reply_time ?? ''}
+              onChange={(e) => setSettingsDraft({ ...settings, reply_time: e.target.value })}
+              placeholder="Отвечаю с 10:00 до 22:00"
+              maxLength={100}
+            />
+            <p className="hint">
+              Покажется рядом с кнопкой «Написать». Помогает покупателю не ждать ответа ночью.
+            </p>
+          </label>
+
+          <button
+            type="submit"
+            className="btn btn--primary btn--block-mobile"
+            disabled={(draft === null && settingsDraft === null) || save.isPending}
+          >
             {save.isPending ? 'Сохраняю…' : 'Сохранить'}
           </button>
           {save.isError && <p className="hint text-danger">Не удалось сохранить.</p>}
