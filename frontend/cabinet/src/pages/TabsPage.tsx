@@ -257,6 +257,9 @@ function SectionBlock({
           Удалить
         </button>
       </div>
+      {(save.isError || remove.isError) && (
+        <p className="mb-2 text-xs text-danger">{errorText(save.error ?? remove.error!)}</p>
+      )}
       {albums.length === 0 ? (
         <p className="text-xs text-ink-2">Сначала создайте альбомы.</p>
       ) : (

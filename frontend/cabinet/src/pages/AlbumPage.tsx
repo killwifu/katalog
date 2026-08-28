@@ -101,6 +101,12 @@ export function AlbumPage() {
             <option value="unlisted">По ссылке</option>
             <option value="draft">Черновик</option>
           </select>
+          {/* Селект сам вернётся к прежнему значению, но молча: без текста
+              продавец жмёт «Опубликован» ещё раз и не понимает, почему
+              альбом остаётся черновиком. */}
+          {setStatus.isError && (
+            <p className="hint text-danger">{errorText(setStatus.error)}</p>
+          )}
           <Link
             to="/albums/$albumId/captions"
             params={{ albumId }}
@@ -169,6 +175,7 @@ export function AlbumPage() {
 
       {photos.isPending && <p className="text-ink-2">Загрузка…</p>}
       {photos.isError && <p className="text-danger">Не удалось загрузить фото.</p>}
+      {remove.isError && <p className="text-danger">{errorText(remove.error)}</p>}
 
       {photos.data && photos.data.total === 0 && (
         <p className="text-ink-2">В альбоме пока нет фото — загрузите пачку выше.</p>

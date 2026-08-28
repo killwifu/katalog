@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { api, type DowngradeAlbum } from '../api'
+import { api, errorText, type DowngradeAlbum } from '../api'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
@@ -159,6 +159,7 @@ export function DowngradePage() {
         </Link>
       </div>
       {save.isSuccess && <p className="hint">Выбор сохранён. Изменить можно в любой момент.</p>}
+      {save.isError && <p className="hint text-danger">{errorText(save.error)}</p>}
       </>
       )}
 
