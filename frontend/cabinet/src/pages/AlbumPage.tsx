@@ -52,6 +52,10 @@ export function AlbumPage() {
 
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const album = albums.data?.find((a) => a.id === albumId)
+  const categories = useQuery({
+    queryKey: ['categories', shop.id],
+    queryFn: () => api.listCategories(shop.id),
+  })
 
   // Название и описание: описание показывается покупателю над фотографиями
   // и это единственное место, где продавец объясняет условия покупки.
@@ -71,6 +75,15 @@ export function AlbumPage() {
     onSuccess: () => {
       setTitle(null)
       setDescription(null)
+      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
+    },
+  })
+
+  // Без этого категории оставались витриной без товара: создать их
+  // продавец мог, а положить туда альбом — нет.
+  const setCategory = useMutation({
+    mutationFn: (categoryId: string | null) => api.setAlbumCategory(shop.id, albumId, categoryId),
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
     },
   })
@@ -142,6 +155,30 @@ export function AlbumPage() {
             placeholder="Размеры, цена, условия отправки"
           />
           <p className="hint">Переносы строк сохранятся.</p>
+        </label>
+        <label className="field">
+          <span>Категория — по ней покупатель найдёт альбом в меню витрины</span>
+          <select
+            className="inp"
+            value={album?.category_id ?? ''}
+            onChange={(e) => setCategory.mutate(e.target.value || null)}
+            disabled={!album || setCategory.isPending}
+          >
+            <option value="">Без категории</option>
+            {(categories.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+          {categories.data?.length === 0 && (
+            <p className="hint">
+              Категорий пока нет — <Link to="/categories" className="underline">создайте первую</Link>.
+            </p>
+          )}
+          {setCategory.isError && (
+            <p className="hint text-danger">{errorText(setCategory.error)}</p>
+          )}
         </label>
         {infoDirty && (
           <button
