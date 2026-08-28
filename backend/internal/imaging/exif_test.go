@@ -29,34 +29,41 @@ func jpegWithEXIF(t *testing.T, w, h int) []byte {
 
 	var tiff bytes.Buffer
 	tiff.WriteString("II")
-	binary.Write(&tiff, binary.LittleEndian, uint16(42))
-	binary.Write(&tiff, binary.LittleEndian, uint32(8))
-	binary.Write(&tiff, binary.LittleEndian, uint16(2))
+	le(&tiff, uint16(42))
+	le(&tiff, uint32(8))
+	le(&tiff, uint16(2))
 
 	// 0x010E ImageDescription, ASCII, значение по смещению.
-	binary.Write(&tiff, binary.LittleEndian, uint16(0x010E))
-	binary.Write(&tiff, binary.LittleEndian, uint16(2))
-	binary.Write(&tiff, binary.LittleEndian, uint32(len(desc)))
-	binary.Write(&tiff, binary.LittleEndian, uint32(ifdEnd))
+	le(&tiff, uint16(0x010E))
+	le(&tiff, uint16(2))
+	le(&tiff, uint32(len(desc)))
+	le(&tiff, uint32(ifdEnd))
 
 	// 0x0112 Orientation, SHORT, значение в самой записи.
-	binary.Write(&tiff, binary.LittleEndian, uint16(0x0112))
-	binary.Write(&tiff, binary.LittleEndian, uint16(3))
-	binary.Write(&tiff, binary.LittleEndian, uint32(1))
-	binary.Write(&tiff, binary.LittleEndian, uint16(6))
-	binary.Write(&tiff, binary.LittleEndian, uint16(0))
+	le(&tiff, uint16(0x0112))
+	le(&tiff, uint16(3))
+	le(&tiff, uint32(1))
+	le(&tiff, uint16(6))
+	le(&tiff, uint16(0))
 
-	binary.Write(&tiff, binary.LittleEndian, uint32(0)) // следующего IFD нет
+	le(&tiff, uint32(0)) // следующего IFD нет
 	tiff.Write(desc)
 
 	payload := append([]byte("Exif\x00\x00"), tiff.Bytes()...)
 	var out bytes.Buffer
 	out.Write(src[:2])
 	out.Write([]byte{0xFF, 0xE1})
-	binary.Write(&out, binary.BigEndian, uint16(len(payload)+2))
+	if err := binary.Write(&out, binary.BigEndian, uint16(len(payload)+2)); err != nil {
+		t.Fatalf("write app1 length: %v", err)
+	}
 	out.Write(payload)
 	out.Write(src[2:])
 	return out.Bytes()
+}
+
+// le пишет значение в буфер: запись в bytes.Buffer ошибку вернуть не может.
+func le(buf *bytes.Buffer, v any) {
+	_ = binary.Write(buf, binary.LittleEndian, v)
 }
 
 // TestEXIFStrippedFromDerivatives — приватный инвариант из CLAUDE.md:
