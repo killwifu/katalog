@@ -311,6 +311,41 @@ func (a *API) handleAdminSuspendShop(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAdminUnsuspendShop — вернуть магазин на витрину. Обратного действия
+// не было вовсе: ошибочная блокировка означала мёртвый магазин без доступа
+// к базе, а продавец снять её не может и не должен.
+func (a *API) handleAdminUnsuspendShop(w http.ResponseWriter, r *http.Request) {
+	shopID, err := uuid.Parse(chi.URLParam(r, "shopID"))
+	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "shop not found")
+		return
+	}
+	req, ok := a.decodeAdminAction(w, r)
+	if !ok {
+		return
+	}
+	shop, err := a.Q.AdminUnsuspendShop(r.Context(), shopID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Либо магазина нет, либо он и не был заблокирован — снаружи
+		// эти случаи не различаем.
+		apiError(w, http.StatusNotFound, "not_found", "suspended shop not found")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "unsuspend shop", err)
+		return
+	}
+	a.auditLog(r.Context(), db.ModerationActionSuspendShop, db.CreateModerationLogParams{
+		ComplaintID: req.complaintID(),
+		ShopID:      uuid.NullUUID{UUID: shop.ID, Valid: true},
+		Note:        "снятие блокировки: " + req.Note,
+	}, r)
+	a.notifyShopOwner(r.Context(), shop.ID, "Katalog: магазин снова опубликован",
+		"блокировка снята, витрина снова доступна покупателям.")
+	a.Revalidate.Shop(shop.Slug)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type flaggedPhotoResponse struct {
 	ID       string `json:"id"`
 	ShopID   string `json:"shop_id"`

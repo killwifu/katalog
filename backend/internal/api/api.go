@@ -156,6 +156,7 @@ func (a *API) Router() http.Handler {
 				r.Post("/albums/{albumID}/hide", a.handleAdminHideAlbum)
 				r.Post("/albums/{albumID}/unhide", a.handleAdminUnhideAlbum)
 				r.Post("/shops/{shopID}/suspend", a.handleAdminSuspendShop)
+				r.Post("/shops/{shopID}/unsuspend", a.handleAdminUnsuspendShop)
 			})
 		})
 	})

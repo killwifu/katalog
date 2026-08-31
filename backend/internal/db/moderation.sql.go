@@ -226,6 +226,36 @@ func (q *Queries) AdminUnhideAlbum(ctx context.Context, id uuid.UUID) (Album, er
 	return i, err
 }
 
+const adminUnsuspendShop = `-- name: AdminUnsuspendShop :one
+UPDATE shops
+SET status = 'active', updated_at = now()
+WHERE id = $1 AND status = 'suspended'
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at
+`
+
+func (q *Queries) AdminUnsuspendShop(ctx context.Context, id uuid.UUID) (Shop, error) {
+	row := q.db.QueryRow(ctx, adminUnsuspendShop, id)
+	var i Shop
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.Contacts,
+		&i.Settings,
+		&i.Status,
+		&i.Plan,
+		&i.StorageUsed,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingState,
+		&i.PaidUntil,
+		&i.SlugChangedAt,
+	)
+	return i, err
+}
+
 const createComplaint = `-- name: CreateComplaint :one
 
 INSERT INTO complaints (shop_id, photo_id, reason, reporter_name, reporter_email, content_url)

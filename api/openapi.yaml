@@ -1417,6 +1417,26 @@ paths:
           description: Блокировка снята
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/admin/shops/{shopID}/unsuspend:
+    post:
+      operationId: adminUnsuspendShop
+      summary: Снять блокировку магазина (жалоба отклонена)
+      description: 404, если магазин не найден или не был заблокирован.
+      parameters:
+        - name: shopID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "204":
+          description: Блокировка снята
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/admin/shops/{shopID}/suspend:
     post:
       operationId: adminSuspendShop

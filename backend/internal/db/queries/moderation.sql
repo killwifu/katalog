@@ -62,6 +62,12 @@ SET blocked_by_moderator = false, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
+-- name: AdminUnsuspendShop :one
+UPDATE shops
+SET status = 'active', updated_at = now()
+WHERE id = $1 AND status = 'suspended'
+RETURNING *;
+
 -- name: AdminSuspendShop :one
 UPDATE shops
 SET status = 'suspended', updated_at = now()
