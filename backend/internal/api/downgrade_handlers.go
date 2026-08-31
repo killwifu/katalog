@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -79,6 +80,31 @@ func (a *API) handleApplyDowngrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		keep = append(keep, id)
+	}
+
+	// Выбор обязан помещаться в тариф. Кабинет это проверяет и блокирует
+	// кнопку, но лимит платный: единственный запрос со списком всех альбомов
+	// оставлял бы видимым весь каталог мимо тарифа.
+	rows, err := a.Q.ListAlbumsForDowngrade(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "list albums for downgrade", err)
+		return
+	}
+	kept := make(map[uuid.UUID]struct{}, len(keep))
+	for _, id := range keep {
+		kept[id] = struct{}{}
+	}
+	var keptPhotos int64
+	for _, row := range rows {
+		if _, ok := kept[row.ID]; ok {
+			keptPhotos += int64(row.PhotoCount)
+		}
+	}
+	limits := a.Cfg.Billing.Limits(string(shop.Plan))
+	if keptPhotos > limits.MaxPhotos {
+		apiError(w, http.StatusBadRequest, "over_limit",
+			fmt.Sprintf("selected albums hold %d photos, plan allows %d", keptPhotos, limits.MaxPhotos))
+		return
 	}
 
 	// Запрос ограничен shop_id, поэтому чужие id в списке просто ни на что
