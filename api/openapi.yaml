@@ -751,6 +751,32 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { description: slug уже занят в этом магазине }
 
+  /api/v1/shops/{shopID}/tabs/order:
+    put:
+      operationId: setTabOrder
+      summary: Задать порядок вкладок целиком
+      description: >
+        Порядок = порядок id в массиве. Чужие id ни на что не влияют —
+        запрос ограничен shop_id.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tab_ids]
+              properties:
+                tab_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Порядок сохранён
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/shops/{shopID}/tabs/{tabID}:
     patch:
       operationId: updateTab

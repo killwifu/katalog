@@ -287,6 +287,44 @@ func (a *API) handleDeleteSection(w http.ResponseWriter, r *http.Request) {
 // INSERT, так что без потолка один запрос может занять соединение надолго.
 const maxSectionAlbums = 500
 
+// handleSetTabOrder задаёт порядок вкладок целиком. Раньше кабинет менял
+// местами два sort_order двумя запросами: если второй не доезжал, у соседей
+// оставался одинаковый порядковый номер, а кабинет об этом не узнавал —
+// он обновлял список только при успехе.
+func (a *API) handleSetTabOrder(w http.ResponseWriter, r *http.Request) {
+	shop := shopFromCtx(r)
+	var req struct {
+		TabIDs []string `json:"tab_ids"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.TabIDs) > maxSectionAlbums {
+		apiError(w, http.StatusBadRequest, "too_many_tabs", "too many tabs")
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(req.TabIDs))
+	for _, raw := range req.TabIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, "invalid_tab", "invalid tab id")
+			return
+		}
+		ids = append(ids, id)
+	}
+	// Запрос ограничен shop_id: чужие id просто не совпадут ни с одной
+	// строкой и порядок не тронут.
+	if _, err := a.Q.SetTabOrder(r.Context(), db.SetTabOrderParams{
+		ShopID:  shop.ID,
+		Column2: ids,
+	}); err != nil {
+		a.internalError(w, "set tab order", err)
+		return
+	}
+	a.Revalidate.Shop(shop.Slug)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleSetSectionAlbums задаёт состав секции целиком: редактор перетаскивания
 // всё равно сохраняет и порядок, а замена списка проще пары add/remove.
 // Порядок в секции ручной, не по дате (kit).

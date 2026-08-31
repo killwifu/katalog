@@ -105,6 +105,7 @@ func (a *API) Router() http.Handler {
 					r.Route("/tabs", func(r chi.Router) {
 						r.Post("/", a.handleCreateTab)
 						r.Get("/", a.handleListTabs)
+						r.Put("/order", a.handleSetTabOrder)
 						r.Patch("/{tabID}", a.handleUpdateTab)
 						r.Delete("/{tabID}", a.handleDeleteTab)
 						r.Post("/{tabID}/sections", a.handleCreateSection)

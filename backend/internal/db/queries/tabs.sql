@@ -83,3 +83,11 @@ LEFT JOIN album_sections asec ON asec.section_id = s.id
 LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
 WHERE t.shop_id = $1 AND t.slug = $2
 ORDER BY s.sort_order, s.created_at, asec.sort_order;
+
+-- Порядок вкладок задаётся целиком одним запросом: обмен двумя апдейтами
+-- рвался посередине и оставлял у соседей одинаковый sort_order.
+-- name: SetTabOrder :execrows
+UPDATE tabs
+SET sort_order = data.ord, updated_at = now()
+FROM unnest($2::uuid[]) WITH ORDINALITY AS data(id, ord)
+WHERE tabs.id = data.id AND tabs.shop_id = $1;

@@ -40,17 +40,19 @@ export function TabsPage() {
   // ради переупорядочивания пяти вкладок не окупается. Если вкладок станет
   // много и порядок начнут менять часто, тогда и библиотека.
   const move = useMutation({
-    mutationFn: async ({ index, dir }: { index: number; dir: -1 | 1 }) => {
+    mutationFn: ({ index, dir }: { index: number; dir: -1 | 1 }) => {
       const list = [...(tabs.data ?? [])]
       const target = index + dir
-      if (target < 0 || target >= list.length) return
-      const [a, b] = [list[index], list[target]]
-      // Меняем местами именно порядковые номера: так соседи не разъезжаются,
-      // даже если в базе они шли не подряд.
-      await api.reorderTab(shop.id, a.id, a.title, b.sort_order)
-      await api.reorderTab(shop.id, b.id, b.title, a.sort_order)
+      if (target < 0 || target >= list.length) return Promise.resolve()
+      ;[list[index], list[target]] = [list[target], list[index]]
+      // Один запрос на весь порядок: два обмена подряд могли оборваться
+      // посередине, и кабинет об этом даже не узнавал.
+      return api.setTabOrder(shop.id, list.map((t) => t.id))
     },
-    onSuccess: refresh,
+    // Обновляем и при ошибке: иначе на экране остаётся порядок, которого
+    // на витрине нет.
+    onSettled: refresh,
+    onError: (e: Error) => setError(errorText(e)),
   })
 
   if (tabs.isPending || sections.isPending || albums.isPending)
