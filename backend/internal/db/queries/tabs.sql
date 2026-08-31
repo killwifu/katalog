@@ -80,6 +80,6 @@ SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_ord
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
-LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan
+LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
 WHERE t.shop_id = $1 AND t.slug = $2
 ORDER BY s.sort_order, s.created_at, asec.sort_order;

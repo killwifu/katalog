@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -346,5 +347,67 @@ func mustQueryRow(t *testing.T, sql string, dst any, args ...any) {
 	t.Helper()
 	if err := env.pool.QueryRow(context.Background(), sql, args...).Scan(dst); err != nil {
 		t.Fatalf("query %q: %v", sql, err)
+	}
+}
+
+// TestModeratorBlockSurvivesSeller: блокировка альбома модератором держится.
+// Раньше она была обычным статусом draft — то есть тем же полем, которым
+// управляет сам продавец, и тот возвращал альбом на витрину одним запросом.
+func TestModeratorBlockSurvivesSeller(t *testing.T) {
+	ctx := context.Background()
+	seller := newClient(t)
+	registerUser(seller)
+	shop := createShop(seller)
+	album := createAlbum(seller, shop.ID)
+
+	admin := newClient(t)
+	adminUser := registerUser(admin)
+	if _, err := env.pool.Exec(ctx,
+		`UPDATE users SET role = 'admin' WHERE id = $1`, adminUser.ID); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+
+	admin.mustJSON("POST", "/api/v1/admin/albums/"+album.ID+"/hide",
+		map[string]any{"note": "жалоба правообладателя"}, http.StatusNoContent, nil)
+
+	// Продавец пытается вернуть альбом на витрину.
+	seller.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID,
+		map[string]any{"status": "published"}, http.StatusOK, nil)
+
+	var page struct {
+		Albums []albumJSON `json:"albums"`
+	}
+	status, raw := seller.do("GET", "/api/v1/public/shops/"+shop.Slug, nil)
+	if status != http.StatusOK {
+		t.Fatalf("public shop: status %d; body: %s", status, raw)
+	}
+	if err := json.Unmarshal(raw, &page); err != nil {
+		t.Fatalf("decode public shop: %v", err)
+	}
+	for _, a := range page.Albums {
+		if a.ID == album.ID {
+			t.Fatal("альбом, заблокированный модератором, вернулся на витрину")
+		}
+	}
+
+	// Модератор может снять блокировку — жалоба бывает необоснованной.
+	admin.mustJSON("POST", "/api/v1/admin/albums/"+album.ID+"/unhide",
+		map[string]any{"note": "жалоба отклонена"}, http.StatusNoContent, nil)
+
+	status, raw = seller.do("GET", "/api/v1/public/shops/"+shop.Slug, nil)
+	if status != http.StatusOK {
+		t.Fatalf("public shop after unhide: status %d", status)
+	}
+	if err := json.Unmarshal(raw, &page); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var back bool
+	for _, a := range page.Albums {
+		if a.ID == album.ID {
+			back = true
+		}
+	}
+	if !back {
+		t.Fatal("после снятия блокировки альбом не вернулся")
 	}
 }

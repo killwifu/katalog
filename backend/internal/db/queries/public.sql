@@ -7,6 +7,7 @@ SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
 ORDER BY a.sort_order, a.created_at;
 
 -- Фолбэк обложки: первое ready-фото каждого альбома магазина
@@ -19,7 +20,8 @@ ORDER BY album_id, sort_order, created_at;
 
 -- name: GetPublicAlbum :one
 SELECT * FROM albums
-WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan;
+WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
+  AND NOT blocked_by_moderator;
 
 -- name: ListPublicPhotos :many
 SELECT * FROM photos
@@ -41,6 +43,7 @@ WHERE p.shop_id = $1
   AND p.status = 'ready'
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
   AND p.caption_tsv @@ websearch_to_tsquery('russian', $2)
 ORDER BY rank DESC, p.created_at DESC, p.id
 LIMIT $3;
@@ -56,6 +59,7 @@ WHERE p.shop_id = $1
   AND p.status = 'ready'
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
   AND word_similarity($2, p.caption) > 0.3
 ORDER BY sim DESC, p.created_at DESC, p.id
 LIMIT $3;

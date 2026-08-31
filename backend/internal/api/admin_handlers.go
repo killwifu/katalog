@@ -235,6 +235,49 @@ func (a *API) handleAdminHideAlbum(w http.ResponseWriter, r *http.Request) {
 	}, r)
 	a.notifyShopOwner(r.Context(), album.ShopID, "Katalog: альбом скрыт модератором",
 		fmt.Sprintf("по жалобе правообладателя альбом «%s» скрыт с витрины.", album.Title))
+	a.revalidateShopByID(r.Context(), album.ShopID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// revalidateShopByID — сбросить кеш витрины, когда под рукой только id.
+// Блокировка по жалобе должна пропадать с витрины сразу, а не через TTL.
+func (a *API) revalidateShopByID(ctx context.Context, shopID uuid.UUID) {
+	shop, err := a.Q.GetShopByID(ctx, shopID)
+	if err != nil {
+		a.Log.Warn("revalidate: load shop failed", "shop_id", shopID, "error", err)
+		return
+	}
+	a.Revalidate.Shop(shop.Slug)
+}
+
+// handleAdminUnhideAlbum — снятие блокировки: жалоба могла оказаться
+// необоснованной, а обратной ручки не было вовсе.
+func (a *API) handleAdminUnhideAlbum(w http.ResponseWriter, r *http.Request) {
+	albumID, err := uuid.Parse(chi.URLParam(r, "albumID"))
+	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "album not found")
+		return
+	}
+	req, ok := a.decodeAdminAction(w, r)
+	if !ok {
+		return
+	}
+	album, err := a.Q.AdminUnhideAlbum(r.Context(), albumID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		apiError(w, http.StatusNotFound, "not_found", "album not found")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "unhide album", err)
+		return
+	}
+	a.auditLog(r.Context(), db.ModerationActionHideAlbum, db.CreateModerationLogParams{
+		ComplaintID: req.complaintID(),
+		ShopID:      uuid.NullUUID{UUID: album.ShopID, Valid: true},
+		AlbumID:     uuid.NullUUID{UUID: album.ID, Valid: true},
+		Note:        "снятие блокировки: " + req.Note,
+	}, r)
+	a.revalidateShopByID(r.Context(), album.ShopID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

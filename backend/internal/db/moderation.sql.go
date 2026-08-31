@@ -47,11 +47,13 @@ func (q *Queries) AdminBlockPhoto(ctx context.Context, id uuid.UUID) (Photo, err
 
 const adminHideAlbum = `-- name: AdminHideAlbum :one
 UPDATE albums
-SET status = 'draft', updated_at = now()
+SET blocked_by_moderator = true, updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
 `
 
+// Блокировка альбома модератором — отдельным флагом, а не статусом:
+// статусом управляет продавец, и жалобу он снимал бы сам одним кликом.
 func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
 	row := q.db.QueryRow(ctx, adminHideAlbum, id)
 	var i Album
@@ -70,6 +72,7 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 		&i.Status,
 		&i.HiddenByPlan,
 		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }
@@ -189,6 +192,36 @@ func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, err
 		&i.BillingState,
 		&i.PaidUntil,
 		&i.SlugChangedAt,
+	)
+	return i, err
+}
+
+const adminUnhideAlbum = `-- name: AdminUnhideAlbum :one
+UPDATE albums
+SET blocked_by_moderator = false, updated_at = now()
+WHERE id = $1
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
+`
+
+func (q *Queries) AdminUnhideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
+	row := q.db.QueryRow(ctx, adminUnhideAlbum, id)
+	var i Album
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ParentID,
+		&i.Title,
+		&i.CoverPhotoID,
+		&i.SortOrder,
+		&i.PasswordHash,
+		&i.PhotoCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CategoryID,
+		&i.Status,
+		&i.HiddenByPlan,
+		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }

@@ -65,7 +65,7 @@ func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (in
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
 `
 
 type CreateAlbumParams struct {
@@ -98,6 +98,7 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.Status,
 		&i.HiddenByPlan,
 		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }
@@ -121,7 +122,7 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -149,12 +150,13 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.Status,
 		&i.HiddenByPlan,
 		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -183,6 +185,7 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.Status,
 			&i.HiddenByPlan,
 			&i.Description,
+			&i.BlockedByModerator,
 		); err != nil {
 			return nil, err
 		}
@@ -253,7 +256,7 @@ SET title          = $3,
     description    = $7,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
 `
 
 type UpdateAlbumParams struct {
@@ -292,6 +295,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.Status,
 		&i.HiddenByPlan,
 		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }
