@@ -1398,6 +1398,25 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/admin/albums/{albumID}/unhide:
+    post:
+      operationId: adminUnhideAlbum
+      summary: Снять блокировку альбома (жалоба отклонена)
+      parameters:
+        - name: albumID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "204":
+          description: Блокировка снята
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/admin/shops/{shopID}/suspend:
     post:
       operationId: adminSuspendShop

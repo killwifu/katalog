@@ -201,11 +201,11 @@ func (q *Queries) GetTabForShop(ctx context.Context, arg GetTabForShopParams) (T
 
 const listPublicSectionAlbums = `-- name: ListPublicSectionAlbums :many
 SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_order,
-       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description
+       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
-LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan
+LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
 WHERE t.shop_id = $1 AND t.slug = $2
 ORDER BY s.sort_order, s.created_at, asec.sort_order
 `
@@ -216,23 +216,24 @@ type ListPublicSectionAlbumsParams struct {
 }
 
 type ListPublicSectionAlbumsRow struct {
-	SectionID    uuid.UUID          `json:"section_id"`
-	SectionTitle string             `json:"section_title"`
-	SectionOrder int32              `json:"section_order"`
-	ID           uuid.NullUUID      `json:"id"`
-	ShopID       uuid.NullUUID      `json:"shop_id"`
-	ParentID     uuid.NullUUID      `json:"parent_id"`
-	Title        *string            `json:"title"`
-	CoverPhotoID uuid.NullUUID      `json:"cover_photo_id"`
-	SortOrder    pgtype.Int4        `json:"sort_order"`
-	PasswordHash *string            `json:"password_hash"`
-	PhotoCount   pgtype.Int4        `json:"photo_count"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CategoryID   uuid.NullUUID      `json:"category_id"`
-	Status       NullAlbumStatus    `json:"status"`
-	HiddenByPlan pgtype.Bool        `json:"hidden_by_plan"`
-	Description  *string            `json:"description"`
+	SectionID          uuid.UUID          `json:"section_id"`
+	SectionTitle       string             `json:"section_title"`
+	SectionOrder       int32              `json:"section_order"`
+	ID                 uuid.NullUUID      `json:"id"`
+	ShopID             uuid.NullUUID      `json:"shop_id"`
+	ParentID           uuid.NullUUID      `json:"parent_id"`
+	Title              *string            `json:"title"`
+	CoverPhotoID       uuid.NullUUID      `json:"cover_photo_id"`
+	SortOrder          pgtype.Int4        `json:"sort_order"`
+	PasswordHash       *string            `json:"password_hash"`
+	PhotoCount         pgtype.Int4        `json:"photo_count"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CategoryID         uuid.NullUUID      `json:"category_id"`
+	Status             NullAlbumStatus    `json:"status"`
+	HiddenByPlan       pgtype.Bool        `json:"hidden_by_plan"`
+	Description        *string            `json:"description"`
+	BlockedByModerator pgtype.Bool        `json:"blocked_by_moderator"`
 }
 
 // Публичная выкладка: секции вкладки со своими альбомами, одним запросом.
@@ -264,6 +265,7 @@ func (q *Queries) ListPublicSectionAlbums(ctx context.Context, arg ListPublicSec
 			&i.Status,
 			&i.HiddenByPlan,
 			&i.Description,
+			&i.BlockedByModerator,
 		); err != nil {
 			return nil, err
 		}

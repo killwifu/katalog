@@ -534,20 +534,21 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 }
 
 type Album struct {
-	ID           uuid.UUID          `json:"id"`
-	ShopID       uuid.UUID          `json:"shop_id"`
-	ParentID     uuid.NullUUID      `json:"parent_id"`
-	Title        string             `json:"title"`
-	CoverPhotoID uuid.NullUUID      `json:"cover_photo_id"`
-	SortOrder    int32              `json:"sort_order"`
-	PasswordHash *string            `json:"password_hash"`
-	PhotoCount   int32              `json:"photo_count"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CategoryID   uuid.NullUUID      `json:"category_id"`
-	Status       AlbumStatus        `json:"status"`
-	HiddenByPlan bool               `json:"hidden_by_plan"`
-	Description  string             `json:"description"`
+	ID                 uuid.UUID          `json:"id"`
+	ShopID             uuid.UUID          `json:"shop_id"`
+	ParentID           uuid.NullUUID      `json:"parent_id"`
+	Title              string             `json:"title"`
+	CoverPhotoID       uuid.NullUUID      `json:"cover_photo_id"`
+	SortOrder          int32              `json:"sort_order"`
+	PasswordHash       *string            `json:"password_hash"`
+	PhotoCount         int32              `json:"photo_count"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CategoryID         uuid.NullUUID      `json:"category_id"`
+	Status             AlbumStatus        `json:"status"`
+	HiddenByPlan       bool               `json:"hidden_by_plan"`
+	Description        string             `json:"description"`
+	BlockedByModerator bool               `json:"blocked_by_moderator"`
 }
 
 type AlbumSection struct {

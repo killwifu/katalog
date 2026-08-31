@@ -13,15 +13,16 @@ import (
 )
 
 type albumResponse struct {
-	ID           string  `json:"id"`
-	ParentID     *string `json:"parent_id"`
-	Title        string  `json:"title"`
-	CoverPhotoID *string `json:"cover_photo_id"`
-	SortOrder    int32   `json:"sort_order"`
-	Status       string  `json:"status"`
-	Description  string  `json:"description"`
-	CategoryID   *string `json:"category_id"`
-	PhotoCount   int32   `json:"photo_count"`
+	ID                 string  `json:"id"`
+	ParentID           *string `json:"parent_id"`
+	Title              string  `json:"title"`
+	CoverPhotoID       *string `json:"cover_photo_id"`
+	SortOrder          int32   `json:"sort_order"`
+	Status             string  `json:"status"`
+	Description        string  `json:"description"`
+	CategoryID         *string `json:"category_id"`
+	PhotoCount         int32   `json:"photo_count"`
+	BlockedByModerator bool    `json:"blocked_by_moderator"`
 }
 
 func toAlbumResponse(al db.Album) albumResponse {
@@ -32,6 +33,9 @@ func toAlbumResponse(al db.Album) albumResponse {
 		Status:      string(al.Status),
 		Description: al.Description,
 		PhotoCount:  al.PhotoCount,
+		// Блокировка модератором — только на чтение: продавец должен
+		// понимать, почему альбома нет на витрине, но снять её не может.
+		BlockedByModerator: al.BlockedByModerator,
 	}
 	if al.ParentID.Valid {
 		s := al.ParentID.UUID.String()

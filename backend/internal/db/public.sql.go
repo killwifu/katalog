@@ -75,8 +75,9 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
 WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
+  AND NOT blocked_by_moderator
 `
 
 type GetPublicAlbumParams struct {
@@ -102,6 +103,7 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 		&i.Status,
 		&i.HiddenByPlan,
 		&i.Description,
+		&i.BlockedByModerator,
 	)
 	return i, err
 }
@@ -180,6 +182,7 @@ SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
 ORDER BY a.sort_order, a.created_at
 `
 
@@ -280,6 +283,7 @@ WHERE p.shop_id = $1
   AND p.status = 'ready'
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
   AND p.caption_tsv @@ websearch_to_tsquery('russian', $2)
 ORDER BY rank DESC, p.created_at DESC, p.id
 LIMIT $3
@@ -359,6 +363,7 @@ WHERE p.shop_id = $1
   AND p.status = 'ready'
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator
   AND word_similarity($2, p.caption) > 0.3
 ORDER BY sim DESC, p.created_at DESC, p.id
 LIMIT $3

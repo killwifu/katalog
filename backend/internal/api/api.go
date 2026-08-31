@@ -154,6 +154,7 @@ func (a *API) Router() http.Handler {
 				r.Post("/photos/{photoID}/block", a.handleAdminBlockPhoto)
 				r.Post("/photos/{photoID}/unflag", a.handleAdminUnflagPhoto)
 				r.Post("/albums/{albumID}/hide", a.handleAdminHideAlbum)
+				r.Post("/albums/{albumID}/unhide", a.handleAdminUnhideAlbum)
 				r.Post("/shops/{shopID}/suspend", a.handleAdminSuspendShop)
 			})
 		})

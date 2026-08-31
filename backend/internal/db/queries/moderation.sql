@@ -48,9 +48,17 @@ WHERE p.flagged
 ORDER BY p.updated_at DESC
 LIMIT 200;
 
+-- Блокировка альбома модератором — отдельным флагом, а не статусом:
+-- статусом управляет продавец, и жалобу он снимал бы сам одним кликом.
 -- name: AdminHideAlbum :one
 UPDATE albums
-SET status = 'draft', updated_at = now()
+SET blocked_by_moderator = true, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: AdminUnhideAlbum :one
+UPDATE albums
+SET blocked_by_moderator = false, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
