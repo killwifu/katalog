@@ -411,3 +411,37 @@ func TestModeratorBlockSurvivesSeller(t *testing.T) {
 		t.Fatal("после снятия блокировки альбом не вернулся")
 	}
 }
+
+// TestAdminUnsuspendShop: блокировку магазина можно снять. Обратного
+// действия не было вовсе — ошибочная блокировка означала мёртвый магазин.
+func TestAdminUnsuspendShop(t *testing.T) {
+	ctx := context.Background()
+	seller := newClient(t)
+	registerUser(seller)
+	shop := createShop(seller)
+
+	admin := newClient(t)
+	adminUser := registerUser(admin)
+	if _, err := env.pool.Exec(ctx,
+		`UPDATE users SET role = 'admin' WHERE id = $1`, adminUser.ID); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+
+	admin.mustJSON("POST", "/api/v1/admin/shops/"+shop.ID+"/suspend",
+		map[string]any{"note": "жалоба"}, http.StatusNoContent, nil)
+	if status, _ := seller.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status == http.StatusOK {
+		t.Fatal("витрина заблокированного магазина всё ещё открыта")
+	}
+
+	admin.mustJSON("POST", "/api/v1/admin/shops/"+shop.ID+"/unsuspend",
+		map[string]any{"note": "жалоба отклонена"}, http.StatusNoContent, nil)
+	if status, raw := seller.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusOK {
+		t.Fatalf("после снятия блокировки витрина не открылась: status %d; body: %s", status, raw)
+	}
+
+	// Повторное снятие — уже не заблокирован.
+	if status, _ := admin.do("POST", "/api/v1/admin/shops/"+shop.ID+"/unsuspend",
+		map[string]any{"note": "повтор"}); status != http.StatusNotFound {
+		t.Fatalf("повторное снятие: status %d, want 404", status)
+	}
+}
