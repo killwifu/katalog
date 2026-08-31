@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -122,4 +123,46 @@ func TestDowngrade(t *testing.T) {
 			t.Error("чужой альбом попал в нашу витрину")
 		}
 	})
+}
+
+// TestDowngradeRespectsPlanLimit: сервер не даёт оставить видимым больше,
+// чем помещается в тариф. Кабинет блокирует кнопку, но лимит платный —
+// одного запроса со списком всех альбомов быть достаточно не должно.
+func TestDowngradeRespectsPlanLimit(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	// Реальные фото тут не нужны: экран понижения читает albums.photo_count.
+	// Лимит тарифа free в тестовой конфигурации — 8 фотографий.
+	var ids []string
+	for i := 0; i < 2; i++ {
+		al := createAlbum(c, shop.ID)
+		ids = append(ids, al.ID)
+		if _, err := env.pool.Exec(ctx,
+			`UPDATE albums SET photo_count = 5 WHERE id = $1`, al.ID); err != nil {
+			t.Fatalf("set photo_count: %v", err)
+		}
+	}
+
+	// Оба альбома — это 10 фото при лимите 8.
+	status, raw := c.do("PUT", "/api/v1/shops/"+shop.ID+"/downgrade",
+		map[string]any{"album_ids": ids})
+	if status != http.StatusBadRequest {
+		t.Fatalf("выбор сверх лимита принят: status %d, want 400; body: %s", status, raw)
+	}
+
+	// Один альбом — 5 фото, помещается.
+	c.mustJSON("PUT", "/api/v1/shops/"+shop.ID+"/downgrade",
+		map[string]any{"album_ids": ids[:1]}, http.StatusNoContent, nil)
+
+	var hidden int
+	if err := env.pool.QueryRow(ctx,
+		`SELECT count(*) FROM albums WHERE shop_id = $1 AND hidden_by_plan`, shop.ID).Scan(&hidden); err != nil {
+		t.Fatalf("count hidden: %v", err)
+	}
+	if hidden != 1 {
+		t.Fatalf("скрыт %d альбомов, ожидался 1", hidden)
+	}
 }
