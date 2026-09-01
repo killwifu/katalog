@@ -1,6 +1,12 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getShopPage, loadOrUnavailable, searchPhotos } from '@/lib/api'
+import {
+  getShopPage,
+  loadOrUnavailable,
+  searchPhotos,
+  ShopUnavailableError,
+  type PhotoPublic,
+} from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
@@ -58,8 +64,20 @@ export default async function SearchPage({ params, searchParams }: Props) {
   if (!shopData) notFound()
   const { shop } = shopData
 
-  const result = q ? await searchPhotos(slug, q) : { photos: [] }
-  const photos = result?.photos ?? []
+  // Сбой поиска не должен превращаться в страницу ошибки: покупатель
+  // на витрине, а не в кабинете, и ему нужен хотя бы каталог и контакты.
+  // ShopUnavailableError пропускаем наверх — это не сбой, а состояние магазина.
+  let photos: PhotoPublic[] = []
+  let failed = false
+  if (q) {
+    try {
+      photos = (await searchPhotos(slug, q))?.photos ?? []
+    } catch (err) {
+      if (err instanceof ShopUnavailableError) throw err
+      console.error('search failed', err)
+      failed = true
+    }
+  }
 
   return (
     <main className="page">
@@ -73,6 +91,11 @@ export default async function SearchPage({ params, searchParams }: Props) {
       </header>
       {q === '' ? (
         <p className="empty">Введите запрос — например, название товара или артикул.</p>
+      ) : failed ? (
+        <>
+          <p className="empty">Поиск сейчас недоступен — попробуйте ещё раз чуть позже.</p>
+          <NotFoundContacts shop={shop} />
+        </>
       ) : photos.length === 0 ? (
         <>
           <p className="empty">По запросу «{q}» ничего не найдено.</p>
