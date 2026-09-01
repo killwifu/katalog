@@ -18,7 +18,10 @@ WHERE id = $1 AND shop_id = $2;
 -- name: ListPhotosByAlbum :many
 SELECT * FROM photos
 WHERE album_id = $1 AND shop_id = $2
-ORDER BY sort_order, created_at
+-- id в сортировке — не украшение: при одинаковых sort_order и created_at
+-- порядок между запросами не определён, и фото на границе страниц может
+-- задвоиться или пропасть. У публичной выборки это уже учтено.
+ORDER BY sort_order, created_at, id
 LIMIT $3 OFFSET $4;
 
 -- name: CountPhotosByAlbum :one

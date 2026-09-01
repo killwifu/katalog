@@ -1131,10 +1131,17 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [shop, album, photos, page, per_page, total]
+                required: [shop, album, children, photos, page, per_page, total]
                 properties:
                   shop: { $ref: "#/components/schemas/PublicShop" }
                   album: { $ref: "#/components/schemas/PublicAlbum" }
+                  children:
+                    type: array
+                    description: >
+                      Вложенные альбомы этого альбома. Пусто у обычного
+                      альбома; нужны, чтобы ссылка на родительскую категорию
+                      не вела на пустую страницу.
+                    items: { $ref: "#/components/schemas/PublicAlbum" }
                   photos:
                     type: array
                     items: { $ref: "#/components/schemas/PublicPhoto" }

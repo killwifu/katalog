@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { getAlbumPage, loadOrUnavailable } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
+import { AlbumGrid } from '@/components/AlbumGrid'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
@@ -45,7 +46,7 @@ export default async function AlbumPage({ params, searchParams }: Props) {
   if (!res.ok) return <ShopUnavailable payload={res.payload} />
   const data = res.data
   if (!data) notFound()
-  const { shop, album, photos, per_page: perPage, total } = data
+  const { shop, album, photos, children, per_page: perPage, total } = data
   const totalPages = Math.max(1, Math.ceil(total / perPage))
   const base = `/${encodeURIComponent(slug)}/a/${album.id}`
   // Ссылка на страницу за пределами альбома — не редкость: продавец удалил
@@ -68,6 +69,15 @@ export default async function AlbumPage({ params, searchParams }: Props) {
         {album.description && <p className="albumdesc">{album.description}</p>}
         <SearchForm slug={slug} />
       </header>
+      {/* Вложенные альбомы: по ссылке на родительскую категорию покупатель
+          раньше попадал на пустую страницу — подальбомы были видны только
+          на главной магазина. */}
+      {children.length > 0 && (
+        <section className="section">
+          <h2 className="section__head">Внутри</h2>
+          <AlbumGrid shopSlug={slug} albums={children} />
+        </section>
+      )}
       <PhotoGrid photos={photos} shop={shop} />
       {totalPages > 1 && (
         <nav className="pagination" aria-label="Страницы альбома">

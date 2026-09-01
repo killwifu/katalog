@@ -83,3 +83,16 @@ SELECT slug, updated_at FROM shops
 WHERE status = 'active' AND billing_state != 'suspended'
 ORDER BY created_at
 LIMIT 50000;
+
+-- Подальбомы открытого альбома: покупатель приходит по прямой ссылке на
+-- родительскую категорию, и без них видит пустую страницу — вложенные
+-- альбомы показывались только на главной магазина.
+-- name: ListPublicChildAlbums :many
+SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+       c.id AS cover_id
+FROM albums a
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+WHERE a.parent_id = $1 AND a.status = 'published'
+  AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+ORDER BY a.sort_order, a.created_at, a.id
+LIMIT 200;

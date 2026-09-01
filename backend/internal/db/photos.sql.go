@@ -259,7 +259,7 @@ func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([
 const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
 SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
 WHERE album_id = $1 AND shop_id = $2
-ORDER BY sort_order, created_at
+ORDER BY sort_order, created_at, id
 LIMIT $3 OFFSET $4
 `
 
@@ -273,6 +273,9 @@ type ListPhotosByAlbumParams struct {
 // Страницами: альбом на тарифе «Продавец» — до 5000 фото, и выдача целиком
 // вешала кабинет на несколько секунд. У витрины пагинация была с самого
 // начала, у кабинета её не было.
+// id в сортировке — не украшение: при одинаковых sort_order и created_at
+// порядок между запросами не определён, и фото на границе страниц может
+// задвоиться или пропасть. У публичной выборки это уже учтено.
 func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumParams) ([]Photo, error) {
 	rows, err := q.db.Query(ctx, listPhotosByAlbum,
 		arg.AlbumID,
