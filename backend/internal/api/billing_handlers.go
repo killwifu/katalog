@@ -295,13 +295,11 @@ func (a *API) settlePaymentSucceeded(ctx context.Context, p billing.Payment) err
 
 	// Витрина могла быть скрыта (suspended) — ревалидируем после коммита.
 	if shop, err := a.Q.GetShopByID(ctx, pay.ShopID); err == nil {
-		// Оплата возвращает всё, что скрыл понижённый тариф: продавцу
-		// не нужно вспоминать, что он там выбирал месяц назад.
-		if n, cerr := a.Q.ClearPlanVisibility(ctx, shop.ID); cerr != nil {
-			a.Log.Error("clear plan visibility", "shop_id", shop.ID, "error", cerr)
-		} else if n > 0 {
-			a.Log.Info("plan visibility restored", "shop_id", shop.ID, "albums", n)
-		}
+		// Оплата возвращает то, что скрыл понижённый тариф, — но только
+		// если для этого появилась причина: каталог помещается в оплаченный
+		// тариф. Иначе очередное списание того же тарифа возвращало на
+		// витрину весь каталог сверх лимита и стирало выбор продавца.
+		a.restorePlanVisibility(ctx, shop)
 		a.Revalidate.Shop(shop.Slug)
 		// Письмо только после коммита: подтверждать оплату, которая
 		// откатилась, хуже, чем не подтвердить её вовсе.
@@ -313,6 +311,29 @@ func (a *API) settlePaymentSucceeded(ctx context.Context, p billing.Payment) err
 	}
 	a.Log.Info("payment succeeded", "shop_id", pay.ShopID, "plan", pay.Plan, "paid_until", sub.PeriodEnd.Time)
 	return nil
+}
+
+// restorePlanVisibility снимает скрытие, наложенное понижением тарифа,
+// когда весь каталог снова помещается в лимит. Считаем по тому же правилу,
+// что и квота загрузки (CountShopPhotos), иначе «помещается» здесь и «можно
+// загрузить» там разошлись бы.
+func (a *API) restorePlanVisibility(ctx context.Context, shop db.Shop) {
+	limits := a.Cfg.Billing.Limits(string(shop.Plan))
+	photos, err := a.Q.CountShopPhotos(ctx, shop.ID)
+	if err != nil {
+		a.Log.Error("count shop photos", "shop_id", shop.ID, "error", err)
+		return
+	}
+	if photos > limits.MaxPhotos {
+		a.Log.Info("plan visibility kept", "shop_id", shop.ID,
+			"photos", photos, "max_photos", limits.MaxPhotos)
+		return
+	}
+	if n, err := a.Q.ClearPlanVisibility(ctx, shop.ID); err != nil {
+		a.Log.Error("clear plan visibility", "shop_id", shop.ID, "error", err)
+	} else if n > 0 {
+		a.Log.Info("plan visibility restored", "shop_id", shop.ID, "albums", n)
+	}
 }
 
 // settlePaymentCanceled — фиксирует отменённый платёж. План не меняется;
