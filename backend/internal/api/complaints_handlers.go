@@ -77,16 +77,23 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveComplaintTarget — best-effort привязка жалобы к магазину/фото по URL:
-// /media/{shop_id}/{photo_id}/{size}.webp -> конкретное фото,
+// .../{shop_id}/{photo_id}/{size}.webp -> конкретное фото,
 // /{slug}[/...] -> магазин. Нераспознанное — жалоба без привязки.
+//
+// Адрес дериватива узнаём по хвосту, а не по первому сегменту: префикс
+// задаётся MEDIA_BASE_URL и в проде совсем другой, чем локально —
+// домен CDN или бакет S3 (deploy/s3/setup.sh выдаёт .../{bucket}/drv).
+// Пока разбор требовал сегмента «media», правообладатель присылал ссылку
+// на картинку, а жалоба приходила без привязки, и модератор искал фото
+// руками — при том что оно было однозначно определено этой самой ссылкой.
 func (a *API) resolveComplaintTarget(ctx context.Context, raw string) (uuid.NullUUID, uuid.NullUUID) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return uuid.NullUUID{}, uuid.NullUUID{}
 	}
 	segs := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(segs) >= 3 && segs[0] == "media" {
-		if pid, err := uuid.Parse(segs[2]); err == nil {
+	if n := len(segs); n >= 3 && strings.HasSuffix(segs[n-1], ".webp") {
+		if pid, err := uuid.Parse(segs[n-2]); err == nil {
 			if photo, err := a.Q.GetPhoto(ctx, pid); err == nil {
 				return uuid.NullUUID{UUID: photo.ShopID, Valid: true},
 					uuid.NullUUID{UUID: photo.ID, Valid: true}
