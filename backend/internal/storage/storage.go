@@ -155,9 +155,15 @@ func (c *Client) RemoveShop(ctx context.Context, shopID uuid.UUID) error {
 	return nil
 }
 
-// RemoveDerivatives удаляет только деривативы (drv/), оригинал остаётся.
-// Используется при модераторской блокировке: CDN перестаёт отдавать контент,
-// но оригинал сохраняется как доказательство/для разблокировки.
+// RemoveDerivatives удаляет только деривативы (drv/), оригинал остаётся
+// как доказательство и для разблокировки.
+//
+// ВНИМАНИЕ: удаление объекта останавливает только источник. Деривативы
+// отдаются с CDN-домена с Cache-Control: max-age=31536000, immutable —
+// значит, край CDN продолжит отдавать уже закешированную копию по тому же
+// адресу, пока не истечёт TTL. Сброс кеша CDN здесь не вызывается: он
+// зависит от провайдера и в проекте не настроен. Для снятия по жалобе
+// правообладателя этого недостаточно — см. handleAdminBlockPhoto.
 func (c *Client) RemoveDerivatives(ctx context.Context, shopID, photoID uuid.UUID, sizes []int) error {
 	var errs []string
 	for _, s := range sizes {
