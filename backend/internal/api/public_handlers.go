@@ -52,6 +52,9 @@ type publicAlbumResponse struct {
 	Description string            `json:"description,omitempty"`
 	PhotoCount  int32             `json:"photo_count"`
 	CoverUrls   map[string]string `json:"cover_urls,omitempty"`
+	// Unlisted — альбом «по ссылке»: витрина ставит ему noindex, чтобы
+	// он не попадал в поиск, раз продавец убрал его из списков.
+	Unlisted bool `json:"unlisted,omitempty"`
 }
 
 type publicPhotoResponse struct {
@@ -264,6 +267,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		Title:       album.Title,
 		Description: album.Description,
 		PhotoCount:  album.PhotoCount,
+		Unlisted:    album.Status == db.AlbumStatusUnlisted,
 	}
 	if album.ParentID.Valid {
 		s := album.ParentID.UUID.String()

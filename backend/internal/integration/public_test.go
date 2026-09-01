@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -369,5 +370,36 @@ func TestPublicAlbumChildren(t *testing.T) {
 		nil, http.StatusOK, &page)
 	if len(page.Children) != 0 {
 		t.Fatalf("у листового альбома нашлись дети: %+v", page.Children)
+	}
+}
+
+// TestUnlistedAlbumNotIndexed: альбом «по ссылке» помечен для витрины как
+// не подлежащий индексации. Продавец убрал его из списков — значит и в
+// поисковой выдаче ему не место, иначе «по ссылке» перестаёт что-либо
+// значить: достаточно, чтобы ссылку однажды опубликовали.
+func TestUnlistedAlbumNotIndexed(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	var page struct {
+		Album struct {
+			Unlisted bool `json:"unlisted"`
+		} `json:"album"`
+	}
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug+"/albums/"+album.ID, nil, http.StatusOK, &page)
+	if page.Album.Unlisted {
+		t.Fatal("обычный альбом помечен как «по ссылке»")
+	}
+
+	if _, err := env.pool.Exec(ctx,
+		`UPDATE albums SET status = 'unlisted' WHERE id = $1`, album.ID); err != nil {
+		t.Fatalf("set unlisted: %v", err)
+	}
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug+"/albums/"+album.ID, nil, http.StatusOK, &page)
+	if !page.Album.Unlisted {
+		t.Fatal("альбом «по ссылке» не помечен — витрина не поставит noindex")
 	}
 }
