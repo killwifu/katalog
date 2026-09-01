@@ -641,6 +641,7 @@ type Photo struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
+	FailReason string             `json:"fail_reason"`
 }
 
 type ReleasedSlug struct {

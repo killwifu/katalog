@@ -160,3 +160,28 @@ func TestQuotaExceeded(t *testing.T) {
 		t.Fatalf("presign over quota: status %d, want 403; body: %s", status, body)
 	}
 }
+
+// TestFailReasonReachesSeller: причина отказа доезжает до продавца.
+// Раньше она только писалась в лог воркера, а в кабинете все провалы
+// выглядели одинаково — в пачке из трёхсот снимков по такому сообщению
+// нечего чинить.
+func TestFailReasonReachesSeller(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	// Декомпрессионная бомба: заголовок обещает сотни мегапикселей.
+	photoID := uploadPhoto(c, shop.ID, album.ID, makePNGBomb(30000, 30000))
+	photo := waitPhotoStatus(c, shop.ID, album.ID, photoID, "failed", 30*time.Second)
+	if photo.FailReason != "too_large" {
+		t.Fatalf("причина отказа %q, ожидалась too_large", photo.FailReason)
+	}
+
+	// Мусор вместо картинки — другая причина.
+	garbage := uploadPhoto(c, shop.ID, album.ID, []byte("это точно не картинка"))
+	photo = waitPhotoStatus(c, shop.ID, album.ID, garbage, "failed", 30*time.Second)
+	if photo.FailReason != "unsupported_format" {
+		t.Fatalf("причина отказа %q, ожидалась unsupported_format", photo.FailReason)
+	}
+}

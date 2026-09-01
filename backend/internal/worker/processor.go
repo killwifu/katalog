@@ -71,7 +71,10 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	var vErr *imaging.ValidationError
 	if errors.As(err, &vErr) {
 		log.Warn("photo validation failed", "reason", vErr.Reason)
-		if dbErr := p.Q.SetPhotoFailed(ctx, photo.ID); dbErr != nil {
+		if dbErr := p.Q.SetPhotoFailed(ctx, db.SetPhotoFailedParams{
+			ID:         photo.ID,
+			FailReason: string(vErr.Code),
+		}); dbErr != nil {
 			return fmt.Errorf("mark photo failed: %w", dbErr)
 		}
 		return fmt.Errorf("validation: %s: %w", vErr.Reason, asynq.SkipRetry)

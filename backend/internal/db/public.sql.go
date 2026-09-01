@@ -280,7 +280,7 @@ func (q *Queries) ListPublicChildAlbums(ctx context.Context, parentID uuid.NullU
 }
 
 const listPublicPhotos = `-- name: ListPublicPhotos :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
 WHERE album_id = $1 AND status = 'ready'
 ORDER BY sort_order, created_at, id
 LIMIT $2 OFFSET $3
@@ -318,6 +318,7 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 			&i.UpdatedAt,
 			&i.Flagged,
 			&i.DrvSize,
+			&i.FailReason,
 		); err != nil {
 			return nil, err
 		}
@@ -330,7 +331,7 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 }
 
 const searchPhotosFTS = `-- name: SearchPhotosFTS :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason,
        ts_rank(p.caption_tsv, websearch_to_tsquery('russian', $2)) AS rank
 FROM photos p
 JOIN albums a ON a.id = p.album_id
@@ -367,6 +368,7 @@ type SearchPhotosFTSRow struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
+	FailReason string             `json:"fail_reason"`
 	Rank       float32            `json:"rank"`
 }
 
@@ -397,6 +399,7 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 			&i.UpdatedAt,
 			&i.Flagged,
 			&i.DrvSize,
+			&i.FailReason,
 			&i.Rank,
 		); err != nil {
 			return nil, err
@@ -410,7 +413,7 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 }
 
 const searchPhotosTrgm = `-- name: SearchPhotosTrgm :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason,
        word_similarity($2, p.caption) AS sim
 FROM photos p
 JOIN albums a ON a.id = p.album_id
@@ -447,6 +450,7 @@ type SearchPhotosTrgmRow struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
+	FailReason string             `json:"fail_reason"`
 	Sim        float32            `json:"sim"`
 }
 
@@ -478,6 +482,7 @@ func (q *Queries) SearchPhotosTrgm(ctx context.Context, arg SearchPhotosTrgmPara
 			&i.UpdatedAt,
 			&i.Flagged,
 			&i.DrvSize,
+			&i.FailReason,
 			&i.Sim,
 		); err != nil {
 			return nil, err
