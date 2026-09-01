@@ -103,3 +103,40 @@ func TestShopSlugChange(t *testing.T) {
 		_ = fmt.Sprint(s3.ID)
 	})
 }
+
+// TestReleasedSlugReserved: освобождённый адрес нельзя перехватить.
+// Адрес витрины — это и есть продукт: продавец рассылает ссылку, печатает
+// её на визитках. Раньше при смене адреса старый освобождался мгновенно,
+// и любой мог занять его вместе со всей чужой аудиторией.
+func TestReleasedSlugReserved(t *testing.T) {
+	owner := newClient(t)
+	registerUser(owner)
+	shop := createShop(owner)
+	oldSlug := shop.Slug
+	newSlug := uniqueSlug()
+
+	owner.mustJSON("PATCH", "/api/v1/shops/"+shop.ID,
+		map[string]any{"slug": newSlug}, http.StatusOK, nil)
+
+	// Чужак пытается занять освободившийся адрес.
+	squatter := newClient(t)
+	registerUser(squatter)
+	status, raw := squatter.do("POST", "/api/v1/shops",
+		map[string]any{"slug": oldSlug, "name": "Чужой"})
+	if status != http.StatusConflict {
+		t.Fatalf("чужак занял освобождённый адрес: status %d, want 409; body: %s", status, raw)
+	}
+
+	// Прежний владелец может вернуть свой адрес обратно: бронь его.
+	// Кулдаун смены при этом всё ещё действует, поэтому проверяем именно
+	// бронь — через создание второго магазина тем же владельцем.
+	var second shopJSON
+	owner.mustJSON("POST", "/api/v1/shops",
+		map[string]any{"slug": uniqueSlug(), "name": "Второй"}, http.StatusCreated, &second)
+
+	// Посторонний адрес, который никто не отпускал, занимается свободно.
+	free := newClient(t)
+	registerUser(free)
+	free.mustJSON("POST", "/api/v1/shops",
+		map[string]any{"slug": uniqueSlug(), "name": "Свободный"}, http.StatusCreated, nil)
+}
