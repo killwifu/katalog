@@ -337,7 +337,7 @@ func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	caption := photo.Caption
 	if req.Caption != nil {
-		if len(*req.Caption) > 2000 {
+		if len([]rune(*req.Caption)) > 2000 {
 			apiError(w, http.StatusBadRequest, "invalid_caption", "caption must be at most 2000 characters")
 			return
 		}

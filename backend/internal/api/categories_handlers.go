@@ -61,7 +61,7 @@ type categoryRequest struct {
 // validateCategory разбирает и проверяет общее для создания и обновления.
 func validateCategory(w http.ResponseWriter, req *categoryRequest) bool {
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 200 {
+	if req.Title == "" || len([]rune(req.Title)) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-200 characters")
 		return false
 	}

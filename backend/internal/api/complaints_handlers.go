@@ -33,15 +33,15 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 	req.Reason = strings.TrimSpace(req.Reason)
 	req.ReporterName = strings.TrimSpace(req.ReporterName)
 	req.ReporterEmail = strings.TrimSpace(req.ReporterEmail)
-	if req.URL == "" || len(req.URL) > 1000 {
+	if req.URL == "" || len([]rune(req.URL)) > 1000 {
 		apiError(w, http.StatusBadRequest, "invalid_url", "url must be 1-1000 characters")
 		return
 	}
-	if len(req.Reason) < 10 || len(req.Reason) > 5000 {
+	if n := len([]rune(req.Reason)); n < 10 || n > 5000 {
 		apiError(w, http.StatusBadRequest, "invalid_reason", "reason must be 10-5000 characters")
 		return
 	}
-	if len(req.ReporterName) > 200 {
+	if len([]rune(req.ReporterName)) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_name", "reporter_name must be at most 200 characters")
 		return
 	}

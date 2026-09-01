@@ -49,7 +49,7 @@ func (a *API) handleCreateTab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 100 {
+	if req.Title == "" || len([]rune(req.Title)) > 100 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-100 characters")
 		return
 	}
@@ -105,7 +105,7 @@ func (a *API) handleUpdateTab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 100 {
+	if req.Title == "" || len([]rune(req.Title)) > 100 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-100 characters")
 		return
 	}
@@ -171,7 +171,7 @@ func (a *API) handleCreateSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 100 {
+	if req.Title == "" || len([]rune(req.Title)) > 100 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-100 characters")
 		return
 	}
@@ -237,7 +237,7 @@ func (a *API) handleUpdateSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 100 {
+	if req.Title == "" || len([]rune(req.Title)) > 100 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-100 characters")
 		return
 	}

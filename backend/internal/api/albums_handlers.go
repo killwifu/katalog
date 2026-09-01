@@ -93,7 +93,7 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Title = strings.TrimSpace(req.Title)
-	if req.Title == "" || len(req.Title) > 200 {
+	if req.Title == "" || len([]rune(req.Title)) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-200 characters")
 		return
 	}
@@ -196,7 +196,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	description := album.Description
 	if req.Title != nil {
 		title = strings.TrimSpace(*req.Title)
-		if title == "" || len(title) > 200 {
+		if title == "" || len([]rune(title)) > 200 {
 			apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-200 characters")
 			return
 		}
@@ -216,7 +216,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	if req.Description != nil {
 		// Описание длинное по назначению: там условия отправки и оплаты.
 		// Ограничиваем разумной длиной, чтобы не превратить его в статью.
-		if len(*req.Description) > 2000 {
+		if len([]rune(*req.Description)) > 2000 {
 			apiError(w, http.StatusBadRequest, "invalid_description", "description must be at most 2000 characters")
 			return
 		}

@@ -33,16 +33,33 @@ func toUserResponse(u db.User) userResponse {
 	}
 }
 
+// normalizeEmail приводит адрес к тому виду, в котором он лежит в базе:
+// ParseAddress принимает и «Имя <a@b>», а хранить и искать надо голый
+// адрес. Пустая строка означает, что разобрать не удалось.
+func normalizeEmail(raw string) string {
+	addr, err := mail.ParseAddress(strings.ToLower(strings.TrimSpace(raw)))
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(addr.Address)
+}
+
 func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req credentialsRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(req.Email))
-	if _, err := mail.ParseAddress(email); err != nil {
+	// Берём разобранный адрес, а не строку как есть: ParseAddress принимает
+	// и форму «Имя <a@b>». Такая строка уезжала в базу целиком — письма
+	// потом не уходили (RCPT TO принимает только голый адрес), а один и тот
+	// же ящик мог зарегистрироваться дважды в разных формах.
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
 		apiError(w, http.StatusBadRequest, "invalid_email", "invalid email address")
 		return
 	}
+	email = strings.ToLower(addr.Address)
 	if len(req.Password) < 8 {
 		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
 		return
@@ -81,7 +98,9 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
+	// Тот же разбор, что и при регистрации: иначе форма «Имя <a@b>»
+	// не совпадёт с сохранённым голым адресом.
+	email := normalizeEmail(req.Email)
 	user, err := a.Q.GetUserByEmail(r.Context(), &email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")

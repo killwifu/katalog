@@ -228,3 +228,69 @@ func resetTokenFor(t *testing.T, ctx context.Context, email string) string {
 	t.Fatalf("reset token for %s not found", email)
 	return ""
 }
+
+// TestEmailNormalized: адрес хранится и ищется в голом виде.
+// mail.ParseAddress принимает и форму «Имя <a@b>»; раньше такая строка
+// уезжала в базу целиком — письма потом не уходили (RCPT TO принимает
+// только адрес), и один ящик мог зарегистрироваться дважды.
+func TestEmailNormalized(t *testing.T) {
+	ctx := context.Background()
+	plain := uniqueEmail()
+
+	c := newClient(t)
+	var u userJSON
+	c.mustJSON("POST", "/api/v1/auth/register",
+		map[string]string{"email": "Имя <" + plain + ">", "password": "password123"},
+		http.StatusCreated, &u)
+
+	var stored string
+	if err := env.pool.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, u.ID).Scan(&stored); err != nil {
+		t.Fatalf("read email: %v", err)
+	}
+	if stored != plain {
+		t.Fatalf("сохранён адрес %q, ожидался %q", stored, plain)
+	}
+
+	// Тот же ящик повторно — конфликт, в какой бы форме его ни прислали.
+	dup := newClient(t)
+	if status, raw := dup.do("POST", "/api/v1/auth/register",
+		map[string]string{"email": plain, "password": "password123"}); status != http.StatusConflict {
+		t.Fatalf("повторная регистрация того же ящика: status %d, want 409; body: %s", status, raw)
+	}
+
+	// Вход работает и по голому адресу, и по форме с именем.
+	for _, form := range []string{plain, "Имя <" + plain + ">"} {
+		login := newClient(t)
+		login.mustJSON("POST", "/api/v1/auth/login",
+			map[string]string{"email": form, "password": "password123"}, http.StatusOK, nil)
+	}
+}
+
+// TestTextLimitsCountRunes: лимиты длины считаются в символах, а не байтах.
+// Кириллица в UTF-8 занимает два байта, поэтому побайтовый лимит давал
+// продавцу вдвое меньше заявленного — при том что кабинет разрешал ввод
+// до объявленной длины и сообщение об ошибке называло её же.
+func TestTextLimitsCountRunes(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	// 150 кириллических символов — это 300 байт, но всего 150 символов.
+	title := strings.Repeat("я", 150)
+	var al albumJSON
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": title}, http.StatusCreated, &al)
+	if al.Title != title {
+		t.Fatalf("название сохранено не целиком: %d символов", len([]rune(al.Title)))
+	}
+
+	// Ровно за границей — отказ.
+	if status, _ := c.do("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": strings.Repeat("я", 201)}); status != http.StatusBadRequest {
+		t.Fatalf("название в 201 символ принято: status %d", status)
+	}
+
+	// Название магазина — тот же счёт.
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID,
+		map[string]any{"name": strings.Repeat("я", 200)}, http.StatusOK, nil)
+}
