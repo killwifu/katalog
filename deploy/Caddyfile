@@ -1,5 +1,27 @@
 # Локальный reverse-proxy. В проде здесь появится домен и автоматический TLS.
 :80 {
+	# Заголовки безопасности на всё, что отдаётся наружу.
+	#
+	# frame-ancestors: витрину продавца нельзя встроить в чужой сайт.
+	# Каталог — это и есть товар; без запрета конкурент показывает чужие
+	# фотографии внутри своей страницы, а покупатель не видит подмены.
+	#
+	# nosniff: наружу уходят файлы, которые загрузил продавец. Пусть
+	# браузер верит Content-Type, а не угадывает по содержимому.
+	#
+	# Referrer-Policy: покупатель уходит в мессенджер продавца, и полный
+	# адрес просматриваемого альбома в реферере туда попадать не должен.
+	#
+	# HSTS: по http браузер его игнорирует, в проде за TLS — работает.
+	header {
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
 	handle /healthz {
 		reverse_proxy api:8080
 	}
