@@ -152,7 +152,7 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	if !a.checkSlugReservation(w, r, req.Slug, uuid.Nil) {
 		return
 	}
-	if req.Name == "" || len(req.Name) > 200 {
+	if req.Name == "" || len([]rune(req.Name)) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_name", "name must be 1-200 characters")
 		return
 	}
@@ -273,7 +273,7 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 	contacts, settings := shop.Contacts, shop.Settings
 	if req.Name != nil {
 		name = strings.TrimSpace(*req.Name)
-		if name == "" || len(name) > 200 {
+		if name == "" || len([]rune(name)) > 200 {
 			apiError(w, http.StatusBadRequest, "invalid_name", "name must be 1-200 characters")
 			return
 		}

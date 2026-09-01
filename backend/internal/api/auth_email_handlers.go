@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/mail"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -69,8 +67,8 @@ func (a *API) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	if _, err := mail.ParseAddress(email); err != nil {
+	email := normalizeEmail(req.Email)
+	if email == "" {
 		apiError(w, http.StatusBadRequest, "invalid_email", "invalid email address")
 		return
 	}
