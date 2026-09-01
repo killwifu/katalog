@@ -60,6 +60,7 @@ func run(logger *slog.Logger) error {
 	redisOpt := asynq.RedisClientOpt{Addr: cfg.RedisAddr}
 	processor := &worker.Processor{
 		Q:          db.New(pool),
+		Pool:       pool,
 		Store:      store,
 		RDB:        rdb,
 		Revalidate: revalidate.New(cfg.StorefrontURL, cfg.RevalidateSecret, logger),

@@ -12,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"katalog/backend/internal/billing"
@@ -25,7 +26,10 @@ import (
 )
 
 type Processor struct {
-	Q          *db.Queries
+	Q *db.Queries
+	// Pool — для транзакций: финал обработки пишет в три таблицы, и разъехаться
+	// они не должны (см. HandlePhotoProcess).
+	Pool       *pgxpool.Pool
 	Store      *storage.Client
 	RDB        *redis.Client
 	Revalidate *revalidate.Notifier
@@ -92,27 +96,41 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		drvBytes += int64(len(blob))
 	}
 
-	err = p.Q.SetPhotoReady(ctx, db.SetPhotoReadyParams{
+	// Три записи одной транзакцией. Порознь сбой на второй или третьей
+	// оставлял расхождение навсегда: статус ready уже проставлен, ретрай
+	// задачи видит его и пропускает обработку (идемпотентность выше), так
+	// что байты деривативов и счётчик альбома не досчитаются уже никогда.
+	// В транзакции сбой откатывает и статус — ретрай доводит дело до конца.
+	tx, err := p.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := p.Q.WithTx(tx)
+
+	if err := q.SetPhotoReady(ctx, db.SetPhotoReadyParams{
 		ID:      photo.ID,
 		Width:   int32(res.Width),
 		Height:  int32(res.Height),
 		Phash:   pgtype.Int8{Int64: res.PHash, Valid: true},
 		DrvSize: drvBytes,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("mark photo ready: %w", err)
 	}
-	if err := p.Q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{
+	if err := q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{
 		ID:          photo.ShopID,
 		StorageUsed: drvBytes,
 	}); err != nil {
 		return fmt.Errorf("account derivative bytes: %w", err)
 	}
-	if err := p.Q.AddAlbumPhotoCount(ctx, db.AddAlbumPhotoCountParams{
+	if err := q.AddAlbumPhotoCount(ctx, db.AddAlbumPhotoCountParams{
 		ID:         photo.AlbumID,
 		PhotoCount: 1,
 	}); err != nil {
 		return fmt.Errorf("increment album photo count: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit photo ready: %w", err)
 	}
 
 	// Фото стало видимым на витрине — инвалидируем ISR-кеш магазина.
