@@ -335,6 +335,17 @@ func (q *Queries) LockShopForUpload(ctx context.Context, dollar_1 string) error 
 	return err
 }
 
+const resetPhotoDerivativeSize = `-- name: ResetPhotoDerivativeSize :exec
+UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1
+`
+
+// Деривативы удалены (блокировка модератором) — размер обнуляется вместе
+// с возвратом байтов в квоту, иначе повторная обработка учтёт их дважды.
+func (q *Queries) ResetPhotoDerivativeSize(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, resetPhotoDerivativeSize, id)
+	return err
+}
+
 const setPhotoFailed = `-- name: SetPhotoFailed :exec
 UPDATE photos
 SET status = 'failed', fail_reason = $2, updated_at = now()

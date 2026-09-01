@@ -1447,6 +1447,29 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/admin/photos/{photoID}/unblock:
+    post:
+      operationId: adminUnblockPhoto
+      summary: Снять блокировку с фото (жалоба отклонена)
+      description: >
+        Фото уходит на повторную обработку: деривативы при блокировке
+        удалены, оригинал сохранён как раз на такой случай. 404, если фото
+        нет или оно не было заблокировано.
+      parameters:
+        - name: photoID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminActionBody" }
+      responses:
+        "200":
+          description: Блокировка снята, фото в обработке
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/admin/albums/{albumID}/unhide:
     post:
       operationId: adminUnhideAlbum

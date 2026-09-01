@@ -35,6 +35,14 @@ SET status = 'blocked', updated_at = now()
 WHERE id = $1 AND status != 'blocked'
 RETURNING *;
 
+-- Снятие блокировки: жалоба бывает необоснованной, а обратного действия
+-- не было вовсе. Возвращаем в ready — деривативы пересоберёт воркер.
+-- name: AdminUnblockPhoto :one
+UPDATE photos
+SET status = 'processing', updated_at = now()
+WHERE id = $1 AND status = 'blocked'
+RETURNING *;
+
 -- name: SetPhotoFlagged :exec
 UPDATE photos
 SET flagged = $2, updated_at = now()
