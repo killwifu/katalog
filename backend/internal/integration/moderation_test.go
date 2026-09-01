@@ -509,3 +509,66 @@ func TestPhotoBlockAndUnblock(t *testing.T) {
 		t.Fatalf("повторное снятие: status %d, want 404", status)
 	}
 }
+
+// TestComplaintResolvesProductionMediaURL: жалоба привязывается к фото и по
+// тому адресу, который правообладатель реально скопирует в проде.
+//
+// Разбор ссылки опирался на первый сегмент пути («media»), а такой префикс
+// бывает только локально: MEDIA_BASE_URL в проде — домен CDN или бакет S3
+// (deploy/s3/setup.sh выдаёт .../{bucket}/drv). Там первый сегмент другой,
+// жалоба оставалась без привязки, и модератор искал фото руками — при том
+// что ссылка на него лежала прямо в жалобе.
+func TestComplaintResolvesProductionMediaURL(t *testing.T) {
+	owner := newClient(t)
+	registerUser(owner)
+	shop := createShop(owner)
+	album := createAlbum(owner, shop.ID)
+	photoID := uploadPhoto(owner, shop.ID, album.ID, makeJPEG(t, 320, 240))
+	waitPhotoStatus(owner, shop.ID, album.ID, photoID, "ready", 60*time.Second)
+
+	adminClient := newClient(t)
+	adminUser := registerUser(adminClient)
+	makeAdmin(t, adminUser.ID)
+
+	cases := map[string]string{
+		"бакет S3 (deploy/s3/setup.sh)": "https://storage.yandexcloud.net/katalog/drv/" +
+			shop.ID + "/" + photoID + "/800.webp",
+		"домен CDN": "https://cdn.katalog.test/drv/" + shop.ID + "/" + photoID + "/300.webp",
+		"локальная раскладка": "http://katalog.test/media/" +
+			shop.ID + "/" + photoID + "/1600.webp",
+	}
+
+	for name, url := range cases {
+		t.Run(name, func(t *testing.T) {
+			reporter := newClient(t)
+			var created struct {
+				ID string `json:"id"`
+			}
+			reporter.mustJSON("POST", "/api/v1/public/complaints", map[string]string{
+				"url":            url,
+				"reporter_name":  "ООО Правообладатель",
+				"reporter_email": "legal@brand.test",
+				"reason":         "Фотография нарушает наши исключительные права.",
+			}, http.StatusCreated, &created)
+
+			var complaints []complaintJSON
+			adminClient.mustJSON("GET", "/api/v1/admin/complaints?status=open",
+				nil, http.StatusOK, &complaints)
+			var target *complaintJSON
+			for i := range complaints {
+				if complaints[i].ID == created.ID {
+					target = &complaints[i]
+				}
+			}
+			if target == nil {
+				t.Fatalf("жалоба %s не найдена в списке админа", created.ID)
+			}
+			if target.PhotoID == nil || *target.PhotoID != photoID {
+				t.Errorf("фото не распознано в адресе %s: %+v", url, target)
+			}
+			if target.ShopID == nil || *target.ShopID != shop.ID {
+				t.Errorf("магазин не распознан в адресе %s: %+v", url, target)
+			}
+		})
+	}
+}
