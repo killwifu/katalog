@@ -20,9 +20,15 @@ SET title          = $3,
     status         = $5,
     cover_photo_id = $6,
     description    = $7,
+    parent_id      = $8,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
 RETURNING *;
+
+-- Есть ли у альбома подальбомы: родителем можно назначить только тот,
+-- у которого их нет, иначе получится третий уровень.
+-- name: CountAlbumChildren :one
+SELECT count(*) FROM albums WHERE parent_id = $1;
 
 -- name: DeleteAlbum :execrows
 DELETE FROM albums

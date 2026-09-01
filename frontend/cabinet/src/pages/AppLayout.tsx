@@ -129,7 +129,17 @@ export function AppLayout() {
               {nav}
             </div>
           )}
-          <BillingBanner state={shop.billing_state} />
+          {shop.status === 'suspended' ? (
+            <div className="alert alert--danger">
+              <span className="flex-1">
+                Магазин заблокирован модератором: витрина скрыта, загрузка
+                фотографий недоступна. Всё содержимое сохранено. Если считаете
+                блокировку ошибкой — напишите в поддержку.
+              </span>
+            </div>
+          ) : (
+            <BillingBanner state={shop.billing_state} />
+          )}
           <Outlet />
         </div>
       </div>

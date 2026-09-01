@@ -91,6 +91,14 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, "invalid_size", fmt.Sprintf("size must be 1..%d bytes", maxFileSize))
 		return
 	}
+	// Блокировка модератором: витрина скрыта, но загрузка продолжала
+	// работать — магазин, снятый по жалобе, спокойно набирал новый
+	// контент, и тот уехал бы на витрину при снятии блокировки.
+	if shop.Status == db.ShopStatusSuspended {
+		apiError(w, http.StatusForbidden, "shop_suspended",
+			"shop is suspended by moderation: uploads are disabled")
+		return
+	}
 	// Мягкий отказ по подписке: в grace/suspended загрузка заблокирована,
 	// контент и витрина (в grace) продолжают работать.
 	if shop.BillingState != db.BillingStateOk {

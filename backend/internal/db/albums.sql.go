@@ -62,6 +62,19 @@ func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (in
 	return result.RowsAffected(), nil
 }
 
+const countAlbumChildren = `-- name: CountAlbumChildren :one
+SELECT count(*) FROM albums WHERE parent_id = $1
+`
+
+// Есть ли у альбома подальбомы: родителем можно назначить только тот,
+// у которого их нет, иначе получится третий уровень.
+func (q *Queries) CountAlbumChildren(ctx context.Context, parentID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlbumChildren, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAlbumsByShop = `-- name: CountAlbumsByShop :one
 SELECT count(*) FROM albums WHERE shop_id = $1
 `
@@ -265,6 +278,7 @@ SET title          = $3,
     status         = $5,
     cover_photo_id = $6,
     description    = $7,
+    parent_id      = $8,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
 RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
@@ -278,6 +292,7 @@ type UpdateAlbumParams struct {
 	Status       AlbumStatus   `json:"status"`
 	CoverPhotoID uuid.NullUUID `json:"cover_photo_id"`
 	Description  string        `json:"description"`
+	ParentID     uuid.NullUUID `json:"parent_id"`
 }
 
 func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album, error) {
@@ -289,6 +304,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		arg.Status,
 		arg.CoverPhotoID,
 		arg.Description,
+		arg.ParentID,
 	)
 	var i Album
 	err := row.Scan(
