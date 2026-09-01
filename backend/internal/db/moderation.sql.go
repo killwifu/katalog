@@ -197,6 +197,40 @@ func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, err
 	return i, err
 }
 
+const adminUnblockPhoto = `-- name: AdminUnblockPhoto :one
+UPDATE photos
+SET status = 'processing', updated_at = now()
+WHERE id = $1 AND status = 'blocked'
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+`
+
+// Снятие блокировки: жалоба бывает необоснованной, а обратного действия
+// не было вовсе. Возвращаем в ready — деривативы пересоберёт воркер.
+func (q *Queries) AdminUnblockPhoto(ctx context.Context, id uuid.UUID) (Photo, error) {
+	row := q.db.QueryRow(ctx, adminUnblockPhoto, id)
+	var i Photo
+	err := row.Scan(
+		&i.ID,
+		&i.AlbumID,
+		&i.ShopID,
+		&i.Caption,
+		&i.CaptionTsv,
+		&i.Status,
+		&i.OrigSize,
+		&i.Width,
+		&i.Height,
+		&i.Phash,
+		&i.Source,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Flagged,
+		&i.DrvSize,
+		&i.FailReason,
+	)
+	return i, err
+}
+
 const adminUnhideAlbum = `-- name: AdminUnhideAlbum :one
 UPDATE albums
 SET blocked_by_moderator = false, updated_at = now()

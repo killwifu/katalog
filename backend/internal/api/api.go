@@ -153,6 +153,7 @@ func (a *API) Router() http.Handler {
 				r.Patch("/complaints/{complaintID}", a.handleAdminUpdateComplaint)
 				r.Get("/photos/flagged", a.handleAdminListFlagged)
 				r.Post("/photos/{photoID}/block", a.handleAdminBlockPhoto)
+				r.Post("/photos/{photoID}/unblock", a.handleAdminUnblockPhoto)
 				r.Post("/photos/{photoID}/unflag", a.handleAdminUnflagPhoto)
 				r.Post("/albums/{albumID}/hide", a.handleAdminHideAlbum)
 				r.Post("/albums/{albumID}/unhide", a.handleAdminUnhideAlbum)

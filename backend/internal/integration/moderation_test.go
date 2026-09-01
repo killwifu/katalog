@@ -445,3 +445,67 @@ func TestAdminUnsuspendShop(t *testing.T) {
 		t.Fatalf("повторное снятие: status %d, want 404", status)
 	}
 }
+
+// TestPhotoBlockAndUnblock: блокировка возвращает байты деривативов в квоту,
+// а снятие блокировки пересобирает фото. Раньше блокировка удаляла файлы
+// из S3, но место за них продолжало числиться за продавцом, и обратного
+// действия не было вовсе.
+func TestPhotoBlockAndUnblock(t *testing.T) {
+	ctx := context.Background()
+	seller := newClient(t)
+	registerUser(seller)
+	shop := createShop(seller)
+	album := createAlbum(seller, shop.ID)
+	photoID := uploadPhoto(seller, shop.ID, album.ID, makeJPEG(t, 800, 600))
+	waitPhotoStatus(seller, shop.ID, album.ID, photoID, "ready", 30*time.Second)
+
+	admin := newClient(t)
+	adminUser := registerUser(admin)
+	if _, err := env.pool.Exec(ctx,
+		`UPDATE users SET role = 'admin' WHERE id = $1`, adminUser.ID); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+
+	var before, drv int64
+	if err := env.pool.QueryRow(ctx,
+		`SELECT s.storage_used, p.drv_size FROM shops s, photos p WHERE s.id = $1 AND p.id = $2`,
+		shop.ID, photoID).Scan(&before, &drv); err != nil {
+		t.Fatalf("read storage: %v", err)
+	}
+	if drv == 0 {
+		t.Fatal("деривативы не учтены — тест ничего не проверит")
+	}
+
+	admin.mustJSON("POST", "/api/v1/admin/photos/"+photoID+"/block",
+		map[string]any{"note": "жалоба"}, http.StatusOK, nil)
+
+	var after int64
+	if err := env.pool.QueryRow(ctx,
+		`SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&after); err != nil {
+		t.Fatalf("read storage: %v", err)
+	}
+	if after != before-drv {
+		t.Fatalf("квота после блокировки %d, ожидалось %d (было %d, деривативы %d)",
+			after, before-drv, before, drv)
+	}
+
+	// Снятие блокировки отправляет фото на повторную обработку.
+	admin.mustJSON("POST", "/api/v1/admin/photos/"+photoID+"/unblock",
+		map[string]any{"note": "жалоба отклонена"}, http.StatusOK, nil)
+	waitPhotoStatus(seller, shop.ID, album.ID, photoID, "ready", 30*time.Second)
+
+	// Повторная обработка вернула байты обратно ровно один раз.
+	if err := env.pool.QueryRow(ctx,
+		`SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&after); err != nil {
+		t.Fatalf("read storage: %v", err)
+	}
+	if after != before {
+		t.Fatalf("квота после снятия блокировки %d, ожидалось %d", after, before)
+	}
+
+	// Повторное снятие — фото уже не заблокировано.
+	if status, _ := admin.do("POST", "/api/v1/admin/photos/"+photoID+"/unblock",
+		map[string]any{"note": "повтор"}); status != http.StatusNotFound {
+		t.Fatalf("повторное снятие: status %d, want 404", status)
+	}
+}

@@ -89,3 +89,8 @@ WHERE album_id = $1 OR album_id IN (SELECT id FROM albums WHERE parent_id = $1);
 -- продавцы друг друга не ждут.
 -- name: LockShopForUpload :exec
 SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint);
+
+-- Деривативы удалены (блокировка модератором) — размер обнуляется вместе
+-- с возвратом байтов в квоту, иначе повторная обработка учтёт их дважды.
+-- name: ResetPhotoDerivativeSize :exec
+UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1;

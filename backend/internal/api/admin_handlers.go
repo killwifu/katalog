@@ -13,6 +13,7 @@ import (
 
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imagingmeta"
+	"katalog/backend/internal/tasks"
 )
 
 // Админ-зона (роль admin): жалобы, блокировки контента, аудит-лог.
@@ -196,6 +197,19 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.RemoveDerivatives(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes); err != nil {
 		a.Log.Error("block: remove derivatives failed", "photo_id", photo.ID, "error", err)
 	}
+	// Байты деривативов возвращаются в квоту: файлов больше нет, и держать
+	// за них место продавца незачем. Оригинал остаётся и остаётся учтённым.
+	if photo.DrvSize > 0 {
+		if err := a.Q.AddShopStorageUsed(r.Context(), db.AddShopStorageUsedParams{
+			ID:          photo.ShopID,
+			StorageUsed: -photo.DrvSize,
+		}); err != nil {
+			a.Log.Error("block: release derivative bytes failed", "error", err)
+		}
+		if err := a.Q.ResetPhotoDerivativeSize(r.Context(), photo.ID); err != nil {
+			a.Log.Error("block: reset drv_size failed", "error", err)
+		}
+	}
 	a.auditLog(r.Context(), db.ModerationActionBlockPhoto, db.CreateModerationLogParams{
 		ComplaintID: req.complaintID(),
 		ShopID:      uuid.NullUUID{UUID: photo.ShopID, Valid: true},
@@ -206,6 +220,50 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 	a.notifyShopOwner(r.Context(), photo.ShopID, "Katalog: фото скрыто модератором",
 		"по жалобе правообладателя одно из ваших фото скрыто с витрины.")
 	writeJSON(w, http.StatusOK, map[string]string{"id": photo.ID.String(), "status": "blocked"})
+}
+
+// handleAdminUnblockPhoto — снятие блокировки с фото. Обратного действия
+// не было вовсе: ошибочно заблокированное фото оставалось скрытым навсегда.
+// Деривативы при блокировке удалены, поэтому фото уходит на повторную
+// обработку — оригинал для этого сохраняется как раз на такой случай.
+func (a *API) handleAdminUnblockPhoto(w http.ResponseWriter, r *http.Request) {
+	photoID, err := uuid.Parse(chi.URLParam(r, "photoID"))
+	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "photo not found")
+		return
+	}
+	req, ok := a.decodeAdminAction(w, r)
+	if !ok {
+		return
+	}
+	photo, err := a.Q.AdminUnblockPhoto(r.Context(), photoID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Либо фото нет, либо оно и не было заблокировано.
+		apiError(w, http.StatusNotFound, "not_found", "blocked photo not found")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "unblock photo", err)
+		return
+	}
+	task, terr := tasks.NewPhotoProcess(photo.ID)
+	if terr != nil {
+		a.internalError(w, "build reprocess task", terr)
+		return
+	}
+	if _, terr := a.Tasks.EnqueueContext(r.Context(), task); terr != nil {
+		a.internalError(w, "enqueue reprocess", terr)
+		return
+	}
+	a.auditLog(r.Context(), db.ModerationActionBlockPhoto, db.CreateModerationLogParams{
+		ComplaintID: req.complaintID(),
+		ShopID:      uuid.NullUUID{UUID: photo.ShopID, Valid: true},
+		AlbumID:     uuid.NullUUID{UUID: photo.AlbumID, Valid: true},
+		PhotoID:     uuid.NullUUID{UUID: photo.ID, Valid: true},
+		Note:        "снятие блокировки: " + req.Note,
+	}, r)
+	a.revalidateShopByID(r.Context(), photo.ShopID)
+	writeJSON(w, http.StatusOK, map[string]string{"id": photo.ID.String(), "status": "processing"})
 }
 
 func (a *API) handleAdminHideAlbum(w http.ResponseWriter, r *http.Request) {
