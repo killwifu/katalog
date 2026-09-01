@@ -84,7 +84,12 @@ func (p *Processor) HandleStatsAggregate(ctx context.Context, t *asynq.Task) err
 			log.Warn("skip non-numeric views key", "key", k)
 			continue
 		}
-		views[key{shopID, albumID}] += n
+		// Присваиваем, а не прибавляем: на дату ключ (shop, album) ровно
+		// один, а SCAN по документации Redis может вернуть один и тот же
+		// ключ несколько раз — при сложении просмотры продавца росли бы
+		// на ровном месте, и вернуть их назад уже нечем (upsert берёт
+		// greatest от прежнего значения).
+		views[key{shopID, albumID}] = n
 		redisKeys = append(redisKeys, k)
 	}
 	if err := iter.Err(); err != nil {
