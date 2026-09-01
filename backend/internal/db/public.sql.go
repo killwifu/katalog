@@ -184,6 +184,7 @@ LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
 ORDER BY a.sort_order, a.created_at
+LIMIT 1000
 `
 
 type ListPublicAlbumsRow struct {
@@ -197,6 +198,10 @@ type ListPublicAlbumsRow struct {
 
 // Публичное чтение витрины. Только активные магазины, не скрытые альбомы,
 // фото в статусе ready. Приватные поля наружу не отдаются (см. handlers).
+// Потолок здесь — страховка горячего пути: страница магазина отдаётся
+// на каждый заход покупателя, и число альбомов в ней не должно зависеть
+// от того, сколько их успел наделать продавец. Совпадает с потолком на
+// создание альбомов, так что честный каталог не обрезается.
 func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]ListPublicAlbumsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicAlbums, shopID)
 	if err != nil {

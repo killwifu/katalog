@@ -1,6 +1,10 @@
 -- Публичное чтение витрины. Только активные магазины, не скрытые альбомы,
 -- фото в статусе ready. Приватные поля наружу не отдаются (см. handlers).
 
+-- Потолок здесь — страховка горячего пути: страница магазина отдаётся
+-- на каждый заход покупателя, и число альбомов в ней не должно зависеть
+-- от того, сколько их успел наделать продавец. Совпадает с потолком на
+-- создание альбомов, так что честный каталог не обрезается.
 -- name: ListPublicAlbums :many
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
        c.id AS cover_id
@@ -8,7 +12,8 @@ FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
-ORDER BY a.sort_order, a.created_at;
+ORDER BY a.sort_order, a.created_at
+LIMIT 1000;
 
 -- Фолбэк обложки: первое ready-фото каждого альбома магазина
 -- (merge с ListPublicAlbums — в handler).

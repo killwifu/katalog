@@ -59,3 +59,6 @@ WHERE shop_id = $1;
 UPDATE albums
 SET hidden_by_plan = false, updated_at = now()
 WHERE shop_id = $1 AND hidden_by_plan;
+
+-- name: CountAlbumsByShop :one
+SELECT count(*) FROM albums WHERE shop_id = $1;

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -75,6 +76,10 @@ func (a *API) albumFromURL(w http.ResponseWriter, r *http.Request) (db.Album, bo
 	return album, true
 }
 
+// maxAlbumsPerShop — см. handleCreateAlbum; то же число стоит потолком
+// в ListPublicAlbums, чтобы честный каталог не обрезался на витрине.
+const maxAlbumsPerShop = 1000
+
 type createAlbumRequest struct {
 	Title     string  `json:"title"`
 	ParentID  *string `json:"parent_id"`
@@ -90,6 +95,20 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 	req.Title = strings.TrimSpace(req.Title)
 	if req.Title == "" || len(req.Title) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-200 characters")
+		return
+	}
+
+	// Число альбомов тарифом не ограничено, а страница магазина отдаёт их
+	// все и на каждый заход покупателя. Потолок держит горячий путь
+	// предсказуемым; тысяча — заведомо больше любого живого каталога.
+	count, err := a.Q.CountAlbumsByShop(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "count albums", err)
+		return
+	}
+	if count >= maxAlbumsPerShop {
+		apiError(w, http.StatusConflict, "album_limit",
+			fmt.Sprintf("shop holds at most %d albums", maxAlbumsPerShop))
 		return
 	}
 
