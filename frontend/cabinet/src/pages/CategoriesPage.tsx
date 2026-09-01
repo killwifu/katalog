@@ -174,6 +174,10 @@ function Row({
 }) {
   const [confirming, setConfirming] = useState(false)
   const [moveTo, setMoveTo] = useState('')
+  // Подкатегории уносятся вместе с родителем (каскад по внешнему ключу),
+  // а счётчик показывал только прямые альбомы — продавец не видел, что
+  // теряет ещё и вложенную структуру.
+  const subCount = all.filter((c) => c.parent_id === category.id).length
   const [editing, setEditing] = useState<string | null>(null)
   const [editParent, setEditParent] = useState<string>(category.parent_id ?? '')
   const targets = all.filter((c) => c.id !== category.id && !c.parent_id)
@@ -244,6 +248,12 @@ function Row({
       </span>
       {confirming ? (
         <>
+          {subCount > 0 && (
+            <span className="rows__meta text-danger">
+              вместе с {subCount}{' '}
+              {subCount === 1 ? 'подкатегорией' : 'подкатегориями'}
+            </span>
+          )}
           <select
             value={moveTo}
             onChange={(e) => setMoveTo(e.target.value)}

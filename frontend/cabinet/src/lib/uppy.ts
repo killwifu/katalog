@@ -34,7 +34,24 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
   const uppy = new Uppy({
     locale: ru_RU,
     restrictions: {
-      allowedFileTypes: ['image/*', '.heic', '.heif'],
+      // Ровно то, что принимает сервер (jpeg/png/webp/heic). Маска
+      // image/* пропускала GIF, BMP, TIFF и SVG: файл целиком уезжал
+      // в S3 и отваливался уже на обработке — трафик потрачен, а
+      // продавец видит «не удалось» без объяснения. На телефоне это
+      // особенно обидно.
+      allowedFileTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/heic',
+        'image/heif',
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.webp',
+        '.heic',
+        '.heif',
+      ],
       maxFileSize: 50 * 1024 * 1024,
     },
   }).use(AwsS3, {
