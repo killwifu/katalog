@@ -69,9 +69,9 @@ const STEPS = [
 // Короткие подписи для главной: на странице тарифов у тех же планов
 // развёрнутые списки возможностей.
 const PLAN_SUMMARY: Record<string, string> = {
-  start: '100 фото, 10 альбомов',
-  sell: '5 000 фото, водяной знак, статистика',
-  biz: '30 000 фото, свой домен, сотрудники',
+  free: '500 фото, 1 ГБ',
+  basic: '5 000 фото, 10 ГБ',
+  pro: '20 000 фото, 20 ГБ',
 }
 
 export default function HomePage() {
@@ -199,7 +199,7 @@ export default function HomePage() {
               ))}
             </div>
             <p className={`center muted ${styles.plansNote}`}>
-              Все тарифы можно попробовать 14 дней без карты ·{' '}
+              Возможности одинаковые на всех тарифах, начать можно бесплатно ·{' '}
               <a href="/pricing">Сравнить возможности</a>
             </p>
           </div>
@@ -220,7 +220,7 @@ export default function HomePage() {
 
       <StickyBar
         title="Бесплатно, без карты"
-        note="100 фото на старте"
+        note="500 фото бесплатно"
         action="Создать"
         href="/app/register"
       />
