@@ -253,7 +253,7 @@ export type PhotoPage = {
   total: number
 }
 
-export type ConfirmResult = { photo_id: string; status: string; error?: string }
+export type ConfirmResult = { photo_id: string; status: string; error?: string; code?: string }
 
 export type ShopStats = {
   days: number

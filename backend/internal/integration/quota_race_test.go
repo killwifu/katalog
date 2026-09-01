@@ -1,7 +1,9 @@
 package integration
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
@@ -89,4 +91,93 @@ func presignBurst(t *testing.T, c *client, shopID, albumID string, parallel int)
 		}
 	}
 	return granted
+}
+
+// TestStorageQuotaEnforcedOnConfirm: лимит хранилища нельзя перебрать,
+// заказав ссылки на загрузку заранее.
+//
+// presign сверяет квоту с shops.storage_used, а байты туда попадают только
+// на confirm — после того, как файл уже лежит в S3. Значит, пока не
+// подтверждён ни один файл, счётчик стоит на месте, и все presign проходят
+// проверку по одному и тому же значению. Дальше confirm квоту не проверял
+// вовсе и просто прибавлял байты: магазин уезжал за лимит тарифа, а платит
+// за это хранилище оператор.
+func TestStorageQuotaEnforcedOnConfirm(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	jpeg := makeJPEG(t, 320, 240)
+	size := int64(len(jpeg))
+
+	// Лимит хранилища тарифа free в тестовой конфигурации — 1 ГиБ.
+	// Оставляем места ровно на полтора файла: один влезает, два — нет.
+	const maxStorage = 1 << 30
+	mustExec(t, "UPDATE shops SET storage_used = $2 WHERE id = $1",
+		shop.ID, maxStorage-size-size/2)
+
+	// Обе ссылки заказаны до того, как подтверждён хоть один файл.
+	first := presignAndPut(t, c, shop.ID, album.ID, jpeg)
+	second := presignAndPut(t, c, shop.ID, album.ID, jpeg)
+
+	var confirm struct {
+		Results []struct {
+			PhotoID string `json:"photo_id"`
+			Status  string `json:"status"`
+			Error   string `json:"error"`
+		} `json:"results"`
+	}
+	c.mustJSON("POST", "/api/v1/photos/confirm",
+		map[string]any{"shop_id": shop.ID, "photo_ids": []string{first, second}},
+		http.StatusOK, &confirm)
+
+	var accepted, rejected int
+	for _, r := range confirm.Results {
+		switch r.Status {
+		case "processing":
+			accepted++
+		case "error":
+			rejected++
+		}
+	}
+	if accepted != 1 || rejected != 1 {
+		t.Errorf("подтверждено %d, отклонено %d — ожидались 1 и 1: %+v",
+			accepted, rejected, confirm.Results)
+	}
+
+	var used int64
+	if err := env.pool.QueryRow(ctx,
+		"SELECT storage_used FROM shops WHERE id = $1", shop.ID).Scan(&used); err != nil {
+		t.Fatalf("read storage_used: %v", err)
+	}
+	if used > maxStorage {
+		t.Errorf("занято %d байт при лимите %d — квота перебрана на %d",
+			used, int64(maxStorage), used-maxStorage)
+	}
+}
+
+// presignAndPut — заказать ссылку и загрузить файл, но не подтверждать.
+func presignAndPut(t *testing.T, c *client, shopID, albumID string, data []byte) string {
+	t.Helper()
+	var pre presignJSON
+	c.mustJSON("POST", "/api/v1/uploads/presign",
+		map[string]any{"shop_id": shopID, "album_id": albumID, "size": len(data)},
+		http.StatusOK, &pre)
+
+	req, err := http.NewRequest(http.MethodPut, pre.URL, bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("build PUT: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT to presigned url: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("PUT to presigned url: status %d: %s", resp.StatusCode, body)
+	}
+	return pre.PhotoID
 }

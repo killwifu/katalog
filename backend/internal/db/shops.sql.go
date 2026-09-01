@@ -28,6 +28,31 @@ func (q *Queries) AddShopStorageUsed(ctx context.Context, arg AddShopStorageUsed
 	return err
 }
 
+const addShopStorageWithinLimit = `-- name: AddShopStorageWithinLimit :one
+UPDATE shops
+SET storage_used = storage_used + $2, updated_at = now()
+WHERE id = $1 AND storage_used + $2 <= $3
+RETURNING storage_used
+`
+
+type AddShopStorageWithinLimitParams struct {
+	ID            uuid.UUID `json:"id"`
+	StorageUsed   int64     `json:"storage_used"`
+	StorageUsed_2 int64     `json:"storage_used_2"`
+}
+
+// Учёт байтов оригинала на confirm: прибавляем, только если помещаемся
+// в лимит тарифа. Проверка и прибавление одним запросом — presign сверяет
+// квоту со счётчиком, в который байты попадают только здесь, так что
+// заказать ссылки заранее и подтвердить их пачкой иначе даёт перебор.
+// Ноль строк означает «не помещается».
+func (q *Queries) AddShopStorageWithinLimit(ctx context.Context, arg AddShopStorageWithinLimitParams) (int64, error) {
+	row := q.db.QueryRow(ctx, addShopStorageWithinLimit, arg.ID, arg.StorageUsed, arg.StorageUsed_2)
+	var storage_used int64
+	err := row.Scan(&storage_used)
+	return storage_used, err
+}
+
 const countShopsByOwner = `-- name: CountShopsByOwner :one
 SELECT count(*) FROM shops WHERE owner_id = $1
 `
