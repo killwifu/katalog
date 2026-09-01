@@ -34,6 +34,36 @@ var reservedSlugs = map[string]struct{}{
 	"pricing": {}, "updates": {}, "remove-bg": {},
 }
 
+// slugReservationDays — сколько освобождённый адрес держится за прежним
+// владельцем. Столько же, сколько нельзя менять адрес повторно: к этому
+// сроку разосланные ссылки в основном отживают своё.
+const slugReservationDays = 180
+
+// checkSlugReservation — не занят ли адрес бронью чужого магазина.
+// Свою бронь владелец может забрать обратно.
+func (a *API) checkSlugReservation(
+	w http.ResponseWriter, r *http.Request, slug string, shopID uuid.UUID,
+) bool {
+	res, err := a.Q.GetSlugReservation(r.Context(), db.GetSlugReservationParams{
+		Slug:    slug,
+		Column2: slugReservationDays,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	if err != nil {
+		a.internalError(w, "check slug reservation", err)
+		return false
+	}
+	if res.ShopID == shopID {
+		return true
+	}
+	// Снаружи это неотличимо от обычной занятости: существование чужого
+	// магазина по такому адресу — не наше дело сообщать.
+	apiError(w, http.StatusConflict, "slug_taken", "this slug is already taken")
+	return false
+}
+
 func validateSlug(slug string) string {
 	if !slugPattern.MatchString(slug) {
 		return "slug must be 3-63 chars: lowercase latin letters, digits, single hyphens"
@@ -112,6 +142,9 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	req.Name = strings.TrimSpace(req.Name)
 	if msg := validateSlug(req.Slug); msg != "" {
 		apiError(w, http.StatusBadRequest, "invalid_slug", msg)
+		return
+	}
+	if !a.checkSlugReservation(w, r, req.Slug, uuid.Nil) {
 		return
 	}
 	if req.Name == "" || len(req.Name) > 200 {
@@ -300,6 +333,10 @@ func (a *API) changeShopSlug(w http.ResponseWriter, r *http.Request, shop db.Sho
 		}
 	}
 
+	if !a.checkSlugReservation(w, r, slug, shop.ID) {
+		return shop, false
+	}
+
 	oldSlug := shop.Slug
 	renamed, err := a.Q.UpdateShopSlug(r.Context(), db.UpdateShopSlugParams{
 		ID:      shop.ID,
@@ -315,6 +352,18 @@ func (a *API) changeShopSlug(w http.ResponseWriter, r *http.Request, shop db.Sho
 		a.internalError(w, "update shop slug", err)
 		return shop, false
 	}
+	// Прежний адрес держим за этим же магазином, новый — освобождаем
+	// от возможной прежней брони.
+	if err := a.Q.ReserveReleasedSlug(r.Context(), db.ReserveReleasedSlugParams{
+		Slug:   oldSlug,
+		ShopID: shop.ID,
+	}); err != nil {
+		a.Log.Error("reserve released slug", "slug", oldSlug, "error", err)
+	}
+	if err := a.Q.DropSlugReservation(r.Context(), slug); err != nil {
+		a.Log.Error("drop slug reservation", "slug", slug, "error", err)
+	}
+
 	a.Revalidate.Shop(oldSlug)
 	return renamed, true
 }

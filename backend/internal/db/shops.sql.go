@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addShopStorageUsed = `-- name: AddShopStorageUsed :exec
@@ -101,6 +102,16 @@ func (q *Queries) DeleteShop(ctx context.Context, arg DeleteShopParams) (int64, 
 	return result.RowsAffected(), nil
 }
 
+const dropSlugReservation = `-- name: DropSlugReservation :exec
+DELETE FROM released_slugs WHERE slug = $1
+`
+
+// Магазин занял адрес — бронь на него больше не нужна.
+func (q *Queries) DropSlugReservation(ctx context.Context, slug string) error {
+	_, err := q.db.Exec(ctx, dropSlugReservation, slug)
+	return err
+}
+
 const getShopByID = `-- name: GetShopByID :one
 SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE id = $1
@@ -163,6 +174,28 @@ func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams
 	return i, err
 }
 
+const getSlugReservation = `-- name: GetSlugReservation :one
+SELECT shop_id, released_at FROM released_slugs
+WHERE slug = $1 AND released_at > now() - make_interval(days => $2::int)
+`
+
+type GetSlugReservationParams struct {
+	Slug    string `json:"slug"`
+	Column2 int32  `json:"column_2"`
+}
+
+type GetSlugReservationRow struct {
+	ShopID     uuid.UUID          `json:"shop_id"`
+	ReleasedAt pgtype.Timestamptz `json:"released_at"`
+}
+
+func (q *Queries) GetSlugReservation(ctx context.Context, arg GetSlugReservationParams) (GetSlugReservationRow, error) {
+	row := q.db.QueryRow(ctx, getSlugReservation, arg.Slug, arg.Column2)
+	var i GetSlugReservationRow
+	err := row.Scan(&i.ShopID, &i.ReleasedAt)
+	return i, err
+}
+
 const listShopsByOwner = `-- name: ListShopsByOwner :many
 SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at FROM shops
 WHERE owner_id = $1
@@ -204,6 +237,25 @@ func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sh
 		return nil, err
 	}
 	return items, nil
+}
+
+const reserveReleasedSlug = `-- name: ReserveReleasedSlug :exec
+INSERT INTO released_slugs (slug, shop_id)
+VALUES ($1, $2)
+ON CONFLICT (slug) DO UPDATE
+SET shop_id = EXCLUDED.shop_id, released_at = now()
+`
+
+type ReserveReleasedSlugParams struct {
+	Slug   string    `json:"slug"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Освобождённый адрес: занять его может только прежний владелец, пока
+// не истёк срок брони.
+func (q *Queries) ReserveReleasedSlug(ctx context.Context, arg ReserveReleasedSlugParams) error {
+	_, err := q.db.Exec(ctx, reserveReleasedSlug, arg.Slug, arg.ShopID)
+	return err
 }
 
 const updateShop = `-- name: UpdateShop :one

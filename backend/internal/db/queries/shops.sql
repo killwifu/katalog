@@ -48,3 +48,19 @@ WHERE id = $1;
 
 -- name: CountShopsByOwner :one
 SELECT count(*) FROM shops WHERE owner_id = $1;
+
+-- Освобождённый адрес: занять его может только прежний владелец, пока
+-- не истёк срок брони.
+-- name: ReserveReleasedSlug :exec
+INSERT INTO released_slugs (slug, shop_id)
+VALUES ($1, $2)
+ON CONFLICT (slug) DO UPDATE
+SET shop_id = EXCLUDED.shop_id, released_at = now();
+
+-- name: GetSlugReservation :one
+SELECT shop_id, released_at FROM released_slugs
+WHERE slug = $1 AND released_at > now() - make_interval(days => $2::int);
+
+-- Магазин занял адрес — бронь на него больше не нужна.
+-- name: DropSlugReservation :exec
+DELETE FROM released_slugs WHERE slug = $1;

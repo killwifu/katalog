@@ -643,6 +643,12 @@ type Photo struct {
 	DrvSize    int64              `json:"drv_size"`
 }
 
+type ReleasedSlug struct {
+	Slug       string             `json:"slug"`
+	ShopID     uuid.UUID          `json:"shop_id"`
+	ReleasedAt pgtype.Timestamptz `json:"released_at"`
+}
+
 type Section struct {
 	ID        uuid.UUID          `json:"id"`
 	TabID     uuid.UUID          `json:"tab_id"`
