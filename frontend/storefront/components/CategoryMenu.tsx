@@ -1,15 +1,14 @@
 import type { CategoryPublic } from '@/lib/api'
 
-// Один компонент — три раскладки (kit: «Не делайте три реализации»):
+// Один компонент — две раскладки (kit: «Не делайте три реализации»):
 //   dropdown — выпадающее меню в шапке витрины;
-//   tree     — дерево слева на странице категории;
-//   sheet    — шторка на телефоне.
+//   tree     — дерево слева на странице категории.
 //
 // Раскрытие — нативный <details>, а не состояние React: компонент остаётся
 // серверным и не тащит клиентский рантайм на горячий путь покупателя
 // (95% трафика при бюджете 100 КБ gzip). aria-expanded браузер проставляет
 // сам. Цена — Escape не закрывает панель, закрывает клик по заголовку.
-type Layout = 'dropdown' | 'tree' | 'sheet'
+type Layout = 'dropdown' | 'tree'
 
 type Props = {
   shopSlug: string
@@ -85,9 +84,7 @@ export function CategoryMenu({ shopSlug, categories, layout, activeSlug }: Props
   return (
     <nav className={`catmenu catmenu--${layout}`} aria-label="Категории">
       <details>
-        <summary className="btn btn--ghost btn--sm">
-          {layout === 'sheet' ? 'Категории' : 'Каталог'}
-        </summary>
+        <summary className="btn btn--ghost btn--sm">Каталог</summary>
         <div className="catpick">
           <CategoryList nodes={nodes} shopSlug={shopSlug} activeSlug={activeSlug} />
         </div>

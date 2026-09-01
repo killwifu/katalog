@@ -1,12 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { api, type Plan, type PlanInfo, errorText } from '../api'
+import { PLAN_NAMES } from '../lib/plans'
 import { useShop } from './AppLayout'
-
-const PLAN_NAMES: Record<Plan, string> = {
-  free: 'Бесплатный',
-  basic: 'Базовый',
-  pro: 'Про',
-}
 
 const STATE_LABELS = {
   ok: null,
@@ -83,13 +79,11 @@ export function BillingPage() {
             )}
           </div>
           {b.subscription?.status === 'active' && b.subscription.auto_renew && (
-            <button
-              onClick={() => cancel.mutate()}
-              disabled={cancel.isPending}
-              className="text-sm text-ink-2 hover:text-danger disabled:opacity-50"
-            >
-              Отключить автопродление
-            </button>
+            <CancelRenew
+              paidUntil={b.paid_until}
+              pending={cancel.isPending}
+              onConfirm={() => cancel.mutate()}
+            />
           )}
         </div>
         {b.subscription?.status === 'canceled' && b.paid_until && (
@@ -113,6 +107,8 @@ export function BillingPage() {
             key={plan.id}
             plan={plan}
             current={plan.id === b.plan}
+            currentPrice={b.limits.price_rub}
+            paidUntil={b.paid_until}
             onSubscribe={() => subscribe.mutate(plan.id)}
             busy={subscribe.isPending}
           />
@@ -146,14 +142,56 @@ function UsageBar({ label, pct }: { label: string; pct: number }) {
   )
 }
 
+// Отключение автопродления в два шага и с датой: одиночный текстовый
+// клик снимал подписку молча, а до какого числа тариф ещё действует,
+// продавец узнавал уже после.
+function CancelRenew({
+  paidUntil,
+  pending,
+  onConfirm,
+}: {
+  paidUntil: string | null
+  pending: boolean
+  onConfirm: () => void
+}) {
+  const [asking, setAsking] = useState(false)
+  if (!asking) {
+    return (
+      <button onClick={() => setAsking(true)} className="btn btn--quiet text-sm">
+        Отключить автопродление
+      </button>
+    )
+  }
+  return (
+    <div className="text-right">
+      <p className="text-sm text-ink-2">
+        Тариф продолжит действовать{paidUntil ? ` до ${formatDate(paidUntil)}` : ''}, дальше
+        витрина перейдёт на бесплатный.
+      </p>
+      <div className="mt-2 flex justify-end gap-2">
+        <button onClick={() => setAsking(false)} className="btn btn--ghost btn--sm">
+          Оставить
+        </button>
+        <button onClick={onConfirm} disabled={pending} className="btn btn--danger btn--sm">
+          Отключить
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function PlanCard({
   plan,
   current,
+  currentPrice,
+  paidUntil,
   onSubscribe,
   busy,
 }: {
   plan: PlanInfo
   current: boolean
+  currentPrice: number
+  paidUntil: string | null
   onSubscribe: () => void
   busy: boolean
 }) {
@@ -171,7 +209,7 @@ function PlanCard({
       </ul>
       {current ? (
         <span className="text-sm font-medium text-brand">Ваш тариф</span>
-      ) : plan.price_rub > 0 ? (
+      ) : plan.price_rub > currentPrice ? (
         <button
           onClick={onSubscribe}
           disabled={busy}
@@ -179,7 +217,14 @@ function PlanCard({
         >
           Подключить
         </button>
-      ) : null}
+      ) : (
+        /* Карточка тарифа ниже текущего рисовалась пустой: продавец видел
+           колонку без единого действия и не понимал, как понизиться. */
+        <p className="text-sm text-ink-2">
+          Ниже текущего. Витрина перейдёт сюда сама
+          {paidUntil ? ` после ${formatDate(paidUntil)}` : ''}, если отключить автопродление.
+        </p>
+      )}
     </div>
   )
 }

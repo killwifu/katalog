@@ -25,7 +25,7 @@
   --surface-alt:      #F1F0EC;
   --text:             #1A1A18;
   --text-2:           #62615C;
-  --text-3:           #90908A;
+  --text-3:           #6E6D67;   /* 4.8:1 на --page, 5.2:1 на белом */
   --border:           #E4E2DC;
   --border-strong:    #CFCCC4;
 
@@ -38,8 +38,8 @@
   --fs-h2:   clamp(20px, 2.6vw, 27px);
   --fs-h3:   17px;
   --fs-body: 15px;
-  --fs-sm:   13.5px;
-  --fs-xs:   12.5px;
+  --fs-sm:   14px;
+  --fs-xs:   13px;
 
   /* --- Геометрия --------------------------------------------------------- */
   --r-card: 16px;
@@ -140,6 +140,7 @@ img {
    края и перекрыла бы подвал: страницы, где она есть, получают отступ снизу. */
 @media (max-width: 859px) {
   body:has(.stickybar) { padding-bottom: 76px; }
+  body:has(.contactbar) { padding-bottom: 80px; }
 }
 
 .muted  { color: var(--text-2); }
@@ -319,10 +320,13 @@ img {
 
 .lead-buttons .btn { color: #fff; }
 
-.btn-telegram { background: #2AABEE; }
-.btn-whatsapp { background: #25D366; }
-.btn-vk       { background: #0077FF; }
-.btn-max      { background: #7B3FF2; }
+/* Затемнённые тона фирменных цветов: логотипные (#2AABEE, #25D366,
+   #0077FF) давали с белым текстом 2.6:1, 2.0:1 и 4.1:1 — провал WCAG
+   на главной кнопке продукта. Значения подобраны под 4.5:1 минимум. */
+.btn-telegram { background: #1C7CB0; }  /* 4.6:1 */
+.btn-whatsapp { background: #107F71; }  /* 4.9:1 */
+.btn-vk       { background: #0062D6; }  /* 5.6:1 */
+.btn-max      { background: #7B3FF2; }  /* 5.5:1 */
 
 .lead-buttons .btn:hover { filter: brightness(0.93); }
 
@@ -410,6 +414,12 @@ img {
   margin-bottom: 6px;
 }
 
+/* На телефоне hover не существует: без подчёркивания хлебные крошки,
+   пагинация и списки подальбомов неотличимы от обычного текста. */
+.breadcrumbs a,
+.pagination a,
+.album-children a { text-decoration: underline; }
+
 .breadcrumbs a:hover { color: var(--text-2); }
 
 .album-header .album-count {
@@ -459,10 +469,25 @@ img {
   overflow-wrap: anywhere;
 }
 
+/* Альбом найденного фото: в выдаче поиска без него покупатель видит
+   товар и не знает, где лежит остальное из той же партии. */
+.photo-album {
+  display: block;
+  padding: 0 12px 10px;
+  font-size: var(--fs-xs);
+  color: var(--brand);
+  text-decoration: underline;
+}
+
 .empty {
   color: var(--text-3);
   margin: 40px 0;
   text-align: center;
+  font-size: var(--fs-sm);
+}
+
+.search-count {
+  margin: 18px 0 0;
   font-size: var(--fs-sm);
 }
 
@@ -684,11 +709,70 @@ img {
   color: var(--text-2);
 }
 
+/* Полоса связи вне лайтбокса: покупатель приходит из мессенджера прямо
+   в альбом, и главное действие витрины не должно требовать открытия фото.
+   На телефоне — липкая у нижнего края, на десктопе — блок в потоке. */
+.contactbar { margin: 16px 0; }
+.contactbar .lead-buttons { margin: 0; }
+
 /* Время ответа продавца под кнопками связи. */
 .reply-time {
   margin-top: 8px;
   font-size: var(--fs-xs);
   color: var(--text-3);
+}
+
+/* --- Мобильные правила ----------------------------------------------------
+   Цель нажатия — минимум 44px (правило макетов). Шрифт полей — 16px:
+   при меньшем iOS Safari зумит страницу на фокусе, и покупателю
+   приходится отщипываться обратно.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 859px) {
+  /* Поля перечислены поимённо: .search-form input и .complaint-form input
+     специфичнее голого input и перебили бы правило — а именно они и есть
+     те поля, в которые покупатель тычет пальцем. */
+  input,
+  select,
+  textarea,
+  .search-form input,
+  .complaint-form input,
+  .complaint-form textarea { font-size: 16px; }
+
+  .btn--sm { height: 44px; padding: 0 18px; }
+
+  .pagination a,
+  .shop-tab,
+  .cattree a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .pagination a { padding: 0 12px; }
+
+  .contactbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    margin: 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .contactbar .lead-buttons { flex-wrap: nowrap; gap: 6px; }
+
+  .contactbar .lead-buttons .btn {
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+    font-size: var(--fs-xs);
+  }
+
+  .contactbar .reply-time { display: none; }
 }
 
 /* --- Вкладки витрины ------------------------------------------------------

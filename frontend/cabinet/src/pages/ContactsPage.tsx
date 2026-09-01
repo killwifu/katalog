@@ -65,11 +65,36 @@ export function ContactsPage() {
       <div className={`alert ${filled.length === 0 ? 'alert--warn' : 'alert--info'}`}>
         {filled.length === 0
           ? 'Ни один канал не заполнен: на витрине кнопок связи сейчас нет.'
-          : `Каналов заполнено: ${filled.length}. Не забудьте сохранить.`}
+          : dirty
+            ? `Каналов заполнено: ${filled.length}. Не забудьте сохранить.`
+            : `Каналов заполнено: ${filled.length}.`}
       </div>
 
       <div className="cols md:grid-cols-2">
-        <div>
+        {/* Предпросмотр стоит перед формой: на телефоне колонки идут одна
+            под другой, и снизу он оказывался ниже кнопки «Сохранить» —
+            то есть не виден ровно тогда, когда нужен. */}
+        <div className="md:order-2">
+          <div className="box">
+            <h2>Как увидит покупатель</h2>
+            {filled.length === 0 ? (
+              <p className="text-sm text-ink-3">Заполните канал — здесь появятся кнопки.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {filled.map((c) => (
+                  <span key={c.key} className={`btn btn--sm btn-${c.key}`}>
+                    {c.label}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="hint">
+              В сообщение подставится подпись фотографии — шаблон меняется в настройках.
+            </p>
+          </div>
+        </div>
+
+        <div className="md:order-1">
           {CHANNELS.map((c) => (
             <label key={c.key} className="field">
               <span>{c.label}</span>
@@ -106,28 +131,6 @@ export function ContactsPage() {
             {save.isPending ? 'Сохраняю…' : 'Сохранить'}
           </button>
           {save.isError && <p className="hint text-danger">Не удалось сохранить.</p>}
-        </div>
-
-        {/* Предпросмотр — чтобы продавец видел результат до того, как
-            отправит ссылку покупателю, а не после. */}
-        <div>
-          <div className="box">
-            <h2>Как увидит покупатель</h2>
-            {filled.length === 0 ? (
-              <p className="text-sm text-ink-3">Заполните канал — здесь появятся кнопки.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {filled.map((c) => (
-                  <span key={c.key} className="btn btn--ghost btn--sm">
-                    {c.label}
-                  </span>
-                ))}
-              </div>
-            )}
-            <p className="hint">
-              В сообщение подставится подпись фотографии — шаблон меняется в настройках.
-            </p>
-          </div>
         </div>
       </div>
     </form>

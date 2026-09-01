@@ -29,13 +29,12 @@ const FEATURES = [
     icon: <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />,
   },
   {
-    title: 'Чистый фон в один клик',
-    text: 'Товар с ковра на полу выглядит как со студийной съёмки. Без фотошопа.',
+    title: 'Поиск по подписям',
+    text: 'Покупатель находит нужное по названию или артикулу, не листая сотни фото.',
     icon: (
       <>
-        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
-        <path d="M22 21H7" />
-        <path d="m5 11 9 9" />
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
       </>
     ),
   },
@@ -54,7 +53,7 @@ const FEATURES = [
 const STEPS = [
   {
     title: 'Загрузите фото',
-    text: 'С телефона или компьютера. Уже торгуете на Yupoo — перенесём альбомы по ссылке.',
+    text: 'С телефона или компьютера, пачкой в сотню снимков — они встанут сами.',
   },
   {
     title: 'Разложите по полкам',
@@ -83,7 +82,7 @@ export default function HomePage() {
         <section className={styles.hero}>
           <div className={`wrap ${styles.heroGrid}`}>
             <div>
-              <span className="tag">Готово за вечер · бесплатно на старте</span>
+              <span className="tag">Бесплатно на старте, без карты</span>
               <h1>Весь ваш товар — в одной ссылке</h1>
               <p className={styles.lead}>
                 Больше не нужно пересылать фото по одному в переписке. Загрузите товары, разложите
@@ -102,7 +101,7 @@ export default function HomePage() {
                     <path d="M15 3h6v6" />
                     <path d="M10 14 21 3" />
                   </svg>
-                  Посмотреть, как это работает
+                  Как это работает
                 </a>
               </div>
             </div>
@@ -120,23 +119,6 @@ export default function HomePage() {
                   <div key={i} className={styles.peekCell} />
                 ))}
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" id="how">
-          <div className="wrap">
-            <div className="section__head">
-              <h2>Как это работает</h2>
-              <p>Две минуты: весь путь от первой фотографии до готовой витрины.</p>
-            </div>
-            {/* Заглушка: видео-гайд ещё не записан. */}
-            <div className={styles.video} aria-hidden="true">
-              <span className={styles.videoPlay}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </span>
             </div>
           </div>
         </section>
@@ -160,10 +142,11 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="section">
+        <section className="section" id="how">
           <div className="wrap">
             <div className="section__head">
-              <h2>Три шага до первой ссылки</h2>
+              <h2>Как это работает</h2>
+              <p>Три шага от первой фотографии до ссылки, которую можно отправить.</p>
             </div>
             <div className={styles.steps}>
               {STEPS.map((step, i) => (
@@ -199,8 +182,8 @@ export default function HomePage() {
               ))}
             </div>
             <p className={`center muted ${styles.plansNote}`}>
-              Возможности одинаковые на всех тарифах, начать можно бесплатно ·{' '}
-              <a href="/pricing">Сравнить возможности</a>
+              Тарифы отличаются только объёмом — фотографиями и местом. Начать
+              можно бесплатно · <a href="/pricing">Сравнить тарифы</a>
             </p>
           </div>
         </section>
@@ -211,7 +194,7 @@ export default function HomePage() {
               <h2>Первую витрину можно собрать сегодня</h2>
               <p>Бесплатно, без карты и без ограничений по времени.</p>
               <a className="btn btn--primary" href="/app/register">
-                Начать
+                Создать витрину
               </a>
             </div>
           </div>
@@ -219,9 +202,9 @@ export default function HomePage() {
       </main>
 
       <StickyBar
-        title="Бесплатно, без карты"
-        note="500 фото бесплатно"
-        action="Создать"
+        title="Первая витрина бесплатно"
+        note="500 фото, без карты"
+        action="Создать витрину"
         href="/app/register"
       />
     </>

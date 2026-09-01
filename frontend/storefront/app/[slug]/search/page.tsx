@@ -8,6 +8,7 @@ import {
   type PhotoPublic,
 } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
+import { ContactBar } from '@/components/ContactBar'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
@@ -63,6 +64,9 @@ export default async function SearchPage({ params, searchParams }: Props) {
   const shopData = res.data
   if (!shopData) notFound()
   const { shop } = shopData
+  // Названия альбомов берём из уже загруженной страницы магазина: выдача
+  // поиска отдаёт только album_id, а второй запрос ради заголовка не нужен.
+  const albumTitles = Object.fromEntries(shopData.albums.map((a) => [a.id, a.title]))
 
   // Сбой поиска не должен превращаться в страницу ошибки: покупатель
   // на витрине, а не в кабинете, и ему нужен хотя бы каталог и контакты.
@@ -104,7 +108,11 @@ export default async function SearchPage({ params, searchParams }: Props) {
           <NotFoundContacts shop={shop} />
         </>
       ) : (
-        <PhotoGrid photos={photos} shop={shop} />
+        <>
+          <p className="muted search-count">Найдено: {photos.length}</p>
+          <PhotoGrid photos={photos} shop={shop} albumTitles={albumTitles} />
+          <ContactBar shop={shop} />
+        </>
       )}
     </main>
   )

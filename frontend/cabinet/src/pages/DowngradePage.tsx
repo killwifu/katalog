@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, errorText, type DowngradeAlbum } from '../api'
+import { PLAN_NAMES } from '../lib/plans'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
@@ -72,7 +73,7 @@ export function DowngradePage() {
 
       {over_limit ? (
         <div className="alert alert--warn">
-          На тарифе «{state.data.plan}» видимыми останутся {max_photos} фотографий
+          На тарифе «{PLAN_NAMES[state.data.plan]}» видимыми останутся {max_photos} фотографий
           из {total_photos} — остальные скроются, но сохранятся в кабинете.
         </div>
       ) : (
