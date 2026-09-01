@@ -12,23 +12,6 @@
 {$APP_DOMAIN} {
 	encode gzip zstd
 
-	# Те же заголовки, что и в локальном Caddyfile. Держать их только там
-	# бессмысленно: наружу смотрит как раз этот файл.
-	#
-	# frame-ancestors: витрину продавца нельзя встроить в чужой сайт —
-	# каталог и есть товар, а подмену покупатель не увидит.
-	# nosniff: наружу уходит то, что загрузил продавец.
-	# Referrer-Policy: адрес просматриваемого альбома не уезжает в
-	# мессенджер продавца вместе с переходом.
-	header {
-		X-Frame-Options "DENY"
-		Content-Security-Policy "frame-ancestors 'none'"
-		X-Content-Type-Options "nosniff"
-		Referrer-Policy "strict-origin-when-cross-origin"
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		-Server
-	}
-
 	handle /healthz {
 		reverse_proxy api:8080
 	}
@@ -57,6 +40,9 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
+		# X-Frame-Options устарел и не покрывает вложенные фреймы —
+		# современные браузеры смотрят на frame-ancestors.
+		Content-Security-Policy "frame-ancestors 'none'"
 		-Server
 	}
 }
