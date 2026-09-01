@@ -32,6 +32,7 @@ export function TabsPage() {
   })
 
   const deleteTab = useMutation({
+    onError: (e: Error) => setError(errorText(e)),
     mutationFn: (id: string) => api.deleteTab(shop.id, id),
     onSuccess: refresh,
   })
@@ -207,6 +208,9 @@ function TabBlock({
             Добавить раздел
           </button>
         </form>
+        {create.isError && (
+          <p className="mt-2 text-sm text-danger">{errorText(create.error)}</p>
+        )}
       </div>
     </section>
   )

@@ -55,6 +55,7 @@ export function CategoriesPage() {
     mutationFn: ({ id, moveTo }: { id: string; moveTo?: string }) =>
       api.deleteCategory(shop.id, id, moveTo),
     onSuccess: () => void refresh(),
+    onError: (e: Error) => setError(errorText(e)),
   })
 
   // Переименование: опечатку в названии иначе можно было исправить только
