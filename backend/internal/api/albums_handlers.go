@@ -112,31 +112,9 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var parentID uuid.NullUUID
-	if req.ParentID != nil {
-		pid, err := uuid.Parse(*req.ParentID)
-		if err != nil {
-			apiError(w, http.StatusBadRequest, "invalid_parent", "invalid parent_id")
-			return
-		}
-		parent, err := a.Q.GetAlbumForShop(r.Context(), db.GetAlbumForShopParams{
-			ID:     pid,
-			ShopID: shop.ID,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			apiError(w, http.StatusNotFound, "not_found", "parent album not found")
-			return
-		}
-		if err != nil {
-			a.internalError(w, "load parent album", err)
-			return
-		}
-		// Максимум 2 уровня: родитель сам не может быть вложенным.
-		if parent.ParentID.Valid {
-			apiError(w, http.StatusBadRequest, "too_deep", "albums can be nested at most 2 levels")
-			return
-		}
-		parentID = uuid.NullUUID{UUID: pid, Valid: true}
+	parentID, ok := a.resolveAlbumParent(w, r, req.ParentID, uuid.Nil)
+	if !ok {
+		return
 	}
 
 	album, err := a.Q.CreateAlbum(r.Context(), db.CreateAlbumParams{
@@ -180,6 +158,62 @@ type updateAlbumRequest struct {
 	Status       *string `json:"status"`
 	Description  *string `json:"description"`
 	CoverPhotoID *string `json:"cover_photo_id"`
+	// ParentID: пустая строка выносит альбом на верхний уровень.
+	// Раньше вложенность задавалась только при создании — переложить
+	// альбом можно было лишь удалив его вместе с фотографиями.
+	ParentID *string `json:"parent_id"`
+}
+
+// resolveAlbumParent разбирает parent_id. self — id альбома, который правим
+// (uuid.Nil при создании): он не может стать сам себе родителем, и альбом
+// с подальбомами не может уехать на второй уровень — его дети окажутся
+// на третьем, а уровней два.
+func (a *API) resolveAlbumParent(
+	w http.ResponseWriter, r *http.Request, raw *string, self uuid.UUID,
+) (uuid.NullUUID, bool) {
+	if raw == nil || *raw == "" {
+		return uuid.NullUUID{}, true
+	}
+	shop := shopFromCtx(r)
+	pid, err := uuid.Parse(*raw)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, "invalid_parent", "invalid parent_id")
+		return uuid.NullUUID{}, false
+	}
+	if self != uuid.Nil && pid == self {
+		apiError(w, http.StatusBadRequest, "invalid_parent", "album cannot be its own parent")
+		return uuid.NullUUID{}, false
+	}
+	parent, err := a.Q.GetAlbumForShop(r.Context(), db.GetAlbumForShopParams{
+		ID:     pid,
+		ShopID: shop.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		apiError(w, http.StatusNotFound, "not_found", "parent album not found")
+		return uuid.NullUUID{}, false
+	}
+	if err != nil {
+		a.internalError(w, "load parent album", err)
+		return uuid.NullUUID{}, false
+	}
+	// Максимум 2 уровня: родитель сам не может быть вложенным.
+	if parent.ParentID.Valid {
+		apiError(w, http.StatusBadRequest, "too_deep", "albums can be nested at most 2 levels")
+		return uuid.NullUUID{}, false
+	}
+	if self != uuid.Nil {
+		children, err := a.Q.CountAlbumChildren(r.Context(), uuid.NullUUID{UUID: self, Valid: true})
+		if err != nil {
+			a.internalError(w, "count album children", err)
+			return uuid.NullUUID{}, false
+		}
+		if children > 0 {
+			apiError(w, http.StatusBadRequest, "too_deep",
+				"album has sub-albums and cannot itself be nested")
+			return uuid.NullUUID{}, false
+		}
+	}
+	return uuid.NullUUID{UUID: pid, Valid: true}, true
 }
 
 func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
@@ -251,9 +285,19 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	parentID := album.ParentID
+	if req.ParentID != nil {
+		var ok bool
+		parentID, ok = a.resolveAlbumParent(w, r, req.ParentID, album.ID)
+		if !ok {
+			return
+		}
+	}
+
 	updated, err := a.Q.UpdateAlbum(r.Context(), db.UpdateAlbumParams{
 		ID:           album.ID,
 		ShopID:       shop.ID,
+		ParentID:     parentID,
 		Title:        title,
 		SortOrder:    sortOrder,
 		Status:       status,

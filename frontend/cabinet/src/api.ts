@@ -104,6 +104,9 @@ export type Shop = {
   name: string
   description: string
   plan: Plan
+  // Блокировка модератором. Продавец её не снимает, но должен понимать,
+  // почему витрина недоступна и почему не грузятся фотографии.
+  status: 'active' | 'suspended' | 'deleted'
   billing_state: BillingState
   paid_until: string | null
   storage_used: number

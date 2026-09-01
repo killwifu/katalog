@@ -465,6 +465,10 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: updateAlbum
+      description: >
+        parent_id применяется: пустая строка выносит альбом на верхний
+        уровень. 400 (too_deep), если родитель сам вложен или у альбома есть
+        подальбомы — уровней всего два.
       summary: Обновить альбом (title, description, sort_order, status, cover_photo_id)
       requestBody:
         required: true
