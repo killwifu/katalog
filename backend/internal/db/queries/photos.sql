@@ -42,7 +42,7 @@ WHERE id = $1;
 
 -- name: SetPhotoFailed :exec
 UPDATE photos
-SET status = 'failed', updated_at = now()
+SET status = 'failed', fail_reason = $2, updated_at = now()
 WHERE id = $1;
 
 -- name: UpdatePhotoCaption :one

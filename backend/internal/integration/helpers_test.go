@@ -112,13 +112,14 @@ type albumJSON struct {
 }
 
 type photoJSON struct {
-	ID      string            `json:"id"`
-	AlbumID string            `json:"album_id"`
-	Caption string            `json:"caption"`
-	Status  string            `json:"status"`
-	Width   int32             `json:"width"`
-	Height  int32             `json:"height"`
-	Urls    map[string]string `json:"urls"`
+	ID         string            `json:"id"`
+	AlbumID    string            `json:"album_id"`
+	Caption    string            `json:"caption"`
+	Status     string            `json:"status"`
+	Width      int32             `json:"width"`
+	Height     int32             `json:"height"`
+	Urls       map[string]string `json:"urls"`
+	FailReason string            `json:"fail_reason"`
 }
 
 type presignJSON struct {

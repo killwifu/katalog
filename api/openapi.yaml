@@ -1945,6 +1945,12 @@ components:
         width: { type: integer }
         height: { type: integer }
         sort_order: { type: integer }
+        fail_reason:
+          type: string
+          enum: [unsupported_format, corrupt, too_large, empty]
+          description: >
+            Только для status=failed. Код причины, а не текст: кабинет
+            переводит его сам, чтобы продавец понял, что чинить.
         urls:
           type: object
           description: Только для status=ready; деривативы WebP (300/800/1600)

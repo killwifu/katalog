@@ -23,9 +23,22 @@ const (
 // DerivativeSizes — деривативы (longest side, px). Покупателю уходят только они.
 var DerivativeSizes = imagingmeta.DerivativeSizes
 
+// Код причины отказа. Хранится у фотографии и переводится в кабинете:
+// продавцу нужно понять, что чинить, а не читать английскую диагностику.
+type FailCode string
+
+const (
+	FailUnsupportedFormat FailCode = "unsupported_format"
+	FailCorrupt           FailCode = "corrupt"
+	FailTooLarge          FailCode = "too_large"
+	FailEmpty             FailCode = "empty"
+)
+
 // ValidationError — постоянная ошибка контента: ретраи бессмысленны,
-// фото помечается failed.
+// фото помечается failed. Reason — техническая диагностика для логов,
+// Code — то, по чему кабинет выбирает объяснение продавцу.
 type ValidationError struct {
+	Code   FailCode
 	Reason string
 }
 
@@ -47,9 +60,9 @@ func DetectFormat(data []byte) (string, error) {
 		case "heic", "heix", "hevc", "hevx", "mif1", "msf1":
 			return "heic", nil
 		}
-		return "", &ValidationError{Reason: fmt.Sprintf("unsupported container brand %q", brand)}
+		return "", &ValidationError{Code: FailUnsupportedFormat, Reason: fmt.Sprintf("unsupported container brand %q", brand)}
 	default:
-		return "", &ValidationError{Reason: "not a supported image (jpeg/png/webp/heic)"}
+		return "", &ValidationError{Code: FailUnsupportedFormat, Reason: "not a supported image (jpeg/png/webp/heic)"}
 	}
 }
 
@@ -88,15 +101,15 @@ func ProcessWithWatermark(data []byte, wm Watermark) (*Result, error) {
 	// только заголовок — размеры проверяются без полного декодирования.
 	header, err := vips.NewImageFromBuffer(data)
 	if err != nil {
-		return nil, &ValidationError{Reason: fmt.Sprintf("cannot read image header: %v", err)}
+		return nil, &ValidationError{Code: FailCorrupt, Reason: fmt.Sprintf("cannot read image header: %v", err)}
 	}
 	w, h := header.Width(), header.Height()
 	header.Close()
 	if w <= 0 || h <= 0 {
-		return nil, &ValidationError{Reason: "empty image"}
+		return nil, &ValidationError{Code: FailEmpty, Reason: "empty image"}
 	}
 	if w > MaxSide || h > MaxSide || w*h > MaxPixels {
-		return nil, &ValidationError{Reason: fmt.Sprintf("image %dx%d exceeds limits (%d px side, %d px total)", w, h, MaxSide, MaxPixels)}
+		return nil, &ValidationError{Code: FailTooLarge, Reason: fmt.Sprintf("image %dx%d exceeds limits (%d px side, %d px total)", w, h, MaxSide, MaxPixels)}
 	}
 
 	result := &Result{Derivatives: make(map[int][]byte, len(DerivativeSizes))}
@@ -105,7 +118,7 @@ func ProcessWithWatermark(data []byte, wm Watermark) (*Result, error) {
 	for _, size := range DerivativeSizes {
 		thumb, err := vips.NewThumbnailWithSizeFromBuffer(data, size, size, vips.InterestingNone, vips.SizeDown)
 		if err != nil {
-			return nil, &ValidationError{Reason: fmt.Sprintf("decode failed: %v", err)}
+			return nil, &ValidationError{Code: FailCorrupt, Reason: fmt.Sprintf("decode failed: %v", err)}
 		}
 		// Знак кладём на уже уменьшённый дериватив: на превью 300px
 		// подпись от полноразмерного кадра была бы нечитаемой.

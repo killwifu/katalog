@@ -32,7 +32,7 @@ func (q *Queries) CountPhotosByAlbum(ctx context.Context, arg CountPhotosByAlbum
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photos (album_id, shop_id, orig_size, source, sort_order)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
 `
 
 type CreatePhotoParams struct {
@@ -69,6 +69,7 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 		&i.UpdatedAt,
 		&i.Flagged,
 		&i.DrvSize,
+		&i.FailReason,
 	)
 	return i, err
 }
@@ -160,7 +161,7 @@ func (q *Queries) FailStaleProcessing(ctx context.Context, dollar_1 int32) ([]uu
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
 WHERE id = $1
 `
 
@@ -184,12 +185,13 @@ func (q *Queries) GetPhoto(ctx context.Context, id uuid.UUID) (Photo, error) {
 		&i.UpdatedAt,
 		&i.Flagged,
 		&i.DrvSize,
+		&i.FailReason,
 	)
 	return i, err
 }
 
 const getPhotoForShop = `-- name: GetPhotoForShop :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -219,6 +221,7 @@ func (q *Queries) GetPhotoForShop(ctx context.Context, arg GetPhotoForShopParams
 		&i.UpdatedAt,
 		&i.Flagged,
 		&i.DrvSize,
+		&i.FailReason,
 	)
 	return i, err
 }
@@ -257,7 +260,7 @@ func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([
 }
 
 const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
 WHERE album_id = $1 AND shop_id = $2
 ORDER BY sort_order, created_at, id
 LIMIT $3 OFFSET $4
@@ -307,6 +310,7 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 			&i.UpdatedAt,
 			&i.Flagged,
 			&i.DrvSize,
+			&i.FailReason,
 		); err != nil {
 			return nil, err
 		}
@@ -333,12 +337,17 @@ func (q *Queries) LockShopForUpload(ctx context.Context, dollar_1 string) error 
 
 const setPhotoFailed = `-- name: SetPhotoFailed :exec
 UPDATE photos
-SET status = 'failed', updated_at = now()
+SET status = 'failed', fail_reason = $2, updated_at = now()
 WHERE id = $1
 `
 
-func (q *Queries) SetPhotoFailed(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, setPhotoFailed, id)
+type SetPhotoFailedParams struct {
+	ID         uuid.UUID `json:"id"`
+	FailReason string    `json:"fail_reason"`
+}
+
+func (q *Queries) SetPhotoFailed(ctx context.Context, arg SetPhotoFailedParams) error {
+	_, err := q.db.Exec(ctx, setPhotoFailed, arg.ID, arg.FailReason)
 	return err
 }
 
@@ -346,7 +355,7 @@ const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
 SET status = 'processing', orig_size = $2, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
 `
 
 type SetPhotoProcessingParams struct {
@@ -375,6 +384,7 @@ func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessing
 		&i.UpdatedAt,
 		&i.Flagged,
 		&i.DrvSize,
+		&i.FailReason,
 	)
 	return i, err
 }
@@ -408,7 +418,7 @@ const updatePhotoCaption = `-- name: UpdatePhotoCaption :one
 UPDATE photos
 SET caption = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
 `
 
 type UpdatePhotoCaptionParams struct {
@@ -437,6 +447,7 @@ func (q *Queries) UpdatePhotoCaption(ctx context.Context, arg UpdatePhotoCaption
 		&i.UpdatedAt,
 		&i.Flagged,
 		&i.DrvSize,
+		&i.FailReason,
 	)
 	return i, err
 }

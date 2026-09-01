@@ -314,7 +314,7 @@ function PhotoTile({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <StatusBadge status={photo.status} />
+            <StatusBadge status={photo.status} reason={photo.fail_reason} />
           </div>
         )}
       </div>
@@ -344,7 +344,17 @@ function PhotoTile({
   )
 }
 
-function StatusBadge({ status }: { status: Photo['status'] }) {
+// Что показать продавцу вместо кода. Причина нужна ровно для того, чтобы
+// он понял, что чинить: в пачке из трёхсот снимков «ошибка файла» на всех
+// одинаковая и бесполезная.
+const FAIL_TEXT: Record<string, string> = {
+  unsupported_format: 'Формат не поддерживается',
+  corrupt: 'Файл повреждён',
+  too_large: 'Слишком большое разрешение',
+  empty: 'Пустой файл',
+}
+
+function StatusBadge({ status, reason }: { status: Photo['status']; reason?: string }) {
   if (status === 'processing' || status === 'uploading') {
     return (
       <span className="flex items-center gap-1 text-xs text-ink-2">
@@ -354,7 +364,11 @@ function StatusBadge({ status }: { status: Photo['status'] }) {
     )
   }
   if (status === 'failed') {
-    return <span className="text-xs font-medium text-danger">Ошибка файла</span>
+    return (
+      <span className="text-xs font-medium text-danger" title={FAIL_TEXT[reason ?? ''] ?? undefined}>
+        {FAIL_TEXT[reason ?? ''] ?? 'Ошибка файла'}
+      </span>
+    )
   }
   return <span className="text-xs text-ink-2">{status}</span>
 }

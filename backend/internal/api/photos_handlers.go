@@ -23,14 +23,15 @@ const (
 )
 
 type photoResponse struct {
-	ID        string            `json:"id"`
-	AlbumID   string            `json:"album_id"`
-	Caption   string            `json:"caption"`
-	Status    string            `json:"status"`
-	Width     int32             `json:"width"`
-	Height    int32             `json:"height"`
-	SortOrder int32             `json:"sort_order"`
-	Urls      map[string]string `json:"urls,omitempty"`
+	ID         string            `json:"id"`
+	AlbumID    string            `json:"album_id"`
+	Caption    string            `json:"caption"`
+	Status     string            `json:"status"`
+	Width      int32             `json:"width"`
+	Height     int32             `json:"height"`
+	SortOrder  int32             `json:"sort_order"`
+	Urls       map[string]string `json:"urls,omitempty"`
+	FailReason string            `json:"fail_reason,omitempty"`
 }
 
 func (a *API) toPhotoResponse(p db.Photo) photoResponse {
@@ -45,6 +46,11 @@ func (a *API) toPhotoResponse(p db.Photo) photoResponse {
 	}
 	if p.Status == db.PhotoStatusReady {
 		resp.Urls = a.mediaURLs(p.ShopID, p.ID)
+	}
+	// Причина провала — только продавцу и только для его фото: по ней он
+	// понимает, что чинить, вместо одинакового «ошибка файла» на всю пачку.
+	if p.Status == db.PhotoStatusFailed {
+		resp.FailReason = p.FailReason
 	}
 	return resp
 }

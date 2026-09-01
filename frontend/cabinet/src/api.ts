@@ -93,6 +93,8 @@ export type FlaggedPhoto = {
   album_id: string
   caption: string
   status: PhotoStatus
+  // Код причины отказа обработки; пусто, если фото не в статусе failed.
+  fail_reason?: string
 }
 
 export type Plan = 'free' | 'basic' | 'pro'
@@ -240,6 +242,8 @@ export type Photo = {
   height: number
   sort_order: number
   urls?: { thumb: string; medium: string; large: string }
+  // Код причины отказа обработки; приходит только при status = failed.
+  fail_reason?: string
 }
 
 export type PhotoPage = {
