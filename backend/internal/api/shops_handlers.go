@@ -64,14 +64,19 @@ func (a *API) checkSlugReservation(
 	return false
 }
 
-func validateSlug(slug string) string {
+// validateSlug возвращает машинный код и сообщение об ошибке; пустой код
+// означает, что адрес годится. Зарезервированное слово — отдельный код:
+// с общим invalid_slug кабинет говорил «Адрес: 3–63 символа, латиница»
+// человеку, который ввёл совершенно правильный «app», и тот перебирал
+// формат вместо того, чтобы придумать другое слово.
+func validateSlug(slug string) (code, msg string) {
 	if !slugPattern.MatchString(slug) {
-		return "slug must be 3-63 chars: lowercase latin letters, digits, single hyphens"
+		return "invalid_slug", "slug must be 3-63 chars: lowercase latin letters, digits, single hyphens"
 	}
 	if _, ok := reservedSlugs[slug]; ok {
-		return "this slug is reserved"
+		return "slug_reserved", "this slug is reserved for the service"
 	}
-	return ""
+	return "", ""
 }
 
 type shopResponse struct {
@@ -145,8 +150,8 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
 	req.Name = strings.TrimSpace(req.Name)
-	if msg := validateSlug(req.Slug); msg != "" {
-		apiError(w, http.StatusBadRequest, "invalid_slug", msg)
+	if code, msg := validateSlug(req.Slug); code != "" {
+		apiError(w, http.StatusBadRequest, code, msg)
 		return
 	}
 	if !a.checkSlugReservation(w, r, req.Slug, uuid.Nil) {
@@ -336,8 +341,8 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 // а не висеть в кеше ISR до истечения TTL.
 func (a *API) changeShopSlug(w http.ResponseWriter, r *http.Request, shop db.Shop, raw string) (db.Shop, bool) {
 	slug := strings.ToLower(strings.TrimSpace(raw))
-	if msg := validateSlug(slug); msg != "" {
-		apiError(w, http.StatusBadRequest, "invalid_slug", msg)
+	if code, msg := validateSlug(slug); code != "" {
+		apiError(w, http.StatusBadRequest, code, msg)
 		return shop, false
 	}
 	if shop.SlugChangedAt.Valid {

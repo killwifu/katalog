@@ -72,6 +72,7 @@ function StepName({ onDone }: { onDone: (shop: Shop) => void }) {
         const messages: Record<string, string> = {
           slug_taken: 'Этот адрес уже занят — попробуйте другой',
           invalid_slug: 'Адрес: 3–63 символа, латиница, цифры и дефисы',
+          slug_reserved: 'Этот адрес занят служебными страницами сервиса — придумайте другой',
           invalid_name: 'Укажите название (до 200 символов)',
         }
         setError(messages[err.code] ?? err.message)

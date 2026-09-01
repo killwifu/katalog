@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateSlug(t *testing.T) {
 	tests := []struct {
@@ -29,9 +32,14 @@ func TestValidateSlug(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			msg := validateSlug(tt.slug)
-			if ok := msg == ""; ok != tt.wantOK {
-				t.Errorf("validateSlug(%q) = %q, want ok=%v", tt.slug, msg, tt.wantOK)
+			code, msg := validateSlug(tt.slug)
+			if ok := code == ""; ok != tt.wantOK {
+				t.Errorf("validateSlug(%q) = %q (%q), want ok=%v", tt.slug, code, msg, tt.wantOK)
+			}
+			// Зарезервированное слово отличается от неверного формата:
+			// кабинет по коду выбирает, что сказать продавцу.
+			if strings.HasPrefix(tt.name, "reserved ") && code != "slug_reserved" {
+				t.Errorf("validateSlug(%q) = %q, want slug_reserved", tt.slug, code)
 			}
 		})
 	}
