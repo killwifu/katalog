@@ -79,3 +79,10 @@ RETURNING id;
 -- name: ListAlbumTreePhotos :many
 SELECT id, (orig_size + drv_size)::bigint AS bytes FROM photos
 WHERE album_id = $1 OR album_id IN (SELECT id FROM albums WHERE parent_id = $1);
+
+-- Счётчик фотографий проверяется и увеличивается под блокировкой на магазин:
+-- без неё параллельные presign читают одно и то же значение и все проходят.
+-- Блокировка транзакционная, снимается сама, и она на магазин — соседние
+-- продавцы друг друга не ждут.
+-- name: LockShopForUpload :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint);

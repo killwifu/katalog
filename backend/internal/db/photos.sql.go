@@ -315,6 +315,19 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 	return items, nil
 }
 
+const lockShopForUpload = `-- name: LockShopForUpload :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint)
+`
+
+// Счётчик фотографий проверяется и увеличивается под блокировкой на магазин:
+// без неё параллельные presign читают одно и то же значение и все проходят.
+// Блокировка транзакционная, снимается сама, и она на магазин — соседние
+// продавцы друг друга не ждут.
+func (q *Queries) LockShopForUpload(ctx context.Context, dollar_1 string) error {
+	_, err := q.db.Exec(ctx, lockShopForUpload, dollar_1)
+	return err
+}
+
 const setPhotoFailed = `-- name: SetPhotoFailed :exec
 UPDATE photos
 SET status = 'failed', updated_at = now()
