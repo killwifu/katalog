@@ -243,6 +243,7 @@ func run(m *testing.M) int {
 	mux := asynq.NewServeMux()
 	processor := &worker.Processor{
 		Q:          env.q,
+		Pool:       env.pool,
 		Store:      env.store,
 		RDB:        rdb,
 		Revalidate: notifier,
