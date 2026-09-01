@@ -102,16 +102,26 @@ const albumsRoute = createRoute({
   component: AlbumsPage,
 })
 
+// remountDeps: смена альбома обязана перемонтировать страницу. Роутер по
+// умолчанию переиспользует компонент при смене параметров, а Uppy на этой
+// странице создаётся один раз — с albumId первого монтирования. Переход
+// с одного альбома на другой напрямую (адресом или кнопкой «назад») оставлял
+// загрузчик смотреть в прежний альбом, и фотографии молча уезжали не туда.
+// Заодно сбрасываются номер страницы и плашка с итогом прошлой загрузки.
 const albumRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/albums/$albumId',
   component: AlbumPage,
+  remountDeps: ({ params }) => params.albumId,
 })
 
+// Тот же случай: проход по подписям держит позицию в состоянии компонента,
+// и без перемонтирования она переезжала бы в другой альбом вместе с ней.
 const captionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/albums/$albumId/captions',
   component: CaptionsPage,
+  remountDeps: ({ params }) => params.albumId,
 })
 
 const categoriesRoute = createRoute({
