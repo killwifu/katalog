@@ -229,6 +229,56 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const listPublicChildAlbums = `-- name: ListPublicChildAlbums :many
+SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+       c.id AS cover_id
+FROM albums a
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+WHERE a.parent_id = $1 AND a.status = 'published'
+  AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+ORDER BY a.sort_order, a.created_at, a.id
+LIMIT 200
+`
+
+type ListPublicChildAlbumsRow struct {
+	ID         uuid.UUID     `json:"id"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	Title      string        `json:"title"`
+	SortOrder  int32         `json:"sort_order"`
+	PhotoCount int32         `json:"photo_count"`
+	CoverID    uuid.NullUUID `json:"cover_id"`
+}
+
+// Подальбомы открытого альбома: покупатель приходит по прямой ссылке на
+// родительскую категорию, и без них видит пустую страницу — вложенные
+// альбомы показывались только на главной магазина.
+func (q *Queries) ListPublicChildAlbums(ctx context.Context, parentID uuid.NullUUID) ([]ListPublicChildAlbumsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicChildAlbums, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublicChildAlbumsRow
+	for rows.Next() {
+		var i ListPublicChildAlbumsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Title,
+			&i.SortOrder,
+			&i.PhotoCount,
+			&i.CoverID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicPhotos = `-- name: ListPublicPhotos :many
 SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size FROM photos
 WHERE album_id = $1 AND status = 'ready'

@@ -57,6 +57,8 @@ export type CategoryPublic = {
 export type AlbumPage = {
   shop: ShopPublic
   album: AlbumPublic
+  // Подальбомы открытого альбома. Пусто у обычного альбома.
+  children: AlbumPublic[]
   photos: PhotoPublic[]
   page: number
   per_page: number

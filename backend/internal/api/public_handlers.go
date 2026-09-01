@@ -269,14 +269,56 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		s := album.ParentID.UUID.String()
 		albumOut.ParentID = &s
 	}
+	// Подальбомы: покупатель приходит по прямой ссылке на родительскую
+	// категорию, и без них видит пустую страницу — вложенные альбомы
+	// показывались только на главной магазина.
+	children, err := a.Q.ListPublicChildAlbums(r.Context(), uuid.NullUUID{UUID: album.ID, Valid: true})
+	if err != nil {
+		a.internalError(w, "list child albums", err)
+		return
+	}
+	outChildren := make([]publicAlbumResponse, 0, len(children))
+	for _, ch := range children {
+		child := publicAlbumResponse{
+			ID:         ch.ID.String(),
+			Title:      ch.Title,
+			PhotoCount: ch.PhotoCount,
+		}
+		cover := ch.CoverID.UUID
+		if !ch.CoverID.Valid {
+			cover = a.firstReadyPhoto(r, ch.ID)
+		}
+		if cover != uuid.Nil {
+			child.CoverUrls = a.mediaURLs(shop.ID, cover)
+		}
+		outChildren = append(outChildren, child)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"shop":     toPublicShopResponse(shop),
 		"album":    albumOut,
+		"children": outChildren,
 		"photos":   outPhotos,
 		"page":     page,
 		"per_page": perPage,
 		"total":    total,
 	})
+}
+
+// firstReadyPhoto — обложка по умолчанию: первое готовое фото альбома.
+// Подальбомов у одного альбома единицы, поэтому запрос на каждый дешевле
+// отдельной выборки по всему магазину.
+func (a *API) firstReadyPhoto(r *http.Request, albumID uuid.UUID) uuid.UUID {
+	photos, err := a.Q.ListPublicPhotos(r.Context(), db.ListPublicPhotosParams{
+		AlbumID: albumID,
+		Limit:   1,
+		Offset:  0,
+	})
+	if err != nil || len(photos) == 0 {
+		a.Log.Debug("no cover for child album", "album_id", albumID)
+		return uuid.Nil
+	}
+	return photos[0].ID
 }
 
 // handlePublicSearch — поиск по подписям в рамках магазина:

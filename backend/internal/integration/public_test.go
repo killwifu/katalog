@@ -337,3 +337,37 @@ func TestReplyTimeVisibility(t *testing.T) {
 		}
 	}
 }
+
+// TestPublicAlbumChildren: подальбомы видны на странице родителя.
+// Покупатель приходит по прямой ссылке на родительскую категорию, а
+// вложенные альбомы показывались только на главной магазина — по ссылке
+// он попадал на пустую страницу.
+func TestPublicAlbumChildren(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	var parent albumJSON
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": "Обувь"}, http.StatusCreated, &parent)
+	var child albumJSON
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": "Кроссовки", "parent_id": parent.ID}, http.StatusCreated, &child)
+
+	var page struct {
+		Children []albumJSON `json:"children"`
+		Photos   []photoJSON `json:"photos"`
+	}
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug+"/albums/"+parent.ID,
+		nil, http.StatusOK, &page)
+	if len(page.Children) != 1 || page.Children[0].ID != child.ID {
+		t.Fatalf("подальбом не отдан: %+v", page.Children)
+	}
+
+	// У обычного альбома детей нет — поле пустое, а не отсутствует.
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug+"/albums/"+child.ID,
+		nil, http.StatusOK, &page)
+	if len(page.Children) != 0 {
+		t.Fatalf("у листового альбома нашлись дети: %+v", page.Children)
+	}
+}

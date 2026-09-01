@@ -45,9 +45,19 @@ export function AlbumPage() {
   )
   useEffect(() => () => uppy.destroy(), [uppy])
 
+  const totalPages = photos.data
+    ? Math.max(1, Math.ceil(photos.data.total / photos.data.per_page))
+    : 1
+
   const remove = useMutation({
     mutationFn: (photoId: string) => api.deletePhoto(photoId),
-    onSuccess: refreshQuota,
+    onSuccess: () => {
+      // Удаление последнего фото на странице оставляло продавца на странице,
+      // которой больше нет: сетка пустая, а навигация исчезает вместе с ней,
+      // когда фото стало меньше одной страницы.
+      if (page > 1 && photos.data?.photos.length === 1) setPage((p) => p - 1)
+      refreshQuota()
+    },
   })
 
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
@@ -254,7 +264,7 @@ export function AlbumPage() {
 
       {/* Пагинация: альбом может содержать тысячи фотографий, и грузить их
           одной страницей — несколько секунд пустых плиток. */}
-      {photos.data && photos.data.total > photos.data.per_page && (
+      {photos.data && (photos.data.total > photos.data.per_page || page > 1) && (
         <nav className="mt-4 flex items-center justify-center gap-3" aria-label="Страницы фотографий">
           <button
             className="btn btn--ghost btn--sm"
@@ -264,12 +274,12 @@ export function AlbumPage() {
             Назад
           </button>
           <span className="text-sm text-ink-2">
-            {page} из {Math.ceil(photos.data.total / photos.data.per_page)}
+            {page} из {totalPages}
           </span>
           <button
             className="btn btn--ghost btn--sm"
             onClick={() => setPage((p) => p + 1)}
-            disabled={page >= Math.ceil(photos.data.total / photos.data.per_page)}
+            disabled={page >= totalPages}
           >
             Дальше
           </button>
