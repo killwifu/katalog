@@ -16,6 +16,9 @@ export type ShopPublic = {
 }
 
 export type AlbumPublic = {
+  // «По ссылке»: альбом убран из списков витрины, значит и в поиске ему
+  // не место — страница получает noindex.
+  unlisted?: boolean
   // Описание отдаётся только на странице альбома, в сетке его нет.
   description?: string
   id: string

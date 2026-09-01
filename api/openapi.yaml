@@ -1933,6 +1933,11 @@ components:
         parent_id: { type: [string, "null"], format: uuid }
         title: { type: string }
         photo_count: { type: integer }
+        unlisted:
+          type: boolean
+          description: >
+            Альбом «по ссылке»: витрина ставит такой странице noindex, чтобы
+            она не попадала в поиск — раз продавец убрал альбом из списков.
         cover_urls: { $ref: "#/components/schemas/PhotoUrls" }
 
     PublicPhoto:

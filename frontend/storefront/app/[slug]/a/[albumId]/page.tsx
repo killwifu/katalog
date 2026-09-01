@@ -24,6 +24,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!data) return { title: 'Альбом не найден' }
   const cover = data.photos[0]?.urls
   return {
+    // Продавец убрал альбом из списков витрины — в поисковой выдаче ему
+    // тоже не место, иначе «по ссылке» перестаёт что-либо значить.
+    robots: data.album.unlisted ? { index: false, follow: true } : undefined,
     title: `${data.album.title} — ${data.shop.name}`,
     description:
       data.album.description?.slice(0, 160) ||
