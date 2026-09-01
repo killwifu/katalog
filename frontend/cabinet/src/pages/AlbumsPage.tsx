@@ -173,7 +173,9 @@ const STATUS: Record<Album['status'], { label: string; cls: string }> = {
 // Удаление в два шага и прямо в строке: отдельного экрана альбом не
 // заслуживает, а нативный confirm() не скажет, сколько фотографий уйдёт.
 function AlbumRow({ album, onDelete }: { album: Album; onDelete: (id: string) => void }) {
-  const status = STATUS[album.status] ?? STATUS.draft
+  const status = album.blocked_by_moderator
+    ? { label: 'Скрыт модератором', cls: 'badge badge--warn' }
+    : STATUS[album.status] ?? STATUS.draft
   const [confirming, setConfirming] = useState(false)
 
   return (

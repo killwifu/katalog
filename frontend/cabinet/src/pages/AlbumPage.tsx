@@ -142,6 +142,16 @@ export function AlbumPage() {
         </div>
       </div>
 
+      {album?.blocked_by_moderator && (
+        <div className="alert alert--warn">
+          <span className="flex-1">
+            Альбом скрыт с витрины модератором по жалобе. Статус переключать
+            можно, но покупателям альбом не показывается. Если считаете
+            блокировку ошибкой — напишите в поддержку.
+          </span>
+        </div>
+      )}
+
       <section className="box">
         <label className="field">
           <span>Название альбома</span>
