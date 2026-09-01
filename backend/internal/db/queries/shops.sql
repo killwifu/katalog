@@ -46,6 +46,17 @@ UPDATE shops
 SET storage_used = greatest(storage_used + $2, 0), updated_at = now()
 WHERE id = $1;
 
+-- Учёт байтов оригинала на confirm: прибавляем, только если помещаемся
+-- в лимит тарифа. Проверка и прибавление одним запросом — presign сверяет
+-- квоту со счётчиком, в который байты попадают только здесь, так что
+-- заказать ссылки заранее и подтвердить их пачкой иначе даёт перебор.
+-- Ноль строк означает «не помещается».
+-- name: AddShopStorageWithinLimit :one
+UPDATE shops
+SET storage_used = storage_used + $2, updated_at = now()
+WHERE id = $1 AND storage_used + $2 <= $3
+RETURNING storage_used;
+
 -- name: CountShopsByOwner :one
 SELECT count(*) FROM shops WHERE owner_id = $1;
 

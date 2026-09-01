@@ -102,11 +102,23 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
         // что загрузил всё.
         const failed = (res.results ?? []).filter((r) => r.status !== 'processing')
         if (failed.length > 0) {
-          onOutcome?.({
-            uploaded: ids.length - failed.length,
-            total: ids.length,
-            confirmFailed: failed.length,
-          })
+          // Отказ по квоте — не сбой: советовать «загрузите заново» здесь
+          // значит гонять продавца по кругу, файл не поместится и во второй
+          // раз. Ему нужен тариф, а не повторная загрузка с телефона.
+          const quota = failed.find((r) => r.code && QUOTA_REASONS[r.code])
+          onOutcome?.(
+            quota
+              ? {
+                  uploaded: ids.length - failed.length,
+                  total: ids.length,
+                  reason: QUOTA_REASONS[quota.code as string],
+                }
+              : {
+                  uploaded: ids.length - failed.length,
+                  total: ids.length,
+                  confirmFailed: failed.length,
+                },
+          )
         }
       })
       .catch(() => {

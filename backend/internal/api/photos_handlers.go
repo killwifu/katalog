@@ -194,6 +194,9 @@ type confirmResult struct {
 	PhotoID string `json:"photo_id"`
 	Status  string `json:"status"`
 	Error   string `json:"error,omitempty"`
+	// Code — машинный код отказа там, где кабинету нужно развести ответы:
+	// «место кончилось» требует сменить тариф, а не грузить файл заново.
+	Code string `json:"code,omitempty"`
 }
 
 // handleConfirmPhotos: photo uploading -> processing + задача в asynq.
@@ -255,7 +258,20 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string) confirmRes
 		return res
 	}
 
-	if _, err := a.Q.SetPhotoProcessing(r.Context(), db.SetPhotoProcessingParams{
+	// Перевод в processing и учёт байтов — одной транзакцией: если файл
+	// не помещается в тариф, фотография остаётся в uploading, а объект
+	// уберёт уборка зависших загрузок. Иначе байты уже посчитаны, а место
+	// в тарифе кончилось — откатывать нечего.
+	tx, err := a.Pool.Begin(r.Context())
+	if err != nil {
+		a.Log.Error("confirm: begin tx failed", "error", err)
+		res.Status, res.Error = "error", "internal error"
+		return res
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	q := a.Q.WithTx(tx)
+
+	if _, err := q.SetPhotoProcessing(r.Context(), db.SetPhotoProcessingParams{
 		ID:       photo.ID,
 		OrigSize: size,
 	}); err != nil {
@@ -267,12 +283,28 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string) confirmRes
 		res.Status, res.Error = "error", "internal error"
 		return res
 	}
-	// Квота: фактический размер оригинала.
-	if err := a.Q.AddShopStorageUsed(r.Context(), db.AddShopStorageUsedParams{
-		ID:          shop.ID,
-		StorageUsed: size,
+	// Квота: фактический размер оригинала. presign проверяет её заранее,
+	// но байты попадают в счётчик только здесь, поэтому ссылки, заказанные
+	// до первого confirm, все проходили ту проверку по одному значению.
+	limits := a.Cfg.Billing.Limits(string(shop.Plan))
+	if _, err := q.AddShopStorageWithinLimit(r.Context(), db.AddShopStorageWithinLimitParams{
+		ID:            shop.ID,
+		StorageUsed:   size,
+		StorageUsed_2: limits.MaxStorage,
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			res.Status, res.Error = "error", "storage quota exceeded for current plan"
+			res.Code = "quota_exceeded"
+			return res
+		}
 		a.Log.Error("confirm: account storage failed", "error", err)
+		res.Status, res.Error = "error", "internal error"
+		return res
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		a.Log.Error("confirm: commit failed", "error", err)
+		res.Status, res.Error = "error", "internal error"
+		return res
 	}
 
 	task, err := tasks.NewPhotoProcess(photo.ID)

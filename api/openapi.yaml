@@ -623,6 +623,12 @@ paths:
                         photo_id: { type: string }
                         status: { type: string }
                         error: { type: string }
+                        code:
+                          type: string
+                          description: >
+                            Машинный код отказа. Сейчас единственный —
+                            quota_exceeded: файл не помещается в тариф.
+                          enum: [quota_exceeded]
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
