@@ -333,7 +333,11 @@ func (a *API) handlePublicSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if q == "" || len(q) > 100 {
+	// Лимит в символах, а не в байтах: по len() русский запрос обрывался
+	// на 50 символах вместо обещанных 100 — а витрина, обрезающая ровно
+	// по 100 символам, получала на такой запрос 400 и отдавала покупателю
+	// страницу ошибки вместо результатов.
+	if q == "" || len([]rune(q)) > 100 {
 		apiError(w, http.StatusBadRequest, "invalid_query", "q must be 1-100 characters")
 		return
 	}

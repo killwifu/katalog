@@ -403,3 +403,32 @@ func TestUnlistedAlbumNotIndexed(t *testing.T) {
 		t.Fatal("альбом «по ссылке» не помечен — витрина не поставит noindex")
 	}
 }
+
+// TestPublicSearchQueryLengthInRunes: лимит длины запроса — в символах.
+// По len() русский запрос обрывался на 50 символах вместо обещанных 100,
+// а витрина, обрезающая ровно по 100 символам, получала на такой запрос
+// 400 и отдавала покупателю страницу ошибки вместо результатов.
+func TestPublicSearchQueryLengthInRunes(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	// 72 символа, 135 байт — обычная фраза, которую покупатель наберёт руками.
+	long := "женские зимние ботинки на натуральном меху чёрные размер тридцать девять"
+	status, raw := c.do("GET",
+		"/api/v1/public/shops/"+shop.Slug+"/search?q="+url.QueryEscape(long), nil)
+	if status != http.StatusOK {
+		t.Fatalf("русский запрос из %d символов: status %d, want 200; body: %s",
+			len([]rune(long)), status, raw)
+	}
+
+	// Ровно 100 символов проходит, 101 — нет: граница считается одинаково
+	// для любого алфавита.
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug+"/search?q="+
+		url.QueryEscape(strings.Repeat("я", 100)), nil, http.StatusOK, nil)
+	status, raw = c.do("GET", "/api/v1/public/shops/"+shop.Slug+"/search?q="+
+		url.QueryEscape(strings.Repeat("я", 101)), nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("запрос из 101 символа принят: status %d, want 400; body: %s", status, raw)
+	}
+}
