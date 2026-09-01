@@ -381,6 +381,28 @@ func (q *Queries) ListTabsByShop(ctx context.Context, shopID uuid.UUID) ([]Tab, 
 	return items, nil
 }
 
+const setTabOrder = `-- name: SetTabOrder :execrows
+UPDATE tabs
+SET sort_order = data.ord, updated_at = now()
+FROM unnest($2::uuid[]) WITH ORDINALITY AS data(id, ord)
+WHERE tabs.id = data.id AND tabs.shop_id = $1
+`
+
+type SetTabOrderParams struct {
+	ShopID  uuid.UUID   `json:"shop_id"`
+	Column2 []uuid.UUID `json:"column_2"`
+}
+
+// Порядок вкладок задаётся целиком одним запросом: обмен двумя апдейтами
+// рвался посередине и оставлял у соседей одинаковый sort_order.
+func (q *Queries) SetTabOrder(ctx context.Context, arg SetTabOrderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTabOrder, arg.ShopID, arg.Column2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateSection = `-- name: UpdateSection :one
 UPDATE sections s
 SET title = $3, sort_order = $4

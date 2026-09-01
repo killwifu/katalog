@@ -7,10 +7,11 @@ import (
 )
 
 type tabResp struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Slug     string `json:"slug"`
-	IsSystem bool   `json:"is_system"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Slug      string `json:"slug"`
+	IsSystem  bool   `json:"is_system"`
+	SortOrder int32  `json:"sort_order"`
 }
 
 type sectionResp struct {
@@ -187,4 +188,50 @@ func TestTabsAndSections(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestSetTabOrder: порядок вкладок задаётся одним запросом. Раньше кабинет
+// менял местами два sort_order двумя PATCH подряд, и оборванный второй
+// оставлял у соседей одинаковый порядковый номер.
+func TestSetTabOrder(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	var tabs []tabResp
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/tabs", nil, http.StatusOK, &tabs)
+	if len(tabs) < 3 {
+		t.Fatalf("ожидались системные вкладки, получено %d", len(tabs))
+	}
+
+	// Переворачиваем порядок целиком.
+	ids := make([]string, 0, len(tabs))
+	for i := len(tabs) - 1; i >= 0; i-- {
+		ids = append(ids, tabs[i].ID)
+	}
+	c.mustJSON("PUT", "/api/v1/shops/"+shop.ID+"/tabs/order",
+		map[string]any{"tab_ids": ids}, http.StatusNoContent, nil)
+
+	var after []tabResp
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/tabs", nil, http.StatusOK, &after)
+	for i, want := range ids {
+		if after[i].ID != want {
+			t.Fatalf("позиция %d: %s, ожидался %s", i, after[i].ID, want)
+		}
+	}
+
+	// Порядковые номера не должны совпадать — иначе порядок держится
+	// только на тайбрейкере по дате.
+	seen := map[int32]bool{}
+	for _, tab := range after {
+		if seen[tab.SortOrder] {
+			t.Fatalf("повторяющийся sort_order %d", tab.SortOrder)
+		}
+		seen[tab.SortOrder] = true
+	}
+
+	// Чужие id порядок не ломают.
+	c.mustJSON("PUT", "/api/v1/shops/"+shop.ID+"/tabs/order",
+		map[string]any{"tab_ids": []string{"00000000-0000-0000-0000-000000000001"}},
+		http.StatusNoContent, nil)
 }

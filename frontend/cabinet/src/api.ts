@@ -299,8 +299,10 @@ export const api = {
   listTabs: (shopId: string) => request<Tab[]>('GET', `/shops/${shopId}/tabs`),
   createTab: (shopId: string, title: string, slug: string) =>
     request<Tab>('POST', `/shops/${shopId}/tabs`, { title, slug }),
-  reorderTab: (shopId: string, tabId: string, title: string, sortOrder: number) =>
-    request<Tab>('PATCH', `/shops/${shopId}/tabs/${tabId}`, { title, sort_order: sortOrder }),
+  // Порядок задаётся целиком: обмен двумя PATCH рвался посередине и
+  // оставлял у соседних вкладок одинаковый sort_order.
+  setTabOrder: (shopId: string, tabIds: string[]) =>
+    request<void>('PUT', `/shops/${shopId}/tabs/order`, { tab_ids: tabIds }),
   deleteTab: (shopId: string, tabId: string) =>
     request<void>('DELETE', `/shops/${shopId}/tabs/${tabId}`),
 
