@@ -193,7 +193,13 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 			a.Log.Error("block: decrement album count failed", "error", err)
 		}
 	}
-	// CDN перестаёт отдавать контент: деривативы удаляются, оригинал остаётся.
+	// Деривативы удаляются, оригинал остаётся. Витрина фото больше не
+	// показывает, а вот прямая ссылка на дериватив живёт ровно столько,
+	// сколько её держит край CDN: адрес иммутабельный, max-age год, сброса
+	// кеша провайдера мы не вызываем. То есть блокировка убирает контент
+	// из выдачи немедленно, а из раздачи по прямой ссылке — нет. Для
+	// notice-and-takedown это дыра: нужен вызов purge у CDN, и он зависит
+	// от провайдера, который в проекте пока не выбран.
 	if err := a.Store.RemoveDerivatives(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes); err != nil {
 		a.Log.Error("block: remove derivatives failed", "photo_id", photo.ID, "error", err)
 	}
