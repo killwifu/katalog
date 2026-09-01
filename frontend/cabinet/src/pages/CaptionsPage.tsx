@@ -74,6 +74,17 @@ function CaptionWalker({
   const inputRef = useRef<HTMLInputElement>(null)
   const photo = index < photos.length ? photos[index] : null
 
+  // Поле всегда показывает подпись того фото, что на экране. Раньше её
+  // подставлял advance(), но на стыке страниц следующего фото ещё не
+  // существует: продавец подписывал сотое, видел «Загружаем следующие
+  // фото…», а когда страница приезжала — сто первое открывалось с
+  // подписью сотого. Enter, и чужая цена уехала на витрину.
+  const [shownID, setShownID] = useState(photos[0].id)
+  if (photo && photo.id !== shownID) {
+    setShownID(photo.id)
+    setCaption(photo.caption)
+  }
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [index])
@@ -93,7 +104,6 @@ function CaptionWalker({
 
   const advance = (nextIndex: number) => {
     setIndex(nextIndex)
-    if (nextIndex < photos.length) setCaption(photos[nextIndex].caption)
     if (nextIndex >= photos.length - PREFETCH_MARGIN) onNearEnd()
     setError('')
   }
