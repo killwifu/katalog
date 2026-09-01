@@ -294,3 +294,36 @@ func TestTextLimitsCountRunes(t *testing.T) {
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID,
 		map[string]any{"name": strings.Repeat("я", 200)}, http.StatusOK, nil)
 }
+
+// TestPasswordLengthInRunes: минимальная длина пароля — 8 символов,
+// а не 8 байт. По len() кириллический пароль проходил с четырёх символов:
+// «абвг» — это ровно восемь байт в UTF-8.
+func TestPasswordLengthInRunes(t *testing.T) {
+	c := newClient(t)
+	email := uniqueEmail()
+
+	status, raw := c.do("POST", "/api/v1/auth/register",
+		map[string]string{"email": email, "password": "абвг"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("пароль из 4 символов принят: status %d, want 400; body: %s", status, raw)
+	}
+
+	// Восемь символов кириллицей — проходит.
+	c.mustJSON("POST", "/api/v1/auth/register",
+		map[string]string{"email": email, "password": "пароль12"}, http.StatusCreated, nil)
+
+	// Тот же счёт и при сбросе пароля: берём настоящий токен из письма
+	// (он лежит в Redis, как его туда положил handleForgotPassword).
+	c.mustJSON("POST", "/api/v1/auth/password/forgot",
+		map[string]string{"email": email}, http.StatusNoContent, nil)
+	keys, err := env.rdb.Keys(context.Background(), "tok:pwreset:*").Result()
+	if err != nil || len(keys) == 0 {
+		t.Fatalf("токен сброса не найден в Redis: %v (%d ключей)", err, len(keys))
+	}
+	token := strings.TrimPrefix(keys[len(keys)-1], "tok:pwreset:")
+	status, raw = c.do("POST", "/api/v1/auth/password/reset",
+		map[string]string{"token": token, "password": "абвг"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("сброс на пароль из 4 символов принят: status %d, want 400; body: %s", status, raw)
+	}
+}
