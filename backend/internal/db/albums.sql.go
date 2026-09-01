@@ -62,6 +62,17 @@ func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (in
 	return result.RowsAffected(), nil
 }
 
+const countAlbumsByShop = `-- name: CountAlbumsByShop :one
+SELECT count(*) FROM albums WHERE shop_id = $1
+`
+
+func (q *Queries) CountAlbumsByShop(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlbumsByShop, shopID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)

@@ -398,6 +398,10 @@ paths:
       - $ref: "#/components/parameters/ShopID"
     post:
       operationId: createAlbum
+      description: >
+        409 (album_limit), если в магазине уже 1000 альбомов. Столько же
+        отдаёт публичная выдача магазина — потолок держит горячий путь
+        предсказуемым.
       summary: Создать альбом (вложенность максимум 2 уровня)
       requestBody:
         required: true
