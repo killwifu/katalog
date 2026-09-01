@@ -60,7 +60,9 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email = strings.ToLower(addr.Address)
-	if len(req.Password) < 8 {
+	// Длина в символах, а не в байтах: по len() кириллический пароль
+	// проходил с четырёх символов — «абвг» это ровно 8 байт.
+	if len([]rune(req.Password)) < 8 {
 		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
 		return
 	}

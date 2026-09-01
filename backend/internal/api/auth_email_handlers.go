@@ -105,7 +105,8 @@ func (a *API) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if len(req.Password) < 8 {
+	// Длина в символах, а не в байтах (см. handleRegister).
+	if len([]rune(req.Password)) < 8 {
 		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
 		return
 	}
