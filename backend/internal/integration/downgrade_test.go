@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"katalog/backend/internal/tasks"
 )
 
 // TestDowngrade: при понижении тарифа фотографии не удаляются — снимается
@@ -164,5 +166,79 @@ func TestDowngradeRespectsPlanLimit(t *testing.T) {
 	}
 	if hidden != 1 {
 		t.Fatalf("скрыт %d альбомов, ожидался 1", hidden)
+	}
+}
+
+// TestRenewalKeepsPlanVisibility: обычное продление того же тарифа не должно
+// возвращать на витрину то, что не помещается в тариф.
+//
+// Понижение тарифа скрывает лишние альбомы, продавец сам выбирает, что
+// останется видимым. Дальше каждые 30 дней проходит рекуррентное списание —
+// и оно снимало скрытие целиком, потому что «оплата возвращает всё». В итоге
+// через месяц на витрине снова весь каталог при оплате младшего тарифа,
+// а выбор продавца молча терялся.
+//
+// Скрытое возвращается тогда, когда для этого есть причина: каталог помещается
+// в оплаченный тариф.
+func TestRenewalKeepsPlanVisibility(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	// Тариф basic: лимит 100 фото в тестовой конфигурации. В каталоге 150 —
+	// столько было на pro, с которого магазин ушёл.
+	keep := createAlbum(c, shop.ID)
+	hidden := createAlbum(c, shop.ID)
+	mustExec(t, "UPDATE albums SET photo_count = 90 WHERE id = $1", keep.ID)
+	mustExec(t, "UPDATE albums SET photo_count = 60 WHERE id = $1", hidden.ID)
+	mustExec(t, `INSERT INTO photos (id, shop_id, album_id, status, source)
+		SELECT gen_random_uuid(), $1, $2, 'ready', 'upload' FROM generate_series(1, 150)`,
+		shop.ID, keep.ID)
+	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
+	mustExec(t, `INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end, payment_method_id)
+		VALUES ($1, 'basic', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-keep-1')`, shop.ID)
+
+	// Продавец оставил видимым только первый альбом.
+	c.mustJSON("PUT", "/api/v1/shops/"+shop.ID+"/downgrade",
+		map[string]any{"album_ids": []string{keep.ID}}, http.StatusNoContent, nil)
+
+	hiddenNow := func() bool {
+		var v bool
+		if err := env.pool.QueryRow(ctx,
+			"SELECT hidden_by_plan FROM albums WHERE id = $1", hidden.ID).Scan(&v); err != nil {
+			t.Fatalf("read hidden_by_plan: %v", err)
+		}
+		return v
+	}
+	if !hiddenNow() {
+		t.Fatal("альбом не скрылся после выбора — проверять дальше нечего")
+	}
+
+	// Проходит очередное списание того же тарифа.
+	if err := env.processor.HandleBillingRenew(ctx, tasks.NewBillingRenew()); err != nil {
+		t.Fatalf("renew run: %v", err)
+	}
+	var providerID string
+	if err := env.pool.QueryRow(ctx,
+		"SELECT provider_payment_id FROM payments WHERE shop_id = $1 AND recurring", shop.ID).Scan(&providerID); err != nil {
+		t.Fatalf("recurring payment row: %v", err)
+	}
+	postWebhook(c, ykNotification("payment.succeeded", env.yk.get(t, providerID)), http.StatusOK)
+
+	if !hiddenNow() {
+		t.Error("продление того же тарифа вернуло на витрину альбом сверх лимита")
+	}
+
+	// А вот повышение тарифа возвращает всё: 150 фото помещаются в pro (200).
+	var sub struct {
+		PaymentID string `json:"payment_id"`
+	}
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
+		map[string]string{"plan": "pro"}, http.StatusOK, &sub)
+	postWebhook(c, ykNotification("payment.succeeded", env.yk.succeedByOurID(t, sub.PaymentID)), http.StatusOK)
+
+	if hiddenNow() {
+		t.Error("повышение тарифа не вернуло скрытое, хотя каталог теперь помещается")
 	}
 }
