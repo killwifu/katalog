@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getShopPage, getTabSections, loadOrUnavailable } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
+import { shopChannels } from '@/lib/links'
 import { ShopHeader } from '@/components/ShopHeader'
 import { ShopTabs } from '@/components/ShopTabs'
 import { AlbumGrid } from '@/components/AlbumGrid'
@@ -39,6 +40,7 @@ export default async function TabPage({ params }: Props) {
   if (!data || !sections) notFound()
   const tab = data.tabs.find((t) => t.slug === tabSlug)
   if (!tab) notFound()
+  const hasContacts = shopChannels(data.shop.contacts).length > 0
 
   return (
     <main className="page">
@@ -54,7 +56,18 @@ export default async function TabPage({ params }: Props) {
       {tabSlug === 'albums' ? (
         <AlbumGrid shopSlug={slug} albums={data.albums.filter((a) => !a.parent_id)} />
       ) : sections.every((s) => s.albums.length === 0) ? (
-        <p className="empty">В этом разделе пока ничего нет.</p>
+        // На вкладке «Контакты» кнопки связи уже стоят в шапке, прямо над
+        // этим местом. Писать под ними «в разделе ничего нет» — противоречить
+        // тому, что покупатель видит своими глазами.
+        tabSlug === 'contacts' ? (
+          <p className="empty">
+            {hasContacts
+              ? 'Напишите продавцу — он ответит и подскажет, что есть в наличии.'
+              : 'Продавец пока не указал, как с ним связаться.'}
+          </p>
+        ) : (
+          <p className="empty">В этом разделе пока ничего нет.</p>
+        )
       ) : (
         sections.filter((s) => s.albums.length > 0).map((section) => (
           <section key={section.title} className="section">
