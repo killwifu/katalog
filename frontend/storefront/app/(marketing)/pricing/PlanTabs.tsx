@@ -6,9 +6,9 @@ import { MATRIX, PLANS, formatPrice, type Plan } from './plans'
 import styles from './pricing.module.css'
 
 // Мобильная версия таблицы сравнения: те же MATRIX и PLANS,
-// но по одному тарифу за раз — таблица из пяти колонок на телефон не влезает.
+// но по одному тарифу за раз — таблица со всеми колонками на телефон не влезает.
 export function PlanTabs() {
-  const [active, setActive] = useState<Plan['id']>('sell')
+  const [active, setActive] = useState<Plan['id']>('basic')
   const plan = PLANS.find((p) => p.id === active) ?? PLANS[0]
 
   return (
@@ -37,7 +37,7 @@ export function PlanTabs() {
           {formatPrice(plan.price)} ₽{plan.price > 0 && <small>/мес</small>}
         </div>
         <p className={`dim ${styles.panelNote}`}>
-          {plan.yearPrice ? `${formatPrice(plan.yearPrice)} ₽ при оплате за год` : 'навсегда, без карты'}
+          {plan.price > 0 ? 'списывается раз в 30 дней' : 'навсегда, без карты'}
         </p>
         <a
           className={`btn ${plan.featured ? 'btn--primary' : 'btn--ghost'} btn--block`}

@@ -56,6 +56,10 @@ jobs:
       - name: Bundle budget (storefront)
         if: matrix.app == 'storefront'
         run: npm run check-bundle
+      # Цены и лимиты на странице тарифов = то, что реально списывает биллинг.
+      - name: Тарифы совпадают с конфигом (storefront)
+        if: matrix.app == 'storefront'
+        run: npm run check-plans
 
   # E2E витрины на полном стеке: сидинг демо-магазина, приёмка
   # «загрузил фото -> витрина обновилась ≤ 60 сек» (ISR-вебхук),
