@@ -123,6 +123,11 @@ func (a *API) toShopResponse(s db.Shop) shopResponse {
 	return resp
 }
 
+// maxShopDescription — короткий текст под названием магазина. Ограничение
+// нужно не ради базы, а ради витрины: описание уходит в публичную выдачу
+// на каждый заход покупателя, и раньше туда влезали хоть 50 тысяч символов.
+const maxShopDescription = 1000
+
 // maxShopsPerOwner — см. handleCreateShop.
 const maxShopsPerOwner = 5
 
@@ -149,6 +154,11 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name == "" || len(req.Name) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_name", "name must be 1-200 characters")
+		return
+	}
+	if len([]rune(req.Description)) > maxShopDescription {
+		apiError(w, http.StatusBadRequest, "invalid_description",
+			fmt.Sprintf("description must be at most %d characters", maxShopDescription))
 		return
 	}
 	contacts := req.Contacts
@@ -269,6 +279,11 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Description != nil {
+		if len([]rune(*req.Description)) > maxShopDescription {
+			apiError(w, http.StatusBadRequest, "invalid_description",
+				fmt.Sprintf("description must be at most %d characters", maxShopDescription))
+			return
+		}
 		description = *req.Description
 	}
 	if req.Contacts != nil {

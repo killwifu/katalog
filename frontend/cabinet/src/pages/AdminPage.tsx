@@ -294,7 +294,14 @@ function OverviewTab() {
 // Продавцы отсортированы по числу жалоб: модератору важно отличить
 // единичный случай от системы, а не листать список по алфавиту.
 function SellersTab() {
+  const queryClient = useQueryClient()
   const q = useQuery({ queryKey: ['admin', 'shops'], queryFn: () => api.adminListShops() })
+  // Снятие блокировки: раньше её можно было только поставить, и ошибочная
+  // блокировка означала мёртвый магазин без доступа к базе.
+  const unsuspend = useMutation({
+    mutationFn: (shopId: string) => api.adminUnsuspendShop(shopId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'shops'] }),
+  })
   if (q.isPending) return <p className="text-ink-2">Загрузка…</p>
   if (q.isError) return <p className="text-danger">Не удалось загрузить продавцов.</p>
   if (q.data.length === 0) return <p className="text-ink-2">Продавцов пока нет.</p>
@@ -310,6 +317,7 @@ function SellersTab() {
             <th className="py-2">Фото</th>
             <th className="py-2">Место</th>
             <th className="py-2">Жалобы</th>
+            <th className="py-2"></th>
           </tr>
         </thead>
         <tbody>
@@ -319,8 +327,14 @@ function SellersTab() {
                 <a href={`/${s.slug}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                   {s.name}
                 </a>
-                {s.billing_state === 'suspended' && (
-                  <span className="ml-2 badge badge--warn">скрыт</span>
+                {/* Модераторская блокировка живёт в status, неоплата —
+                    в billing_state. Раньше метка смотрела только на второе,
+                    и заблокированный модератором магазин выглядел обычным. */}
+                {s.status === 'suspended' && (
+                  <span className="ml-2 badge badge--warn">заблокирован</span>
+                )}
+                {s.status !== 'suspended' && s.billing_state === 'suspended' && (
+                  <span className="ml-2 badge badge--warn">скрыт за неоплату</span>
                 )}
               </td>
               <td className="py-2 text-ink-2">{s.email}</td>
@@ -329,6 +343,17 @@ function SellersTab() {
               <td className="py-2 text-ink-2">{formatBytes(s.storage_used)}</td>
               <td className={`py-2 ${s.complaints > 0 ? 'font-medium text-danger' : 'text-ink-3'}`}>
                 {s.complaints}
+              </td>
+              <td className="py-2">
+                {s.status === 'suspended' && (
+                  <button
+                    onClick={() => unsuspend.mutate(s.id)}
+                    disabled={unsuspend.isPending}
+                    className="btn btn--ghost btn--sm"
+                  >
+                    Разблокировать
+                  </button>
+                )}
               </td>
             </tr>
           ))}

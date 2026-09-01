@@ -192,6 +192,9 @@ export type Album = {
   cover_photo_id: string | null
   sort_order: number
   status: AlbumStatus
+  // Блокировка модератором по жалобе: снять её продавец не может,
+  // но должен понимать, почему альбома нет на витрине.
+  blocked_by_moderator: boolean
   description: string
   category_id: string | null
   photo_count: number
@@ -416,6 +419,10 @@ export const api = {
       complaint_id: complaintId ?? '',
       note: '',
     }),
+  adminUnhideAlbum: (albumId: string, note = '') =>
+    request<void>('POST', `/admin/albums/${albumId}/unhide`, { complaint_id: '', note }),
+  adminUnsuspendShop: (shopId: string, note = '') =>
+    request<void>('POST', `/admin/shops/${shopId}/unsuspend`, { complaint_id: '', note }),
   adminListFlagged: () => request<FlaggedPhoto[]>('GET', '/admin/photos/flagged'),
   adminUnflagPhoto: (photoId: string) =>
     request<void>('POST', `/admin/photos/${photoId}/unflag`),
