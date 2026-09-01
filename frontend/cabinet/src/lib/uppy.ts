@@ -88,7 +88,13 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
       const reason = Object.values(QUOTA_REASONS).find((r) => failed.some((f) => f.error?.includes(r)))
       onOutcome({ uploaded: ok.length, total: ok.length + failed.length, reason })
     }
-    const ids = ok
+    // Подтверждаем в том порядке, в каком продавец выбрал файлы, а не в
+    // том, в каком они докачались: место фотографии в альбоме сервер
+    // назначает по порядку в этом списке. Крупный файл, доехавший
+    // последним, иначе оказывался в конце ряда своих же ракурсов.
+    const picked = new Map(uppy.getFiles().map((f, i) => [f.id, i]))
+    const ids = [...ok]
+      .sort((a, b) => (picked.get(a.id) ?? 0) - (picked.get(b.id) ?? 0))
       .map((f) => (f.meta as { photoId?: string }).photoId)
       .filter((id): id is string => Boolean(id))
     if (ids.length === 0) return

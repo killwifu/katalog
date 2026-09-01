@@ -335,6 +335,20 @@ func (q *Queries) LockShopForUpload(ctx context.Context, dollar_1 string) error 
 	return err
 }
 
+const nextAlbumSortOrder = `-- name: NextAlbumSortOrder :one
+SELECT coalesce(max(sort_order), 0)::int + 1 FROM photos WHERE album_id = $1
+`
+
+// Следующее место в альбоме. Считается в той же транзакции, что и переход
+// в processing, поэтому подтверждения одной пачки получают возрастающие
+// номера в том порядке, в каком их перечислил клиент.
+func (q *Queries) NextAlbumSortOrder(ctx context.Context, albumID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, nextAlbumSortOrder, albumID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const resetPhotoDerivativeSize = `-- name: ResetPhotoDerivativeSize :exec
 UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1
 `
@@ -364,19 +378,24 @@ func (q *Queries) SetPhotoFailed(ctx context.Context, arg SetPhotoFailedParams) 
 
 const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
-SET status = 'processing', orig_size = $2, updated_at = now()
+SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
 RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
 `
 
 type SetPhotoProcessingParams struct {
-	ID       uuid.UUID `json:"id"`
-	OrigSize int64     `json:"orig_size"`
+	ID        uuid.UUID `json:"id"`
+	OrigSize  int64     `json:"orig_size"`
+	SortOrder int32     `json:"sort_order"`
 }
 
 // Переход uploading -> processing после подтверждения загрузки в S3.
+// Здесь же фотография занимает место в альбоме: sort_order приходит
+// из NextAlbumSortOrder. На presign он оставался нулём, и выдача падала
+// на created_at — то есть на порядок, в котором до сервера доехали
+// запросы параллельного загрузчика.
 func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessingParams) (Photo, error) {
-	row := q.db.QueryRow(ctx, setPhotoProcessing, arg.ID, arg.OrigSize)
+	row := q.db.QueryRow(ctx, setPhotoProcessing, arg.ID, arg.OrigSize, arg.SortOrder)
 	var i Photo
 	err := row.Scan(
 		&i.ID,

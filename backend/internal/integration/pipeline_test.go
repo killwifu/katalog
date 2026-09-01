@@ -185,3 +185,52 @@ func TestFailReasonReachesSeller(t *testing.T) {
 		t.Fatalf("причина отказа %q, ожидалась unsupported_format", photo.FailReason)
 	}
 }
+
+// TestConfirmAssignsPhotoOrder: порядок фотографий в альбоме задаёт продавец,
+// а не гонка загрузок.
+//
+// sort_order на presign всегда ставился в 0, поэтому выдача падала на
+// created_at — то есть на то, в каком порядке до сервера доехали запросы.
+// Загрузчик шлёт их пачками по нескольку штук параллельно, так что внутри
+// каждой пачки порядок случайный: все ракурсы одной модели, загруженные
+// разом, раскладывались как попало. Переставить фото вручную нельзя —
+// ни ручки, ни эндпоинта для этого нет.
+func TestConfirmAssignsPhotoOrder(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+
+	// Три файла загружены, но ещё не подтверждены.
+	ids := []string{
+		presignAndPut(t, c, shop.ID, album.ID, makeJPEG(t, 320, 240)),
+		presignAndPut(t, c, shop.ID, album.ID, makeJPEG(t, 320, 241)),
+		presignAndPut(t, c, shop.ID, album.ID, makeJPEG(t, 320, 242)),
+	}
+	// Продавец подтверждает их в своём порядке: третий, первый, второй.
+	want := []string{ids[2], ids[0], ids[1]}
+	c.mustJSON("POST", "/api/v1/photos/confirm",
+		map[string]any{"shop_id": shop.ID, "photo_ids": want}, http.StatusOK, nil)
+
+	var page struct {
+		Photos []struct {
+			ID        string `json:"id"`
+			SortOrder int32  `json:"sort_order"`
+		} `json:"photos"`
+	}
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID+"/photos",
+		nil, http.StatusOK, &page)
+
+	got := make([]string, 0, len(page.Photos))
+	for _, p := range page.Photos {
+		got = append(got, p.ID)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("фотографий %d, ожидалось %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("порядок в альбоме %v, ожидался порядок подтверждения %v", got, want)
+		}
+	}
+}

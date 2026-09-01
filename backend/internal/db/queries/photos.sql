@@ -29,11 +29,21 @@ SELECT count(*) FROM photos
 WHERE album_id = $1 AND shop_id = $2;
 
 -- Переход uploading -> processing после подтверждения загрузки в S3.
+-- Здесь же фотография занимает место в альбоме: sort_order приходит
+-- из NextAlbumSortOrder. На presign он оставался нулём, и выдача падала
+-- на created_at — то есть на порядок, в котором до сервера доехали
+-- запросы параллельного загрузчика.
 -- name: SetPhotoProcessing :one
 UPDATE photos
-SET status = 'processing', orig_size = $2, updated_at = now()
+SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
 RETURNING *;
+
+-- Следующее место в альбоме. Считается в той же транзакции, что и переход
+-- в processing, поэтому подтверждения одной пачки получают возрастающие
+-- номера в том порядке, в каком их перечислил клиент.
+-- name: NextAlbumSortOrder :one
+SELECT coalesce(max(sort_order), 0)::int + 1 FROM photos WHERE album_id = $1;
 
 -- name: SetPhotoReady :exec
 UPDATE photos

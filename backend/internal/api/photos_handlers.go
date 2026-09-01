@@ -271,9 +271,19 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string) confirmRes
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	q := a.Q.WithTx(tx)
 
+	// Место в альбоме — в порядке подтверждения: клиент перечисляет фото
+	// так, как продавец их выбрал, а параллельная загрузка доезжает как
+	// придётся, поэтому опираться на created_at нельзя.
+	sortOrder, err := q.NextAlbumSortOrder(r.Context(), photo.AlbumID)
+	if err != nil {
+		a.Log.Error("confirm: next sort order failed", "error", err)
+		res.Status, res.Error = "error", "internal error"
+		return res
+	}
 	if _, err := q.SetPhotoProcessing(r.Context(), db.SetPhotoProcessingParams{
-		ID:       photo.ID,
-		OrigSize: size,
+		ID:        photo.ID,
+		OrigSize:  size,
+		SortOrder: sortOrder,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			res.Status = "processing" // гонка двух confirm — уже переведено
