@@ -98,32 +98,23 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 			"subscription is inactive: uploads are disabled until the plan is renewed")
 		return
 	}
-	// Квоты тарифа. При параллельных загрузках возможен небольшой перебор
-	// (счётчики фиксируются на confirm), это осознанный компромисс.
 	limits := a.Cfg.Billing.Limits(string(shop.Plan))
-	photoCount, err := a.Q.CountShopPhotos(r.Context(), shop.ID)
-	if err != nil {
-		a.internalError(w, "count shop photos", err)
-		return
-	}
-	if photoCount >= limits.MaxPhotos {
-		apiError(w, http.StatusForbidden, "photo_quota_exceeded",
-			fmt.Sprintf("plan photo limit reached (%d photos), upgrade your plan", limits.MaxPhotos))
-		return
-	}
 	if shop.StorageUsed+req.Size > limits.MaxStorage {
 		apiError(w, http.StatusForbidden, "quota_exceeded",
 			"storage quota exceeded for current plan, upgrade your plan")
 		return
 	}
 
-	photo, err := a.Q.CreatePhoto(r.Context(), db.CreatePhotoParams{
-		AlbumID:   albumID,
-		ShopID:    shop.ID,
-		OrigSize:  req.Size,
-		Source:    db.PhotoSourceUpload,
-		SortOrder: 0,
-	})
+	// Счёт и вставка — под блокировкой на магазин. Иначе параллельные
+	// presign читают одно и то же значение счётчика и проходят все:
+	// десять одновременных запросов на 499/500 давали 509 фотографий,
+	// а скриптом перебор не ограничен ничем.
+	photo, err := a.createPhotoWithinQuota(r, shop, albumID, req.Size, limits.MaxPhotos)
+	if errors.Is(err, errPhotoQuota) {
+		apiError(w, http.StatusForbidden, "photo_quota_exceeded",
+			fmt.Sprintf("plan photo limit reached (%d photos), upgrade your plan", limits.MaxPhotos))
+		return
+	}
 	if err != nil {
 		a.internalError(w, "create photo", err)
 		return
@@ -134,6 +125,50 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, presignResponse{PhotoID: photo.ID.String(), URL: url})
+}
+
+// errPhotoQuota — лимит фотографий тарифа исчерпан.
+var errPhotoQuota = errors.New("photo quota exceeded")
+
+// createPhotoWithinQuota считает фотографии и заводит новую в одной
+// транзакции под блокировкой на магазин: проверка и вставка должны быть
+// неделимы, иначе лимит обходится параллельными запросами. Блокировка
+// транзакционная и на конкретный магазин — соседние продавцы не ждут.
+func (a *API) createPhotoWithinQuota(
+	r *http.Request, shop db.Shop, albumID uuid.UUID, size, maxPhotos int64,
+) (db.Photo, error) {
+	ctx := r.Context()
+	tx, err := a.Pool.Begin(ctx)
+	if err != nil {
+		return db.Photo{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := a.Q.WithTx(tx)
+
+	if err := q.LockShopForUpload(ctx, shop.ID.String()); err != nil {
+		return db.Photo{}, fmt.Errorf("lock shop: %w", err)
+	}
+	count, err := q.CountShopPhotos(ctx, shop.ID)
+	if err != nil {
+		return db.Photo{}, fmt.Errorf("count shop photos: %w", err)
+	}
+	if count >= maxPhotos {
+		return db.Photo{}, errPhotoQuota
+	}
+	photo, err := q.CreatePhoto(ctx, db.CreatePhotoParams{
+		AlbumID:   albumID,
+		ShopID:    shop.ID,
+		OrigSize:  size,
+		Source:    db.PhotoSourceUpload,
+		SortOrder: 0,
+	})
+	if err != nil {
+		return db.Photo{}, fmt.Errorf("create photo: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.Photo{}, fmt.Errorf("commit tx: %w", err)
+	}
+	return photo, nil
 }
 
 type confirmRequest struct {
