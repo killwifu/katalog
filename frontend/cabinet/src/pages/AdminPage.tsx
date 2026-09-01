@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, type AdminComplaint } from '../api'
+import { api, type AdminComplaint , errorText } from '../api'
 
 // Админ-зона: жалобы правообладателей и фото, помеченные стоп-словами.
 // Доступ только для role=admin (бэкенд отвечает 404 остальным).
@@ -62,6 +62,14 @@ function TabButton({
   )
 }
 
+// Действия модератора молча проваливались: он думал, что отработал жалобу,
+// а запрос не прошёл. Один вывод на вкладку — показываем первую ошибку.
+function ActionError({ of }: { of: { isError: boolean; error: Error | null }[] }) {
+  const failed = of.find((m) => m.isError)
+  if (!failed) return null
+  return <p className="mb-3 text-sm text-danger">{errorText(failed.error!)}</p>
+}
+
 function ComplaintsTab() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState('open')
@@ -98,6 +106,7 @@ function ComplaintsTab() {
 
   return (
     <div>
+      <ActionError of={[setComplaintStatus, blockPhoto, hideAlbum, suspendShop]} />
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value)}
@@ -219,6 +228,7 @@ function FlaggedTab() {
 
   return (
     <ul className="space-y-3">
+      <ActionError of={[block, unflag]} />
       {flagged.data.map((p) => (
         <li key={p.id} className="box">
           <div className="mb-1 flex items-center justify-between gap-2">
@@ -308,6 +318,7 @@ function SellersTab() {
 
   return (
     <div className="overflow-x-auto">
+      <ActionError of={[unsuspend]} />
       <table className="w-full text-sm">
         <thead className="text-left text-ink-2">
           <tr>

@@ -245,6 +245,7 @@ export function AlbumPage() {
       {photos.isPending && <p className="text-ink-2">Загрузка…</p>}
       {photos.isError && <p className="text-danger">Не удалось загрузить фото.</p>}
       {remove.isError && <p className="text-danger">{errorText(remove.error)}</p>}
+      {setCover.isError && <p className="text-danger">{errorText(setCover.error)}</p>}
 
       {photos.data && photos.data.total === 0 && (
         <p className="text-ink-2">В альбоме пока нет фото — загрузите пачку выше.</p>
