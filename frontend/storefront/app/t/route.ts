@@ -10,6 +10,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const KEY_TTL_SECONDS = 72 * 3600
 const VISITOR_COOKIE = 'kv'
 const VISITOR_TTL_SECONDS = 365 * 24 * 3600
+// Потолок беконов с одного адреса в минуту. Отказ молчаливый: счётчик
+// просмотров не тот путь, где стоит объяснять клиенту, что он превысил.
+const BEACON_LIMIT_PER_MIN = 60
 
 export async function POST(req: Request): Promise<Response> {
   let shopId = ''
@@ -43,6 +46,15 @@ export async function POST(req: Request): Promise<Response> {
   const shopKey = `views:${date}:${shopId}:-`
   try {
     const redis = getRedis()
+
+    // Бекон никем не подписан: shop_id лежит в разметке страницы, так что
+    // накрутить чужие просмотры можно было скриптом в один цикл. Живому
+    // покупателю хватает единиц запросов в минуту; всё сверх — не он.
+    const rlKey = `rl:t:${ip}:${Math.floor(Date.now() / 60000)}`
+    const hits = await redis.incr(rlKey)
+    if (hits === 1) await redis.expire(rlKey, 120)
+    if (hits > BEACON_LIMIT_PER_MIN) return new Response(null, { status: 204 })
+
     const pipe = redis.pipeline()
     pipe.incr(shopKey)
     pipe.expire(shopKey, KEY_TTL_SECONDS, 'NX')
