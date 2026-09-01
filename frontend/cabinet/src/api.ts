@@ -6,6 +6,7 @@ const API = '/api/v1'
 export const API_ERRORS: Record<string, string> = {
   slug_taken: 'Этот адрес уже занят',
   invalid_slug: 'Адрес: 3–63 символа, латиница, цифры и одиночные дефисы',
+  slug_reserved: 'Этот адрес занят служебными страницами сервиса — придумайте другой',
   invalid_name: 'Укажите название',
   invalid_title: 'Укажите название (до 200 символов)',
   invalid_parent: 'Неверная родительская категория',
