@@ -8,7 +8,8 @@ const SITE_URL = process.env.SITE_URL ?? 'http://localhost'
 export const dynamic = 'force-dynamic'
 
 // Публичные страницы сервиса — их адреса статичны.
-const PUBLIC_PAGES = ['', '/pricing', '/updates', '/remove-bg']
+// «Убрать фон» в карту сайта не отдаём: вёрстка есть, обработки в API нет.
+const PUBLIC_PAGES = ['', '/pricing', '/updates']
 
 // Sitemap: публичные страницы + активные магазины
 // (скрытые альбомы в выдачу API не попадают).

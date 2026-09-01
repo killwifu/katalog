@@ -301,6 +301,13 @@ function PhotoTile({
   onSetCover: () => void
   isCover: boolean
 }) {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(t)
+  }, [armed])
+
   return (
     <figure className="group relative overflow-hidden rounded-lg border border-line bg-white">
       <div className="aspect-square bg-surface-alt">
@@ -334,12 +341,18 @@ function PhotoTile({
           {isCover ? '★' : '☆'}
         </button>
       )}
+      {/* Два тапа, не один: на телефоне кнопка видна всегда (наводить нечем),
+          а промах по ней стоил фотографии — восстановить её нельзя.
+          Взвод сам спадает через три секунды, чтобы красный крест
+          не оставался висеть на плитке. */}
       <button
-        onClick={onDelete}
-        title="Удалить"
-        className="photo-tile__act absolute top-1 right-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block"
+        onClick={() => (armed ? onDelete() : setArmed(true))}
+        title={armed ? 'Нажмите ещё раз, чтобы удалить' : 'Удалить'}
+        className={`photo-tile__act absolute top-1 right-1 hidden rounded px-1.5 py-0.5 text-xs text-white group-hover:block ${
+          armed ? 'bg-danger font-medium' : 'bg-black/60'
+        }`}
       >
-        ✕
+        {armed ? 'Удалить?' : '✕'}
       </button>
     </figure>
   )
@@ -371,5 +384,9 @@ function StatusBadge({ status, reason }: { status: Photo['status']; reason?: str
       </span>
     )
   }
-  return <span className="text-xs text-ink-2">{status}</span>
+  if (status === 'blocked') {
+    return <span className="text-xs font-medium text-danger">Скрыто модератором</span>
+  }
+  // Осталось только ready без готовых деривативов: файл принят, ссылок ещё нет.
+  return <span className="text-xs text-ink-2">Готовим…</span>
 }

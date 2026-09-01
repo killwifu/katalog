@@ -1,32 +1,26 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import styles from './site.module.css'
 
 // Шапка публичных страниц. Активный пункт определяется по пути,
 // поэтому компонент клиентский; заодно на нём висит бургер-меню.
+//
+// Вход/кабинет: в разметке лежат оба варианта, лишний прячет CSS по
+// атрибуту html[data-auth], который ставит инлайн-скрипт из layout ещё
+// до первой отрисовки. Раньше маркер сессии читался в useEffect, и у
+// вошедшего продавца на каждой загрузке мигало «Войти».
 
 const NAV = [
   { href: '/', label: 'Главная' },
   { href: '/pricing', label: 'Тарифы' },
   { href: '/updates', label: 'Обновления' },
-  { href: '/remove-bg', label: 'Убрать фон' },
 ]
 
 export function SiteHeader() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  // Страница статическая и отдаётся из кеша всем одинаково, поэтому о сессии
-  // она узнать не может. Читаем маркер, который сервер кладёт рядом с сессией
-  // при входе и снимает при выходе, — запроса к API это не стоит.
-  //
-  // Значение по умолчанию «не вошёл»: до гидратации разметка совпадает
-  // с серверной, иначе React ругнётся на несовпадение.
-  const [signedIn, setSignedIn] = useState(false)
-  useEffect(() => {
-    setSignedIn(document.cookie.split('; ').some((c) => c.startsWith('katalog_signed=')))
-  }, [])
 
   return (
     <header className={styles.head}>
@@ -60,20 +54,15 @@ export function SiteHeader() {
         </nav>
 
         <div className={styles.right}>
-          {signedIn ? (
-            <a className="btn btn--light btn--sm" href="/app/">
-              Кабинет
-            </a>
-          ) : (
-            <>
-              <a className={styles.login} href="/app/login">
-                Войти
-              </a>
-              <a className="btn btn--light btn--sm" href="/app/register">
-                Создать витрину
-              </a>
-            </>
-          )}
+          <a className={`${styles.authIn} btn btn--light btn--sm`} href="/app/">
+            Кабинет
+          </a>
+          <a className={`${styles.authOut} ${styles.login}`} href="/app/login">
+            Войти
+          </a>
+          <a className={`${styles.authOut} btn btn--light btn--sm`} href="/app/register">
+            Создать витрину
+          </a>
         </div>
       </div>
 
@@ -87,14 +76,15 @@ export function SiteHeader() {
             {item.label}
           </a>
         ))}
-        {signedIn ? (
-          <a href="/app/">Кабинет</a>
-        ) : (
-          <>
-            <a href="/app/login">Войти</a>
-            <a href="/app/register">Создать витрину</a>
-          </>
-        )}
+        <a className={styles.authIn} href="/app/">
+          Кабинет
+        </a>
+        <a className={styles.authOut} href="/app/login">
+          Войти
+        </a>
+        <a className={styles.authOut} href="/app/register">
+          Создать витрину
+        </a>
       </nav>
     </header>
   )

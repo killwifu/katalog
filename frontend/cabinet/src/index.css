@@ -27,7 +27,7 @@
   --color-surface-alt: #F1F0EC;
   --color-ink: #1A1A18;
   --color-ink-2: #62615C;
-  --color-ink-3: #90908A;
+  --color-ink-3: #6E6D67;
   --color-line: #E4E2DC;
   --color-line-strong: #CFCCC4;
   --color-danger: #B00020;
@@ -37,8 +37,8 @@
   --text-h1: 22px;
   --text-h3: 17px;
   --text-body: 15px;
-  --text-sm: 13.5px;
-  --text-xs: 12.5px;
+  --text-sm: 14px;
+  --text-xs: 13px;
 
   --radius-card: 16px;
   --radius-el: 10px;
@@ -116,7 +116,7 @@ body { min-height: 100vh; }
 
 .field { display: block; margin-bottom: 14px; }
 .field > span { display: block; font-size: var(--text-sm); color: var(--color-ink-2); margin-bottom: 6px; }
-.hint { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: 6px; }
+.hint { font-size: var(--text-sm); color: var(--color-ink-2); margin-top: 6px; }
 
 .inp {
   width: 100%; padding: 10px 12px; font: inherit;
@@ -152,6 +152,14 @@ select.inp { appearance: auto; }
 @media (max-width: 859px) {
   .btn--block-mobile { width: 100%; min-height: 44px; }
 
+  /* 16px в полях: при меньшем iOS Safari зумит страницу на фокусе. Больнее
+     всего на проходе по подписям, где продавец фокусит поле сотни раз.
+     .inp перекрывает `font: inherit`, объявленный выше. */
+  .inp,
+  input,
+  select,
+  textarea { font-size: 16px; }
+
   /* То же правило — и для мелких кнопок без класса .btn: бургер выходил
      31×29, а «Удалить» рядом с «Переименовать» — 50×17. Палец в такую
      цель не попадает, а промах рядом с удалением стоит альбома.
@@ -183,6 +191,16 @@ select.inp { appearance: auto; }
     padding: 0 12px;
   }
 }
+
+/* --- Кнопки каналов -------------------------------------------------------
+   Значения совпадают с витриной (storefront/app/globals.css): предпросмотр
+   в «Контактах» обязан показывать ровно то, что увидит покупатель.
+   -------------------------------------------------------------------------- */
+
+.btn-telegram { background: #1C7CB0; color: #fff; }
+.btn-whatsapp { background: #107F71; color: #fff; }
+.btn-vk       { background: #0062D6; color: #fff; }
+.btn-max      { background: #7B3FF2; color: #fff; }
 
 /* --- Метки статусов ------------------------------------------------------- */
 
@@ -267,6 +285,31 @@ select.inp { appearance: auto; }
 }
 .ob__link { padding: 14px; background: var(--color-brand-soft); border-radius: var(--radius-el); margin-bottom: 16px; }
 .ob__link p { font-size: var(--text-sm); color: var(--color-brand-ink); word-break: break-all; margin-bottom: 10px; }
+
+/* --- Предпросмотр водяного знака ------------------------------------------
+   Знак необратим: он впекается при загрузке. Продавец должен увидеть
+   заметность до того, как прогонит через неё триста фотографий.
+   -------------------------------------------------------------------------- */
+
+.wmprev {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 120px;
+  border-radius: var(--radius-el);
+  background: repeating-linear-gradient(
+    45deg,
+    #d8d6d0 0 12px,
+    #c9c7c1 12px 24px
+  );
+}
+
+.wmprev span {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 45%);
+}
 
 /* --- Радио-карточки выбора (макет system/downgrade) ----------------------- */
 

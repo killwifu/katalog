@@ -69,6 +69,10 @@ function CaptionWalker({
 }) {
   const [index, setIndex] = useState(0)
   const [caption, setCaption] = useState(photos[0].caption)
+  // Подписи, сохранённые за этот проход. Список фото лежит в кеше с
+  // staleTime: Infinity и о сохранении не знает — без этой карты возврат
+  // к предыдущему снимку показывал бы подпись, которую продавец уже стёр.
+  const [saved] = useState(() => new Map<string, string>())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -82,7 +86,7 @@ function CaptionWalker({
   const [shownID, setShownID] = useState(photos[0].id)
   if (photo && photo.id !== shownID) {
     setShownID(photo.id)
-    setCaption(photo.caption)
+    setCaption(saved.get(photo.id) ?? photo.caption)
   }
 
   useEffect(() => {
@@ -96,14 +100,20 @@ function CaptionWalker({
     return (
       <div className="text-center">
         <p className="mb-2 text-lg font-medium text-ink">Готово!</p>
-        <p className="mb-4 text-ink-2">Подписи проставлены для {photos.length} фото.</p>
+        {/* Пропущенные фото подписаны не были: считать их — врать продавцу,
+            который потом ищет на витрине цены, которых нет. */}
+        <p className="mb-4 text-ink-2">
+          Сохранено подписей: {saved.size} из {photos.length}.
+        </p>
         <BackLink albumId={albumId} />
       </div>
     )
   }
 
   const advance = (nextIndex: number) => {
-    setIndex(nextIndex)
+    // Клампим: индекс ниже нуля дал бы photos[-1] === undefined и падение
+    // на photo.id — проверка ниже ловит только выход за верхнюю границу.
+    setIndex(Math.max(0, nextIndex))
     if (nextIndex >= photos.length - PREFETCH_MARGIN) onNearEnd()
     setError('')
   }
@@ -114,6 +124,7 @@ function CaptionWalker({
     setError('')
     try {
       await api.updateCaption(photo.id, caption)
+      saved.set(photo.id, caption)
       advance(index + 1)
     } catch {
       setError('Не удалось сохранить, попробуйте ещё раз')
@@ -155,6 +166,18 @@ function CaptionWalker({
         />
         {error && <p className="mb-2 text-sm text-danger">{error}</p>}
         <div className="flex gap-2">
+          {/* Возврат к предыдущему снимку: проход шёл только вперёд, и
+              опечатка в цене становилась неисправимой внутри потока. */}
+          <button
+            type="button"
+            onClick={() => advance(index - 1)}
+            disabled={index === 0}
+            aria-label="Предыдущее фото"
+            title="Предыдущее фото"
+            className="btn btn--ghost"
+          >
+            ←
+          </button>
           <button
             type="submit"
             disabled={saving}
@@ -165,7 +188,7 @@ function CaptionWalker({
           <button
             type="button"
             onClick={() => advance(index + 1)}
-            className="rounded border border-line-strong px-4 py-2 text-ink-2 hover:bg-surface-alt"
+            className="btn btn--ghost"
           >
             Пропустить
           </button>

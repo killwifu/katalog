@@ -86,8 +86,9 @@ export function AlbumsPage() {
       {create.isError && <p className="mb-4 text-sm text-danger">Не удалось создать альбом.</p>}
 
       {/* Панель показывается, когда альбомов уже много: на трёх штуках
-          она только мешает. */}
-      {albums.data.filter((a) => !a.parent_id).length > 5 && (
+          она только мешает. Но пока фильтр включён — не прячем ни при каком
+          числе: иначе удаление альбома убирало поле вместе с запросом. */}
+      {(albums.data.filter((a) => !a.parent_id).length > 5 || norm !== '' || categoryId !== '') && (
         <div className="mb-4 grid gap-2 sm:grid-cols-[2fr_1fr_1fr]">
           <input
             className="inp"
@@ -191,11 +192,13 @@ function AlbumRow({ album, onDelete }: { album: Album; onDelete: (id: string) =>
               ? `Удалить вместе с ${album.photo_count} фото?`
               : 'Удалить альбом?'}
           </span>
+          {/* Отмена — первой и полноценной кнопкой: 12px текстом она была
+              вдвое меньше цели нажатия и вдвое незаметнее удаления. */}
+          <button onClick={() => setConfirming(false)} className="btn btn--ghost btn--sm">
+            Отмена
+          </button>
           <button onClick={() => onDelete(album.id)} className="btn btn--danger btn--sm">
             Удалить
-          </button>
-          <button onClick={() => setConfirming(false)} className="text-xs text-ink-2">
-            Отмена
           </button>
         </span>
       ) : (

@@ -19,13 +19,22 @@ export function OverviewPage() {
   })
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const downgrade = useQuery({ queryKey: ['downgrade', shop.id], queryFn: () => api.getDowngrade(shop.id) })
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'no' | 'yes' | 'fail'>('no')
 
   const shopUrl = `${location.origin}/${shop.slug}`
+  // Буфер обмена отказывает в небезопасном контексте и при отказе в
+  // разрешении. Без catch это был необработанный reject, а надпись
+  // «Скопировано» появлялась в любом случае — продавец отправлял
+  // покупателю пустоту.
   const copy = async () => {
-    await navigator.clipboard.writeText(shopUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(shopUrl)
+      setCopied('yes')
+    } catch {
+      setCopied('fail')
+      return
+    }
+    setTimeout(() => setCopied('no'), 2000)
   }
 
   const daily = stats.data?.daily ?? []
@@ -69,9 +78,12 @@ export function OverviewPage() {
             onClick={() => void copy()}
             className="btn btn--primary btn--sm"
           >
-            {copied ? 'Скопировано' : 'Копировать'}
+            {copied === 'yes' ? 'Скопировано' : 'Копировать'}
           </button>
         </div>
+        {copied === 'fail' && (
+          <p className="hint text-danger">Не удалось скопировать — выделите ссылку вручную.</p>
+        )}
       </section>
 
       <section className="stats mb-6">

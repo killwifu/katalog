@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { getAlbumPage, loadOrUnavailable } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
+import { ContactBar } from '@/components/ContactBar'
 import { AlbumGrid } from '@/components/AlbumGrid'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
@@ -72,6 +73,9 @@ export default async function AlbumPage({ params, searchParams }: Props) {
         {album.description && <p className="albumdesc">{album.description}</p>}
         <SearchForm slug={slug} />
       </header>
+      {/* Покупатель приходит сюда прямо из мессенджера: кнопки связи должны
+          быть под рукой, а не за открытием фотографии. */}
+      <ContactBar shop={shop} />
       {/* Вложенные альбомы: по ссылке на родительскую категорию покупатель
           раньше попадал на пустую страницу — подальбомы были видны только
           на главной магазина. */}

@@ -57,8 +57,15 @@
 
 .login:hover { opacity: 1; }
 
+/* Цель нажатия 44×44: вокруг иконки 24×24 не было ни одного пикселя
+   отступа, и попасть в меню с телефона удавалось не с первого раза. */
 .burger {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -10px;
   background: none;
   border: 0;
   padding: 0;
@@ -76,7 +83,9 @@
 }
 
 .mobNav a {
-  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   opacity: 0.9;
 }
 
@@ -104,7 +113,17 @@
   justify-content: center;
 }
 
+/* Подчёркивание, а не только hover: на телефоне hover не существует,
+   и ссылки на оферту и жалобу выглядели обычным текстом. */
+.footIn a { text-decoration: underline; }
+
 .foot a:hover { color: var(--text-2); }
+
+/* Состояние сессии проставляет инлайн-скрипт до первой отрисовки
+   (app/(marketing)/layout.tsx). Без атрибута показываем «не вошёл» —
+   это верно для большинства посетителей и работает без JS. */
+:global(html[data-auth='in']) .authOut { display: none; }
+:global(html:not([data-auth='in'])) .authIn { display: none; }
 
 /* --- Липкая полоса действия (только мобильный) ---------------------------- */
 

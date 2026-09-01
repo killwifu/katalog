@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { createContext, useContext, useState } from 'react'
 import { api, type Shop } from '../api'
+import { PLAN_NAMES } from '../lib/plans'
 import { OnboardingPage } from './OnboardingPage'
 
 const ShopContext = createContext<Shop | null>(null)
@@ -99,7 +100,7 @@ export function AppLayout() {
               <span style={{ width: `${usedPct}%` }} />
             </div>
             <p>
-              {usedMB} из {maxMB} МБ · тариф «{shop.plan}»
+              {usedMB} из {maxMB} МБ · тариф «{PLAN_NAMES[shop.plan]}»
             </p>
           </div>
           <button onClick={() => void logout()} className="btn btn--quiet mt-4">
@@ -118,15 +119,17 @@ export function AppLayout() {
             ☰
           </button>
           <h1>{shop.name}</h1>
-          <button onClick={() => void logout()} className="btn btn--quiet">
-            Выйти
-          </button>
         </header>
 
         <div className="app__main">
+          {/* «Выйти» переехало из полосы в меню: в шапке телефона было три
+              цели, и самой опасной из них досталось постоянное место. */}
           {menuOpen && (
             <div className="side mb-4 rounded-card border md:hidden">
               {nav}
+              <button onClick={() => void logout()} className="btn btn--quiet mt-2">
+                Выйти
+              </button>
             </div>
           )}
           {shop.status === 'suspended' ? (

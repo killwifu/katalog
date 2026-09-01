@@ -6,10 +6,10 @@ export function SearchForm({ slug, initial }: { slug: string; initial?: string }
         type="search"
         name="q"
         defaultValue={initial ?? ''}
-        placeholder="Поиск по каталогу"
+        placeholder="Поиск по всему каталогу"
         maxLength={100}
         required
-        aria-label="Поиск по подписям"
+        aria-label="Поиск по всему каталогу магазина"
       />
       <button type="submit" className="btn btn--primary">
         Найти

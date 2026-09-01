@@ -109,8 +109,8 @@ function StepName({ onDone }: { onDone: (shop: Shop) => void }) {
           placeholder="seoul-wear"
         />
         <p className="hint">
-          {location.origin}/{effectiveSlug || 'адрес'} — позже поменять будет сложно,
-          ссылка уже разойдётся по покупателям.
+          {location.origin}/{effectiveSlug || 'адрес'} — менять адрес можно не чаще
+          раза в полгода, и старые ссылки после смены перестают работать.
         </p>
       </label>
 
@@ -125,6 +125,7 @@ function StepName({ onDone }: { onDone: (shop: Shop) => void }) {
 function StepPhotos({ shop, onDone }: { shop: Shop; onDone: () => void }) {
   const [uppy, setUppy] = useState<Uppy | null>(null)
   const [error, setError] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -138,7 +139,9 @@ function StepPhotos({ shop, onDone }: { shop: Shop; onDone: () => void }) {
         created = createPhotoUppy({
           shopId: shop.id,
           albumId: album.id,
-          onBatchConfirmed: onDone,
+          // Не уводим на следующий шаг сами: продавец мог отправить первую
+          // пачку и добирать вторую — экран уезжал у него из-под пальца.
+          onBatchConfirmed: () => setConfirmed(true),
         })
         setUppy(created)
       })
@@ -147,7 +150,7 @@ function StepPhotos({ shop, onDone }: { shop: Shop; onDone: () => void }) {
       cancelled = true
       created?.destroy()
     }
-  }, [shop.id, onDone])
+  }, [shop.id])
 
   return (
     <div>
@@ -162,17 +165,36 @@ function StepPhotos({ shop, onDone }: { shop: Shop; onDone: () => void }) {
       ) : (
         <p className="text-ink-2">Готовим загрузку…</p>
       )}
-      {/* Пропуск обязателен: продавец мог зайти с компьютера, где фото нет. */}
-      <button type="button" className="ob__skip" onClick={onDone}>
-        Пропустить и загрузить позже
-      </button>
+      {confirmed ? (
+        <button type="button" className="btn btn--primary w-full mt-4" onClick={onDone}>
+          Готово, дальше
+        </button>
+      ) : (
+        /* Пропуск обязателен: продавец мог зайти с компьютера, где фото нет. */
+        <button type="button" className="ob__skip" onClick={onDone}>
+          Пропустить и загрузить позже
+        </button>
+      )}
     </div>
   )
 }
 
 function StepDone({ shop, onFinish }: { shop: Shop; onFinish: () => void }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'no' | 'yes' | 'fail'>('no')
   const url = `${location.origin}/${shop.slug}`
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied('yes')
+    } catch {
+      // Небезопасный контекст или отказ в разрешении: ссылку продавец
+      // выделит руками, но знать об этом он должен.
+      setCopied('fail')
+      return
+    }
+    setTimeout(() => setCopied('no'), 2000)
+  }
 
   return (
     <div>
@@ -184,16 +206,12 @@ function StepDone({ shop, onFinish }: { shop: Shop; onFinish: () => void }) {
 
       <div className="ob__link">
         <p>{url}</p>
-        <button
-          className="btn btn--primary btn--sm"
-          onClick={() => {
-            void navigator.clipboard.writeText(url)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-          }}
-        >
-          {copied ? 'Скопировано' : 'Скопировать ссылку'}
+        <button className="btn btn--primary btn--sm" onClick={() => void copy()}>
+          {copied === 'yes' ? 'Скопировано' : 'Скопировать ссылку'}
         </button>
+        {copied === 'fail' && (
+          <p className="hint text-danger">Не удалось скопировать — выделите ссылку вручную.</p>
+        )}
       </div>
 
       <button className="btn btn--ghost w-full" onClick={onFinish}>

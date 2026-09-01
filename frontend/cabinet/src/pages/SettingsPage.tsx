@@ -25,6 +25,11 @@ export function SettingsPage() {
   const dirty = name !== null || description !== null || slug !== null || settings !== null
   useUnsavedGuard(dirty)
   const slugLocked = Boolean(data?.slug_changeable_at)
+  // Смена адреса ломает все ссылки, которые продавец уже разослал, и уезжает
+  // на сервер той же кнопкой, что описание и водяной знак. Одного «Сохранить»
+  // для такого мало — просим подтвердить последствие явно.
+  const slugChanged = slug !== null && slugValue.trim().toLowerCase() !== data?.slug
+  const [slugConfirmed, setSlugConfirmed] = useState(false)
 
   const save = useMutation({
     mutationFn: async () => {
@@ -33,7 +38,7 @@ export function SettingsPage() {
         await api.updateShop(shop.id, {
           ...(name !== null ? { name: nameValue.trim() } : {}),
           ...(description !== null ? { description: descValue } : {}),
-          ...(slug !== null && slugValue !== data?.slug ? { slug: slugValue.trim().toLowerCase() } : {}),
+          ...(slugChanged ? { slug: slugValue.trim().toLowerCase() } : {}),
         })
       }
     },
@@ -42,6 +47,7 @@ export function SettingsPage() {
       setDescription(null)
       setSlug(null)
       setSettings(null)
+      setSlugConfirmed(false)
       setError('')
       void queryClient.invalidateQueries({ queryKey: ['shop', shop.id] })
       void queryClient.invalidateQueries({ queryKey: ['shops'] })
@@ -79,13 +85,30 @@ export function SettingsPage() {
           />
           <p className="hint">
             {location.origin}/{slugValue || 'адрес'} — эту ссылку вы отправляете покупателям.
-            {slugLocked
-              ? ` Менять можно не чаще раза в полгода: следующая смена после ${new Date(
-                  data!.slug_changeable_at!,
-                ).toLocaleDateString('ru-RU')}.`
-              : ' После смены старые ссылки перестанут работать.'}
+            {slugLocked &&
+              ` Менять можно не чаще раза в полгода: следующая смена после ${new Date(
+                data!.slug_changeable_at!,
+              ).toLocaleDateString('ru-RU')}.`}
           </p>
         </label>
+
+        {slugChanged && (
+          <div className="alert alert--warn">
+            <span className="flex-1">
+              Адрес станет {location.origin}/{slugValue.trim().toLowerCase() || '…'}. Все ранее
+              разосланные ссылки на {location.origin}/{data?.slug} перестанут работать, включая
+              те, что уже лежат в переписках с покупателями.
+              <label className="mt-2 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={slugConfirmed}
+                  onChange={(e) => setSlugConfirmed(e.target.checked)}
+                />
+                Понимаю, меняем адрес
+              </label>
+            </span>
+          </div>
+        )}
 
         <label className="field">
           <span>Название витрины</span>
@@ -138,7 +161,7 @@ export function SettingsPage() {
           />
         </label>
 
-        <label className="field !mb-0">
+        <label className="field">
           <span>Заметность: {Math.round(wm.opacity * 100)}%</span>
           <input
             type="range"
@@ -150,6 +173,17 @@ export function SettingsPage() {
             className="w-full"
           />
         </label>
+
+        {/* Знак впекается при загрузке и на уже загруженных фото не меняется.
+            Узнавать, что 55% — это много, на трёхстах снимках поздно. */}
+        <div className="field !mb-0">
+          <span>Как будет выглядеть</span>
+          <div className="wmprev">
+            <span style={{ opacity: wm.enabled ? wm.opacity : 0.15 }}>
+              {wm.text || '@ваш_ник'}
+            </span>
+          </div>
+        </div>
       </section>
 
       <section className="box">
@@ -168,7 +202,11 @@ export function SettingsPage() {
       </section>
 
       {error && <p className="hint text-danger">{error}</p>}
-      <button type="submit" className="btn btn--primary btn--block-mobile" disabled={!dirty || save.isPending}>
+      <button
+        type="submit"
+        className="btn btn--primary btn--block-mobile"
+        disabled={!dirty || save.isPending || (slugChanged && !slugConfirmed)}
+      >
         {save.isPending ? 'Сохраняю…' : 'Сохранить'}
       </button>
     </form>

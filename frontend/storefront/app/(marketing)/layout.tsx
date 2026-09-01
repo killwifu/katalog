@@ -18,6 +18,16 @@ const golos = Golos_Text({
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
     <div className={golos.className}>
+      {/* Маркер сессии — не httpOnly cookie, который сервер кладёт при входе
+          и снимает при выходе. Читаем его синхронно, до отрисовки шапки:
+          страница статическая и отдаётся из кеша всем одинаково, а решать
+          «Войти или Кабинет» после гидратации значит мигать этой кнопкой. */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "document.documentElement.dataset.auth=document.cookie.indexOf('katalog_signed=')>-1?'in':'out'",
+        }}
+      />
       <SiteHeader />
       {children}
       <SiteFooter />
