@@ -52,15 +52,16 @@ func validateSettings(raw json.RawMessage) string {
 	return ""
 }
 
-// validateContacts проверяет каналы связи магазина. Пустая строка означает
-// «канал не заполнен» и допустима: так продавец его убирает.
-func validateContacts(raw json.RawMessage) string {
+// validateContacts проверяет каналы связи магазина. Пустая строка в коде
+// означает «всё в порядке». Пустое значение канала допустимо: так продавец
+// его убирает.
+func validateContacts(raw json.RawMessage) (code, msg string) {
 	if len(raw) == 0 {
-		return ""
+		return "", ""
 	}
 	var contacts map[string]string
 	if err := json.Unmarshal(raw, &contacts); err != nil {
-		return "contacts must be an object of channel -> string"
+		return "invalid_contacts", "contacts must be an object of channel -> string"
 	}
 	for channel, value := range contacts {
 		v := strings.TrimSpace(value)
@@ -68,10 +69,16 @@ func validateContacts(raw json.RawMessage) string {
 			continue
 		}
 		if len(v) > maxContactValue {
-			return fmt.Sprintf("%s: value must be at most %d characters", channel, maxContactValue)
+			return "invalid_contacts", fmt.Sprintf("%s: value must be at most %d characters", channel, maxContactValue)
 		}
 		if strings.ContainsAny(v, "\n\r") {
-			return fmt.Sprintf("%s: value must be a single line", channel)
+			return "invalid_contacts", fmt.Sprintf("%s: value must be a single line", channel)
+		}
+		if channel == "whatsapp" {
+			if m := validateWhatsApp(v); m != "" {
+				return "invalid_whatsapp", m
+			}
+			continue
 		}
 		hosts, restricted := contactHosts[channel]
 		if !restricted {
@@ -83,12 +90,36 @@ func validateContacts(raw json.RawMessage) string {
 		}
 		u, err := url.Parse(v)
 		if err != nil {
-			return fmt.Sprintf("%s: invalid link", channel)
+			return "invalid_contacts", fmt.Sprintf("%s: invalid link", channel)
 		}
 		host := strings.ToLower(u.Hostname())
 		if !contains(hosts, host) {
-			return fmt.Sprintf("%s: link must point to %s", channel, strings.Join(hosts, ", "))
+			return "invalid_contacts", fmt.Sprintf("%s: link must point to %s", channel, strings.Join(hosts, ", "))
 		}
+	}
+	return "", ""
+}
+
+// validateWhatsApp: ссылка строится как wa.me/<цифры>, и всё, что не цифра,
+// витрина выбрасывает. Значит ник или адрес почты превращаются в ссылку
+// вообще без получателя — покупатель жмёт «WhatsApp» и попадает в пустоту,
+// а продавец об этом не узнаёт: у себя на телефоне ссылка откроется.
+// Кабинет и так пишет «только цифры», но до сих пор ничто это не проверяло.
+func validateWhatsApp(v string) string {
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, v)
+	// 8 999… — привычная запись внутри России, но для wa.me это номер
+	// в стране с кодом 8, которой не существует. Ловим отдельно: без
+	// подсказки продавец не поймёт, что не так с «правильным» номером.
+	if len(digits) == 11 && strings.HasPrefix(digits, "8") {
+		return "whatsapp: use international format (7XXXXXXXXXX), not the Russian 8 prefix"
+	}
+	if len(digits) < 10 || len(digits) > 15 {
+		return "whatsapp: must be a phone number in international format, digits only"
 	}
 	return ""
 }

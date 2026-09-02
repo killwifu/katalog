@@ -31,3 +31,43 @@ func TestShopDescriptionLimit(t *testing.T) {
 		t.Fatalf("длинное описание принято при создании: status %d, want 400; body: %s", status, raw)
 	}
 }
+
+// TestWhatsAppNumberValidated: номер WhatsApp обязан быть номером.
+//
+// Витрина строит ссылку как wa.me/<цифры>, выбрасывая всё остальное. Ник
+// или адрес почты превращались в ссылку вообще без получателя: покупатель
+// жмёт главную кнопку продукта и попадает в пустоту, а продавец не узнаёт —
+// у себя на телефоне ссылка откроется. Кабинет пишет «только цифры», но
+// до сих пор ничто этого не проверяло.
+func TestWhatsAppNumberValidated(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	bad := map[string]string{
+		"ник вместо номера":     "@myshop",
+		"почта":                 "shop@example.com",
+		"слишком короткий":      "12345",
+		"российская запись с 8": "8 999 123-45-67",
+	}
+	for name, value := range bad {
+		t.Run(name, func(t *testing.T) {
+			status, body := c.do("PATCH", "/api/v1/shops/"+shop.ID,
+				map[string]any{"contacts": map[string]string{"whatsapp": value}})
+			if status != http.StatusBadRequest {
+				t.Fatalf("значение %q принято: status %d, want 400; body: %s", value, status, body)
+			}
+		})
+	}
+
+	// Международный формат проходит — и с разделителями, которые продавец
+	// наверняка наберёт руками.
+	for _, ok := range []string{"79991234567", "+7 999 123-45-67"} {
+		c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID,
+			map[string]any{"contacts": map[string]string{"whatsapp": ok}}, http.StatusOK, nil)
+	}
+
+	// Пустое значение — способ убрать канал, он должен остаться рабочим.
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID,
+		map[string]any{"contacts": map[string]string{"whatsapp": ""}}, http.StatusOK, nil)
+}
