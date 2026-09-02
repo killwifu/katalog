@@ -79,9 +79,12 @@ RETURNING id, shop_id;
 -- исчерпала ретраи и ушла в архив asynq — статус в БД при этом не меняется.
 -- Такое фото навсегда висит в кабинете со спиннером и занимает квоту.
 -- Оригинал в S3 не трогаем: поведение то же, что у обычного failed.
+-- Причина 'lost' отличает нашу поломку от негодного файла: остальные коды
+-- (unsupported_format, corrupt, too_large, empty) говорят продавцу, что не так
+-- с его файлом, а здесь с файлом всё в порядке — потерялась задача.
 -- name: FailStaleProcessing :many
 UPDATE photos
-SET status = 'failed', updated_at = now()
+SET status = 'failed', fail_reason = 'lost', updated_at = now()
 WHERE status = 'processing'
   AND updated_at < now() - make_interval(hours => $1::int)
 RETURNING id;

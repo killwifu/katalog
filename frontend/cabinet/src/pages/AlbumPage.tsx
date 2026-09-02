@@ -366,6 +366,9 @@ const FAIL_TEXT: Record<string, string> = {
   corrupt: 'Файл повреждён',
   too_large: 'Слишком большое разрешение',
   empty: 'Пустой файл',
+  // Не про файл, а про нас: задача обработки потерялась. Винить в этом
+  // фотографию продавца нельзя — он начнёт искать проблему там, где её нет.
+  lost: 'Обработка не завершилась — загрузите файл заново',
 }
 
 function StatusBadge({ status, reason }: { status: Photo['status']; reason?: string }) {
@@ -379,8 +382,8 @@ function StatusBadge({ status, reason }: { status: Photo['status']; reason?: str
   }
   if (status === 'failed') {
     return (
-      <span className="text-xs font-medium text-danger" title={FAIL_TEXT[reason ?? ''] ?? undefined}>
-        {FAIL_TEXT[reason ?? ''] ?? 'Ошибка файла'}
+      <span className="text-xs font-medium text-danger" title={FAIL_TEXT[reason ?? ''] ?? 'Причина неизвестна'}>
+        {FAIL_TEXT[reason ?? ''] ?? 'Не удалось обработать'}
       </span>
     )
   }
