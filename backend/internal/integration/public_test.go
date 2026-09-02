@@ -354,6 +354,9 @@ func TestPublicAlbumChildren(t *testing.T) {
 	var child albumJSON
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
 		map[string]any{"title": "Кроссовки", "parent_id": parent.ID}, http.StatusCreated, &child)
+	// Фото в подальбоме обязательно: пустые альбомы витрина не показывает,
+	// и без него проверка «дети отдаются» прошла бы вхолостую.
+	uploadReadyPhoto(t, c, shop.ID, child.ID, makeJPEG(t, 320, 240))
 
 	var page struct {
 		Children []albumJSON `json:"children"`
@@ -431,4 +434,74 @@ func TestPublicSearchQueryLengthInRunes(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("запрос из 101 символа принят: status %d, want 400; body: %s", status, raw)
 	}
+}
+
+// TestEmptyAlbumsHiddenFromStorefront: альбом без фотографий покупателю
+// не показывается — тап по нему упирается в «здесь пока нет фото».
+// Родитель, чьи фотографии лежат в подальбомах, при этом остаётся видимым:
+// иначе с витрины исчезает целая ветка каталога.
+func TestEmptyAlbumsHiddenFromStorefront(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	full := createAlbum(c, shop.ID)
+	empty := createAlbum(c, shop.ID)
+	parent := createAlbum(c, shop.ID)      // своих фото нет, но есть подальбом с фото
+	emptyParent := createAlbum(c, shop.ID) // и он, и подальбом пусты
+
+	child := createChildAlbum(t, c, shop.ID, parent.ID)
+	emptyChild := createChildAlbum(t, c, shop.ID, emptyParent.ID)
+
+	p1 := uploadPhoto(c, shop.ID, full.ID, makeJPEG(t, 320, 240))
+	p2 := uploadPhoto(c, shop.ID, child.ID, makeJPEG(t, 320, 241))
+	waitPhotoStatus(c, shop.ID, full.ID, p1, "ready", 60*time.Second)
+	waitPhotoStatus(c, shop.ID, child.ID, p2, "ready", 60*time.Second)
+
+	var page struct {
+		Albums []struct {
+			ID string `json:"id"`
+		} `json:"albums"`
+	}
+	c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug, nil, http.StatusOK, &page)
+	shown := map[string]bool{}
+	for _, a := range page.Albums {
+		shown[a.ID] = true
+	}
+
+	for _, want := range []struct {
+		id   string
+		name string
+	}{{full.ID, "альбом с фото"}, {parent.ID, "родитель с непустым подальбомом"}, {child.ID, "непустой подальбом"}} {
+		if !shown[want.id] {
+			t.Errorf("%s пропал с витрины", want.name)
+		}
+	}
+	for _, gone := range []struct {
+		id   string
+		name string
+	}{{empty.ID, "пустой альбом"}, {emptyParent.ID, "пустой родитель"}, {emptyChild.ID, "пустой подальбом"}} {
+		if shown[gone.id] {
+			t.Errorf("%s показан покупателю", gone.name)
+		}
+	}
+
+	// В кабинете продавец по-прежнему видит все шесть: скрытие — только
+	// на витрине, ничего не удаляется и не меняется.
+	var own []struct {
+		ID string `json:"id"`
+	}
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums", nil, http.StatusOK, &own)
+	if len(own) != 6 {
+		t.Fatalf("в кабинете альбомов %d, want 6", len(own))
+	}
+}
+
+// createChildAlbum — альбом второго уровня внутри родителя.
+func createChildAlbum(t *testing.T, c *client, shopID, parentID string) albumJSON {
+	t.Helper()
+	var a albumJSON
+	c.mustJSON("POST", "/api/v1/shops/"+shopID+"/albums",
+		map[string]any{"title": "Подальбом", "parent_id": parentID}, http.StatusCreated, &a)
+	return a
 }

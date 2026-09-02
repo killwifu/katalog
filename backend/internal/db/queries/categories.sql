@@ -61,5 +61,10 @@ SELECT a.* FROM albums a
 JOIN categories c ON c.id = a.category_id
 WHERE a.shop_id = $1
   AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+  AND (a.photo_count > 0 OR EXISTS (
+        SELECT 1 FROM albums ch
+        WHERE ch.parent_id = a.id AND ch.status = 'published'
+          AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
+          AND ch.photo_count > 0))
   AND (c.slug = $2 OR c.parent_id = (SELECT id FROM categories WHERE shop_id = $1 AND slug = $2))
 ORDER BY a.sort_order, a.created_at DESC;

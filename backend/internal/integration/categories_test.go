@@ -56,7 +56,7 @@ func TestCategories(t *testing.T) {
 	// Альбом относится к категории; витрина отдаёт его по слагу категории,
 	// причём у родителя видны и альбомы вложенной категории.
 	album := createAlbum(c, shop.ID)
-	uploadPhoto(c, shop.ID, album.ID, makeJPEG(t, 320, 240))
+	uploadReadyPhoto(t, c, shop.ID, album.ID, makeJPEG(t, 320, 240))
 	c.mustJSON("PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s/category", shop.ID, album.ID),
 		map[string]any{"category_id": child.ID}, http.StatusOK, &struct{}{})
 

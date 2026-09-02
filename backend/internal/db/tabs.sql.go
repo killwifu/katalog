@@ -205,7 +205,13 @@ SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_ord
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
-LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published'
+     AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+     AND (a.photo_count > 0 OR EXISTS (
+           SELECT 1 FROM albums ch
+           WHERE ch.parent_id = a.id AND ch.status = 'published'
+             AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
+             AND ch.photo_count > 0))
 WHERE t.shop_id = $1 AND t.slug = $2
 ORDER BY s.sort_order, s.created_at, asec.sort_order
 `

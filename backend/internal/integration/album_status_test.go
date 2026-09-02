@@ -14,7 +14,7 @@ func TestAlbumStatus(t *testing.T) {
 	registerUser(c)
 	shop := createShop(c)
 	album := createAlbum(c, shop.ID)
-	uploadPhoto(c, shop.ID, album.ID, makeJPEG(t, 320, 240))
+	uploadReadyPhoto(t, c, shop.ID, album.ID, makeJPEG(t, 320, 240))
 
 	setStatus := func(status string) {
 		c.mustJSON("PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s", shop.ID, album.ID),
