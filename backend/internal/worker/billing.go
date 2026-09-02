@@ -59,6 +59,11 @@ func (p *Processor) HandleBillingLifecycle(ctx context.Context, _ *asynq.Task) e
 // менять его молча нельзя.
 const contentKeepMonths = 3
 
+// pendingPaymentBlockHours — сколько незакрытый платёж блокирует новое
+// списание по той же подписке. Сутки: за это время ЮKassa доводит платёж
+// до финального статуса и успевает исчерпать ретраи уведомления.
+const pendingPaymentBlockHours = 24
+
 // mailOwner отправляет письмо владельцу магазина. Письмо — не критичный
 // путь: сбой логируем и идём дальше, иначе одна недоставка остановит
 // обработку остальных магазинов.
@@ -132,7 +137,9 @@ func (p *Processor) HandleBillingRenew(ctx context.Context, _ *asynq.Task) error
 	if !p.Billing.Enabled() {
 		return nil
 	}
-	subs, err := p.Q.ListSubscriptionsToRenew(ctx)
+	// Незакрытый платёж блокирует повторное списание только сутки: дольше
+	// он всё равно не завершится, а вечная блокировка замораживала продления.
+	subs, err := p.Q.ListSubscriptionsToRenew(ctx, pendingPaymentBlockHours)
 	if err != nil {
 		return fmt.Errorf("list subscriptions to renew: %w", err)
 	}

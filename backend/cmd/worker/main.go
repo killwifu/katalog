@@ -88,6 +88,7 @@ func run(logger *slog.Logger) error {
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	mux.HandleFunc(tasks.TypeBillingLifecycle, processor.HandleBillingLifecycle)
 	mux.HandleFunc(tasks.TypeBillingRenew, processor.HandleBillingRenew)
+	mux.HandleFunc(tasks.TypeBillingReconcile, processor.HandleBillingReconcile)
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
 	mux.HandleFunc(tasks.TypeStatsDigest, processor.HandleStatsDigest)
 	mux.HandleFunc(tasks.TypeTrafficAlert, processor.HandleTrafficAlert)
@@ -110,6 +111,11 @@ func run(logger *slog.Logger) error {
 	}
 	if _, err := scheduler.Register("0 1 * * *", tasks.NewBillingRenew()); err != nil {
 		return fmt.Errorf("register billing renew cron: %w", err)
+	}
+	// Сверка зависших платежей — каждый час: недоставленное уведомление
+	// не должно ждать до утра, деньги уже списаны.
+	if _, err := scheduler.Register("20 * * * *", tasks.NewBillingReconcile()); err != nil {
+		return fmt.Errorf("register billing reconcile cron: %w", err)
 	}
 	// Уборка зависших загрузок (02:30 UTC): освобождает квоту продавца.
 	if _, err := scheduler.Register("30 2 * * *", tasks.NewUploadsCleanup()); err != nil {

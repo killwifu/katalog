@@ -97,9 +97,23 @@ WHERE s.status = 'active'
   AND s.payment_method_id IS NOT NULL
   AND s.period_end < now() + interval '1 day'
   AND NOT EXISTS (
+      -- Незакрытый платёж блокирует повторное списание, но только пока он
+      -- действительно может завершиться. Без срока одно недоставленное
+      -- уведомление замораживало продления магазина навсегда: подписка
+      -- тихо уходила в grace и дальше в suspended при рабочей карте.
       SELECT 1 FROM payments p
       WHERE p.shop_id = s.shop_id AND p.recurring AND p.status = 'pending'
+        AND p.created_at > now() - make_interval(hours => sqlc.arg(pending_hours)::int)
   );
+
+-- Платежи, застрявшие в pending: уведомление о финальном статусе не дошло.
+-- Сверяются с ЮKassa отдельной задачей — см. HandleBillingReconcile.
+-- name: ListStuckPayments :many
+SELECT id, shop_id, provider_payment_id, created_at FROM payments
+WHERE status = 'pending'
+  AND created_at < now() - make_interval(mins => sqlc.arg(older_than_minutes)::int)
+ORDER BY created_at
+LIMIT 100;
 
 -- Приближение к лимиту хранилища: письмо шлём один раз при переходе через
 -- порог, поэтому отбираем только тех, кто ещё не предупреждён сегодня.

@@ -17,6 +17,7 @@ const (
 	TypeStoragePurge     = "storage:purge"
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
+	TypeBillingReconcile = "billing:reconcile"
 	TypeEmailSend        = "email:send"
 	TypeStatsDigest      = "stats:digest"
 	TypeTrafficAlert     = "stats:traffic-alert"
@@ -120,6 +121,13 @@ func NewBillingRenew() *asynq.Task {
 		asynq.MaxRetry(3),
 		asynq.Timeout(10*time.Minute),
 	)
+}
+
+// NewBillingReconcile — сверка зависших платежей с ЮKassa: уведомление
+// о финальном статусе могло не дойти, а платёж в pending блокирует
+// следующее списание.
+func NewBillingReconcile() *asynq.Task {
+	return asynq.NewTask(TypeBillingReconcile, nil, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 }
 
 func NewPhotoProcess(photoID uuid.UUID) (*asynq.Task, error) {

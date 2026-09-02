@@ -490,3 +490,122 @@ func mustExec(t *testing.T, sql string, args ...any) {
 		t.Fatalf("exec %q: %v", sql, err)
 	}
 }
+
+// cancelByOurID «отменяет» платёж в фейке по id нашей записи.
+func (f *fakeYooKassa) cancelByOurID(t *testing.T, ourPaymentID string) *billing.Payment {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.payments {
+		if p.Metadata["payment_id"] == ourPaymentID {
+			p.Status = billing.StatusCanceled
+			return p
+		}
+	}
+	t.Fatalf("fake yookassa: payment with metadata payment_id=%s not found", ourPaymentID)
+	return nil
+}
+
+// TestReconcileStuckPayments: недоставленное уведомление ЮKassa больше
+// не замораживает магазин.
+//
+// Расчёт платежа запускает вебхук, и ретраи ЮKassa не вечны. Потерянное
+// уведомление оставляло платёж в pending навсегда: деньги списаны, подписка
+// не продлена, а следующее списание не начиналось — незакрытый платёж его
+// блокировал. Магазин уезжал в grace и скрывался при рабочей карте.
+func TestReconcileStuckPayments(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("оплаченный платёж досчитывается", func(t *testing.T) {
+		c := newClient(t)
+		registerUser(c)
+		shop := createShop(c)
+
+		var sub struct {
+			PaymentID string `json:"payment_id"`
+		}
+		c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
+			map[string]string{"plan": "pro"}, http.StatusOK, &sub)
+
+		// В ЮKassa платёж прошёл, а уведомление до нас не доехало.
+		env.yk.succeedByOurID(t, sub.PaymentID)
+		mustExec(t, "UPDATE payments SET created_at = now() - interval '1 hour' WHERE id = $1", sub.PaymentID)
+
+		before := getBilling(c, shop.ID)
+		if before.Plan != "free" {
+			t.Fatalf("до сверки тариф уже %s — платёж зачёлся сам", before.Plan)
+		}
+
+		if err := env.processor.HandleBillingReconcile(ctx, tasks.NewBillingReconcile()); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+
+		after := getBilling(c, shop.ID)
+		if after.Plan != "pro" || after.BillingState != "ok" {
+			t.Fatalf("после сверки тариф %s / %s, ожидался pro / ok", after.Plan, after.BillingState)
+		}
+		var status string
+		if err := env.pool.QueryRow(ctx,
+			"SELECT status::text FROM payments WHERE id = $1", sub.PaymentID).Scan(&status); err != nil {
+			t.Fatalf("read payment: %v", err)
+		}
+		if status != "succeeded" {
+			t.Fatalf("платёж остался в статусе %q", status)
+		}
+	})
+
+	t.Run("отменённый платёж закрывается", func(t *testing.T) {
+		c := newClient(t)
+		registerUser(c)
+		shop := createShop(c)
+
+		var sub struct {
+			PaymentID string `json:"payment_id"`
+		}
+		c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
+			map[string]string{"plan": "basic"}, http.StatusOK, &sub)
+		env.yk.cancelByOurID(t, sub.PaymentID)
+		mustExec(t, "UPDATE payments SET created_at = now() - interval '1 hour' WHERE id = $1", sub.PaymentID)
+
+		if err := env.processor.HandleBillingReconcile(ctx, tasks.NewBillingReconcile()); err != nil {
+			t.Fatalf("reconcile: %v", err)
+		}
+		var status string
+		if err := env.pool.QueryRow(ctx,
+			"SELECT status::text FROM payments WHERE id = $1", sub.PaymentID).Scan(&status); err != nil {
+			t.Fatalf("read payment: %v", err)
+		}
+		if status != "canceled" {
+			t.Fatalf("платёж остался в статусе %q, ожидался canceled", status)
+		}
+		if b := getBilling(c, shop.ID); b.Plan != "free" {
+			t.Fatalf("отменённый платёж поменял тариф на %s", b.Plan)
+		}
+	})
+
+	t.Run("зависший платёж не блокирует продление навсегда", func(t *testing.T) {
+		c := newClient(t)
+		registerUser(c)
+		shop := createShop(c)
+
+		mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
+		mustExec(t, `INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end, payment_method_id)
+			VALUES ($1, 'basic', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-stuck-1')`, shop.ID)
+		// Платёж, зависший двое суток назад: ЮKassa о нём давно забыла.
+		mustExec(t, `INSERT INTO payments (shop_id, plan, amount, currency, status, recurring, created_at)
+			VALUES ($1, 'basic', 49000, 'RUB', 'pending', true, now() - interval '2 days')`, shop.ID)
+
+		if err := env.processor.HandleBillingRenew(ctx, tasks.NewBillingRenew()); err != nil {
+			t.Fatalf("renew: %v", err)
+		}
+		var fresh int
+		if err := env.pool.QueryRow(ctx,
+			`SELECT count(*) FROM payments WHERE shop_id = $1 AND created_at > now() - interval '1 minute'`,
+			shop.ID).Scan(&fresh); err != nil {
+			t.Fatalf("count payments: %v", err)
+		}
+		if fresh == 0 {
+			t.Fatal("продление не состоялось: зависший платёж заблокировал списание")
+		}
+	})
+}
