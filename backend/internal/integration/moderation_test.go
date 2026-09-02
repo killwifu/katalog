@@ -359,6 +359,9 @@ func TestModeratorBlockSurvivesSeller(t *testing.T) {
 	registerUser(seller)
 	shop := createShop(seller)
 	album := createAlbum(seller, shop.ID)
+	// С фотографией: пустой альбом витрина не показывает и без блокировки,
+	// и проверка «скрытие пережило продавца» стала бы пустой.
+	uploadReadyPhoto(t, seller, shop.ID, album.ID, makeJPEG(t, 320, 240))
 
 	admin := newClient(t)
 	adminUser := registerUser(admin)

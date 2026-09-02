@@ -274,3 +274,16 @@ func writePNGChunk(buf *bytes.Buffer, name string, data []byte) {
 	binary.BigEndian.PutUint32(crcBytes[:], crc.Sum32())
 	buf.Write(crcBytes[:])
 }
+
+// uploadReadyPhoto — загрузить фото и дождаться обработки.
+//
+// Витрина не показывает пустые альбомы, а albums.photo_count растёт только
+// когда фото стало ready. Значит тест, который грузит фото и сразу лезет
+// на витрину, проверяет не то, что собирался: альбома там нет не потому,
+// что сработала проверяемая логика, а потому что воркер не успел.
+func uploadReadyPhoto(t *testing.T, c *client, shopID, albumID string, data []byte) string {
+	t.Helper()
+	id := uploadPhoto(c, shopID, albumID, data)
+	waitPhotoStatus(c, shopID, albumID, id, "ready", 60*time.Second)
+	return id
+}

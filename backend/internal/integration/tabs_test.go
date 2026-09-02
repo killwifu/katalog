@@ -86,8 +86,8 @@ func TestTabsAndSections(t *testing.T) {
 
 	a1 := createAlbum(c, shop.ID)
 	a2 := createAlbum(c, shop.ID)
-	uploadPhoto(c, shop.ID, a1.ID, makeJPEG(t, 320, 240))
-	uploadPhoto(c, shop.ID, a2.ID, makeJPEG(t, 320, 240))
+	uploadReadyPhoto(t, c, shop.ID, a1.ID, makeJPEG(t, 320, 240))
+	uploadReadyPhoto(t, c, shop.ID, a2.ID, makeJPEG(t, 320, 240))
 
 	setAlbums := func(ids ...string) {
 		status, body := c.do("PUT", fmt.Sprintf("/api/v1/shops/%s/sections/%s/albums", shop.ID, sec.ID),

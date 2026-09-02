@@ -183,6 +183,11 @@ FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
+  AND (a.photo_count > 0 OR EXISTS (
+        SELECT 1 FROM albums ch
+        WHERE ch.parent_id = a.id AND ch.status = 'published'
+          AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
+          AND ch.photo_count > 0))
 ORDER BY a.sort_order, a.created_at
 LIMIT 1000
 `
@@ -202,6 +207,9 @@ type ListPublicAlbumsRow struct {
 // на каждый заход покупателя, и число альбомов в ней не должно зависеть
 // от того, сколько их успел наделать продавец. Совпадает с потолком на
 // создание альбомов, так что честный каталог не обрезается.
+// Пустой альбом покупателю показывать незачем: тап по нему упирается
+// в «здесь пока нет фото». Родителя, у которого фотографии лежат в
+// подальбомах, при этом прятать нельзя — иначе исчезает целая ветка.
 func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]ListPublicAlbumsRow, error) {
 	rows, err := q.db.Query(ctx, listPublicAlbums, shopID)
 	if err != nil {
@@ -236,6 +244,9 @@ FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
 WHERE a.parent_id = $1 AND a.status = 'published'
   AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+  -- Глубже двух уровней альбомов не бывает, поэтому здесь достаточно
+  -- собственного счётчика.
+  AND a.photo_count > 0
 ORDER BY a.sort_order, a.created_at, a.id
 LIMIT 200
 `
