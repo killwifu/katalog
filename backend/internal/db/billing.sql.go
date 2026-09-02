@@ -125,21 +125,68 @@ func (q *Queries) GetSubscriptionByShop(ctx context.Context, shopID uuid.UUID) (
 	return i, err
 }
 
+const listStuckPayments = `-- name: ListStuckPayments :many
+SELECT id, shop_id, provider_payment_id, created_at FROM payments
+WHERE status = 'pending'
+  AND created_at < now() - make_interval(mins => $1::int)
+ORDER BY created_at
+LIMIT 100
+`
+
+type ListStuckPaymentsRow struct {
+	ID                uuid.UUID          `json:"id"`
+	ShopID            uuid.UUID          `json:"shop_id"`
+	ProviderPaymentID *string            `json:"provider_payment_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+// Платежи, застрявшие в pending: уведомление о финальном статусе не дошло.
+// Сверяются с ЮKassa отдельной задачей — см. HandleBillingReconcile.
+func (q *Queries) ListStuckPayments(ctx context.Context, olderThanMinutes int32) ([]ListStuckPaymentsRow, error) {
+	rows, err := q.db.Query(ctx, listStuckPayments, olderThanMinutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStuckPaymentsRow
+	for rows.Next() {
+		var i ListStuckPaymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShopID,
+			&i.ProviderPaymentID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubscriptionsToRenew = `-- name: ListSubscriptionsToRenew :many
 SELECT s.id, s.shop_id, s.plan, s.status, s.period_start, s.period_end, s.created_at, s.payment_method_id, s.updated_at FROM subscriptions s
 WHERE s.status = 'active'
   AND s.payment_method_id IS NOT NULL
   AND s.period_end < now() + interval '1 day'
   AND NOT EXISTS (
+      -- Незакрытый платёж блокирует повторное списание, но только пока он
+      -- действительно может завершиться. Без срока одно недоставленное
+      -- уведомление замораживало продления магазина навсегда: подписка
+      -- тихо уходила в grace и дальше в suspended при рабочей карте.
       SELECT 1 FROM payments p
       WHERE p.shop_id = s.shop_id AND p.recurring AND p.status = 'pending'
+        AND p.created_at > now() - make_interval(hours => $1::int)
   )
 `
 
 // Рекуррентные списания: активные подписки с сохранённым способом оплаты,
 // истекающие в ближайшие сутки, без незавершённого рекуррентного платежа.
-func (q *Queries) ListSubscriptionsToRenew(ctx context.Context) ([]Subscription, error) {
-	rows, err := q.db.Query(ctx, listSubscriptionsToRenew)
+func (q *Queries) ListSubscriptionsToRenew(ctx context.Context, pendingHours int32) ([]Subscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsToRenew, pendingHours)
 	if err != nil {
 		return nil, err
 	}

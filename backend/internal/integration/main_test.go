@@ -233,6 +233,9 @@ func run(m *testing.M) int {
 	}
 	env.srv = httptest.NewServer(app.Router())
 	defer env.srv.Close()
+	// Сверка зависших платежей переотправляет уведомление на наш же вебхук,
+	// поэтому воркеру нужен адрес API — в тестах это тот же сервер.
+	cfg.APIInternalURL = env.srv.URL
 
 	// Воркер в том же процессе — полный путь presign -> put -> confirm ->
 	// asynq -> govips -> ready проверяется по-настоящему.
@@ -255,6 +258,7 @@ func run(m *testing.M) int {
 	env.processor = processor
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
+	mux.HandleFunc(tasks.TypeBillingReconcile, processor.HandleBillingReconcile)
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)
 	mux.HandleFunc(tasks.TypeStoragePurge, processor.HandleStoragePurge)
 	if err := asynqSrv.Start(mux); err != nil {

@@ -33,6 +33,10 @@ type Config struct {
 	PublicRateLimit int64
 	// StorefrontURL — внутренний адрес витрины Next.js для вебхука ревалидации.
 	StorefrontURL string
+	// APIInternalURL — внутренний адрес самого API. Воркер переотправляет
+	// на него уведомления ЮKassa, которые не дошли (см. HandleBillingReconcile):
+	// расчёт платежа живёт в одном месте, дублировать его в воркере нельзя.
+	APIInternalURL string
 	// RevalidateSecret — shared secret вебхука Go -> Next (пустой = вебхук выключен).
 	RevalidateSecret string
 	// SiteURL — публичный базовый URL (ссылки в письмах: сброс пароля и т.п.).
@@ -112,6 +116,7 @@ func Load() Config {
 		AuthRateLimit:          getenvInt64("AUTH_RATE_LIMIT", 20),
 		PublicRateLimit:        getenvInt64("PUBLIC_RATE_LIMIT", 300),
 		StorefrontURL:          getenv("STOREFRONT_URL", "http://localhost:3000"),
+		APIInternalURL:         getenv("API_INTERNAL_URL", "http://api:8080"),
 		RevalidateSecret:       os.Getenv("REVALIDATE_SECRET"),
 		SiteURL:                getenv("SITE_URL", "http://localhost"),
 		MediaBaseURL:           strings.TrimRight(getenv("MEDIA_BASE_URL", "/media"), "/"),
