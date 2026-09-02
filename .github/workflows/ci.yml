@@ -239,6 +239,21 @@ jobs:
           $COMPOSE pull --quiet
           $COMPOSE up -d --remove-orphans
 
+          # Caddyfile смонтирован одним файлом, а git checkout заменяет файл
+          # целиком — контейнер продолжает видеть старый inode со старым
+          # содержимым. Образ caddy при этом не менялся, поэтому up -d его
+          # не трогает: правки конфига не доезжали до прода вообще никак.
+          # На боевом стенде так и оказалось — Caddy работал с конфигом
+          # одиннадцатидневной давности.
+          # Сверяем содержимое и пересоздаём контейнер, только если разъехалось:
+          # безусловный --force-recreate рвал бы соединения на каждом деплое.
+          HOST_SUM=$(md5sum deploy/Caddyfile.prod | cut -d' ' -f1)
+          CONT_SUM=$($COMPOSE exec -T caddy md5sum /etc/caddy/Caddyfile 2>/dev/null | cut -d' ' -f1 || true)
+          if [ "$HOST_SUM" != "$CONT_SUM" ]; then
+            echo "Caddyfile изменился — пересоздаём caddy"
+            $COMPOSE up -d --force-recreate caddy
+          fi
+
           docker logout ghcr.io
           docker image prune -f
           REMOTE
