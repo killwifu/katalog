@@ -56,6 +56,12 @@ type Config struct {
 	// TrafficAlertMinViews — минимум просмотров за день для срабатывания
 	// (отсекает шум маленьких магазинов).
 	TrafficAlertMinViews int64
+	// RetentionLeadClicksDays — сколько хранить сырые переходы в мессенджеры
+	// (в них visitor_hash). Агрегат за день остаётся в daily_stats.
+	RetentionLeadClicksDays int64
+	// RetentionDailyStatsDays — сколько хранить дневные агрегаты. Больше
+	// года кабинет всё равно не показывает (максимум days=365).
+	RetentionDailyStatsDays int64
 }
 
 // MailConfig — транзакционная почта. Пустой SMTPHost = письма пишутся в лог.
@@ -101,28 +107,30 @@ func (b BillingConfig) Limits(plan string) PlanLimits {
 
 func Load() Config {
 	return Config{
-		HTTPAddr:               getenv("HTTP_ADDR", ":8080"),
-		WorkerHealthAddr:       getenv("WORKER_HEALTH_ADDR", ":8081"),
-		DatabaseURL:            getenv("DATABASE_URL", "postgres://katalog:katalog@localhost:5432/katalog?sslmode=disable"),
-		RedisAddr:              getenv("REDIS_ADDR", "localhost:6379"),
-		S3Endpoint:             getenv("S3_ENDPOINT", "http://localhost:9000"),
-		S3PublicEndpoint:       getenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000"),
-		S3Bucket:               getenv("S3_BUCKET", "katalog"),
-		S3AccessKey:            getenv("S3_ACCESS_KEY", "minioadmin"),
-		S3SecretKey:            getenv("S3_SECRET_KEY", "minioadmin"),
-		S3Region:               getenv("S3_REGION", "us-east-1"),
-		CookieSecure:           os.Getenv("COOKIE_SECURE") == "true",
-		SessionTTL:             30 * 24 * time.Hour,
-		AuthRateLimit:          getenvInt64("AUTH_RATE_LIMIT", 20),
-		PublicRateLimit:        getenvInt64("PUBLIC_RATE_LIMIT", 300),
-		StorefrontURL:          getenv("STOREFRONT_URL", "http://localhost:3000"),
-		APIInternalURL:         getenv("API_INTERNAL_URL", "http://api:8080"),
-		RevalidateSecret:       os.Getenv("REVALIDATE_SECRET"),
-		SiteURL:                getenv("SITE_URL", "http://localhost"),
-		MediaBaseURL:           strings.TrimRight(getenv("MEDIA_BASE_URL", "/media"), "/"),
-		StopWords:              splitList(os.Getenv("STOP_WORDS")),
-		TrafficAlertMultiplier: getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),
-		TrafficAlertMinViews:   getenvInt64("TRAFFIC_ALERT_MIN_VIEWS", 1000),
+		HTTPAddr:                getenv("HTTP_ADDR", ":8080"),
+		WorkerHealthAddr:        getenv("WORKER_HEALTH_ADDR", ":8081"),
+		DatabaseURL:             getenv("DATABASE_URL", "postgres://katalog:katalog@localhost:5432/katalog?sslmode=disable"),
+		RedisAddr:               getenv("REDIS_ADDR", "localhost:6379"),
+		S3Endpoint:              getenv("S3_ENDPOINT", "http://localhost:9000"),
+		S3PublicEndpoint:        getenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000"),
+		S3Bucket:                getenv("S3_BUCKET", "katalog"),
+		S3AccessKey:             getenv("S3_ACCESS_KEY", "minioadmin"),
+		S3SecretKey:             getenv("S3_SECRET_KEY", "minioadmin"),
+		S3Region:                getenv("S3_REGION", "us-east-1"),
+		CookieSecure:            os.Getenv("COOKIE_SECURE") == "true",
+		SessionTTL:              30 * 24 * time.Hour,
+		AuthRateLimit:           getenvInt64("AUTH_RATE_LIMIT", 20),
+		PublicRateLimit:         getenvInt64("PUBLIC_RATE_LIMIT", 300),
+		StorefrontURL:           getenv("STOREFRONT_URL", "http://localhost:3000"),
+		APIInternalURL:          getenv("API_INTERNAL_URL", "http://api:8080"),
+		RevalidateSecret:        os.Getenv("REVALIDATE_SECRET"),
+		SiteURL:                 getenv("SITE_URL", "http://localhost"),
+		MediaBaseURL:            strings.TrimRight(getenv("MEDIA_BASE_URL", "/media"), "/"),
+		StopWords:               splitList(os.Getenv("STOP_WORDS")),
+		TrafficAlertMultiplier:  getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),
+		TrafficAlertMinViews:    getenvInt64("TRAFFIC_ALERT_MIN_VIEWS", 1000),
+		RetentionLeadClicksDays: getenvInt64("RETENTION_LEAD_CLICKS_DAYS", 90),
+		RetentionDailyStatsDays: getenvInt64("RETENTION_DAILY_STATS_DAYS", 400),
 		Mail: MailConfig{
 			SMTPHost:   os.Getenv("SMTP_HOST"),
 			SMTPPort:   int(getenvInt64("SMTP_PORT", 587)),

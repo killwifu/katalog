@@ -14,6 +14,7 @@ const (
 	TypePhotoProcess     = "photo:process"
 	TypeStatsAggregate   = "stats:aggregate"
 	TypeUploadsCleanup   = "uploads:cleanup"
+	TypeRetentionPurge   = "retention:purge"
 	TypeStoragePurge     = "storage:purge"
 	TypeBillingLifecycle = "billing:lifecycle"
 	TypeBillingRenew     = "billing:renew"
@@ -128,6 +129,11 @@ func NewBillingRenew() *asynq.Task {
 // следующее списание.
 func NewBillingReconcile() *asynq.Task {
 	return asynq.NewTask(TypeBillingReconcile, nil, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
+}
+
+// NewRetentionPurge — уборка аналитики по сроку хранения.
+func NewRetentionPurge() *asynq.Task {
+	return asynq.NewTask(TypeRetentionPurge, nil, asynq.MaxRetry(3), asynq.Timeout(10*time.Minute))
 }
 
 func NewPhotoProcess(photoID uuid.UUID) (*asynq.Task, error) {

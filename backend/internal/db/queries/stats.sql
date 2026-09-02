@@ -102,3 +102,17 @@ WHERE created_at >= $1;
 -- name: CountActiveShops :one
 SELECT count(*) FROM shops
 WHERE status = 'active';
+
+-- Ретеншн. Сырые события переходов и дневные агрегаты живут ограниченный
+-- срок: lead_clicks хранит visitor_hash, то есть данные о посетителях,
+-- и держать их годами незачем — в daily_stats уже лежит агрегат.
+--
+-- payments и moderation_log сознательно не чистятся: первое — финансовые
+-- записи, второе — доказательство, что и почему сняли по жалобе.
+-- name: DeleteOldLeadClicks :execrows
+DELETE FROM lead_clicks
+WHERE created_at < now() - make_interval(days => sqlc.arg(keep_days)::int);
+
+-- name: DeleteOldDailyStats :execrows
+DELETE FROM daily_stats
+WHERE date < current_date - sqlc.arg(keep_days)::int;
