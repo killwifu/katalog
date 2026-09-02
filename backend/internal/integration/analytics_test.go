@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -229,5 +230,61 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 	if strings.Contains(body, "katalog_public_request_seconds_count 0\n") {
 		t.Fatal("latency histogram is empty after a public request")
+	}
+}
+
+// TestRetentionPurge: аналитика не копится вечно.
+//
+// lead_clicks хранит visitor_hash — сведения о посетителях витрин, и держать
+// их годами незачем: агрегат за день уходит в daily_stats той же ночью.
+// Финансовые записи и журнал модерации задача не трогает: их срок хранения
+// определяется не удобством уборки.
+func TestRetentionPurge(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	// Старое (за пределами срока) и свежее — по обеим таблицам.
+	mustExec(t, `INSERT INTO lead_clicks (shop_id, channel, visitor_hash, created_at)
+		VALUES ($1, 'telegram', 'old', now() - interval '400 days'),
+		       ($1, 'telegram', 'fresh', now() - interval '2 days')`, shop.ID)
+	mustExec(t, `INSERT INTO daily_stats (shop_id, date, views, unique_visitors, lead_clicks)
+		VALUES ($1, current_date - 500, 10, 5, 1),
+		       ($1, current_date - 10, 20, 7, 2)`, shop.ID)
+	// Платёж и запись модерации — их уборка обязана оставить.
+	mustExec(t, `INSERT INTO payments (shop_id, plan, amount, currency, status, created_at)
+		VALUES ($1, 'basic', 49000, 'RUB', 'canceled', now() - interval '900 days')`, shop.ID)
+	admin := newClient(t)
+	adminUser := registerUser(admin)
+	mustExec(t, `INSERT INTO moderation_log (shop_id, admin_id, action, note, created_at)
+		VALUES ($1, $2, 'block_photo', 'старая жалоба', now() - interval '900 days')`,
+		shop.ID, adminUser.ID)
+
+	if err := env.processor.HandleRetentionPurge(ctx, tasks.NewRetentionPurge()); err != nil {
+		t.Fatalf("retention purge: %v", err)
+	}
+
+	count := func(query string) int {
+		var n int
+		if err := env.pool.QueryRow(ctx, query, shop.ID).Scan(&n); err != nil {
+			t.Fatalf("count (%s): %v", query, err)
+		}
+		return n
+	}
+	if n := count(`SELECT count(*) FROM lead_clicks WHERE shop_id = $1`); n != 1 {
+		t.Errorf("переходов осталось %d, ожидался 1 свежий", n)
+	}
+	if n := count(`SELECT count(*) FROM lead_clicks WHERE shop_id = $1 AND visitor_hash = 'fresh'`); n != 1 {
+		t.Error("уборка снесла свежий переход")
+	}
+	if n := count(`SELECT count(*) FROM daily_stats WHERE shop_id = $1`); n != 1 {
+		t.Errorf("дневных строк осталось %d, ожидалась 1 свежая", n)
+	}
+	if n := count(`SELECT count(*) FROM payments WHERE shop_id = $1`); n != 1 {
+		t.Error("уборка тронула платежи — это финансовые записи")
+	}
+	if n := count(`SELECT count(*) FROM moderation_log WHERE shop_id = $1`); n != 1 {
+		t.Error("уборка тронула журнал модерации — это доказательство по жалобе")
 	}
 }

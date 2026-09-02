@@ -93,6 +93,7 @@ func run(logger *slog.Logger) error {
 	mux.HandleFunc(tasks.TypeStatsDigest, processor.HandleStatsDigest)
 	mux.HandleFunc(tasks.TypeTrafficAlert, processor.HandleTrafficAlert)
 	mux.HandleFunc(tasks.TypeUploadsCleanup, processor.HandleUploadsCleanup)
+	mux.HandleFunc(tasks.TypeRetentionPurge, processor.HandleRetentionPurge)
 	mux.HandleFunc(tasks.TypeStoragePurge, processor.HandleStoragePurge)
 
 	// Ночная агрегация просмотров/лидов в daily_stats (00:30 UTC за вчера).
@@ -116,6 +117,11 @@ func run(logger *slog.Logger) error {
 	// не должно ждать до утра, деньги уже списаны.
 	if _, err := scheduler.Register("20 * * * *", tasks.NewBillingReconcile()); err != nil {
 		return fmt.Errorf("register billing reconcile cron: %w", err)
+	}
+	// Уборка аналитики по сроку хранения (03:10 UTC) — после ночной
+	// агрегации, чтобы вчерашние события успели попасть в daily_stats.
+	if _, err := scheduler.Register("10 3 * * *", tasks.NewRetentionPurge()); err != nil {
+		return fmt.Errorf("register retention cron: %w", err)
 	}
 	// Уборка зависших загрузок (02:30 UTC): освобождает квоту продавца.
 	if _, err := scheduler.Register("30 2 * * *", tasks.NewUploadsCleanup()); err != nil {

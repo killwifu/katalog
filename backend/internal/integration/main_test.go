@@ -205,6 +205,9 @@ func run(m *testing.M) int {
 		// Низкий порог, чтобы тест алерта не создавал тысячи просмотров.
 		TrafficAlertMultiplier: 5,
 		TrafficAlertMinViews:   100,
+		// Сроки хранения аналитики — как в проде по умолчанию.
+		RetentionLeadClicksDays: 90,
+		RetentionDailyStatsDays: 400,
 		Billing: config.BillingConfig{
 			// Маленький лимит фото на free — для теста квоты.
 			Plans: map[string]config.PlanLimits{

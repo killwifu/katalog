@@ -74,6 +74,38 @@ func (q *Queries) CountPhotosUploadedSince(ctx context.Context, createdAt pgtype
 	return count, err
 }
 
+const deleteOldDailyStats = `-- name: DeleteOldDailyStats :execrows
+DELETE FROM daily_stats
+WHERE date < current_date - $1::int
+`
+
+func (q *Queries) DeleteOldDailyStats(ctx context.Context, keepDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldDailyStats, keepDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOldLeadClicks = `-- name: DeleteOldLeadClicks :execrows
+DELETE FROM lead_clicks
+WHERE created_at < now() - make_interval(days => $1::int)
+`
+
+// Ретеншн. Сырые события переходов и дневные агрегаты живут ограниченный
+// срок: lead_clicks хранит visitor_hash, то есть данные о посетителях,
+// и держать их годами незачем — в daily_stats уже лежит агрегат.
+//
+// payments и moderation_log сознательно не чистятся: первое — финансовые
+// записи, второе — доказательство, что и почему сняли по жалобе.
+func (q *Queries) DeleteOldLeadClicks(ctx context.Context, keepDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldLeadClicks, keepDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getShopLeadsByChannel = `-- name: GetShopLeadsByChannel :many
 SELECT channel, count(*)::bigint AS clicks
 FROM lead_clicks
