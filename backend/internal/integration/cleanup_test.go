@@ -69,12 +69,20 @@ func TestCleanupStaleProcessing(t *testing.T) {
 		t.Fatalf("cleanup: %v", err)
 	}
 
-	var status string
-	if err := env.pool.QueryRow(ctx, `SELECT status FROM photos WHERE id = $1`, photoID).Scan(&status); err != nil {
+	var status, reason string
+	if err := env.pool.QueryRow(ctx,
+		`SELECT status, coalesce(fail_reason, '') FROM photos WHERE id = $1`,
+		photoID).Scan(&status, &reason); err != nil {
 		t.Fatalf("read status: %v", err)
 	}
 	if status != "failed" {
 		t.Fatalf("stale processing photo: status %q, want failed", status)
+	}
+	// Причина обязана отличать нашу поломку от негодного файла: с пустой
+	// причиной кабинет показывал «Ошибка файла», хотя файл в порядке —
+	// потерялась задача обработки. Продавец шёл искать проблему в фотографии.
+	if reason != "lost" {
+		t.Fatalf("причина отказа %q, want lost", reason)
 	}
 }
 

@@ -1981,10 +1981,12 @@ components:
         sort_order: { type: integer }
         fail_reason:
           type: string
-          enum: [unsupported_format, corrupt, too_large, empty]
+          enum: [unsupported_format, corrupt, too_large, empty, lost]
           description: >
             Только для status=failed. Код причины, а не текст: кабинет
             переводит его сам, чтобы продавец понял, что чинить.
+            Первые четыре — про файл. lost — про нас: задача обработки
+            потерялась, файл в порядке, помогает повторная загрузка.
         urls:
           type: object
           description: Только для status=ready; деривативы WebP (300/800/1600)
