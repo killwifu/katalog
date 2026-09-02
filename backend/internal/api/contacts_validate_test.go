@@ -23,15 +23,24 @@ func TestValidateContacts(t *testing.T) {
 		{"перенос строки", `{"telegram":"shop\nother"}`, true},
 		{"не объект строк", `{"telegram":123}`, true},
 
+		// Номер WhatsApp: витрина строит wa.me/<цифры>, поэтому всё, что
+		// не превращается в номер, даёт ссылку без получателя.
+		{"whatsapp ником", `{"whatsapp":"@myshop"}`, true},
+		{"whatsapp почтой", `{"whatsapp":"shop@example.com"}`, true},
+		{"whatsapp слишком короткий", `{"whatsapp":"12345"}`, true},
+		{"whatsapp с российской восьмёркой", `{"whatsapp":"8 999 123-45-67"}`, true},
+		{"whatsapp международный", `{"whatsapp":"79991234567"}`, false},
+		{"whatsapp с разделителями", `{"whatsapp":"+7 999 123-45-67"}`, false},
+
 		// Телеграм и whatsapp ссылками не задаются — там всегда ник или номер,
 		// и «https://...» просто станет частью ника, никуда не уводя.
 		{"ссылка в telegram остаётся ником", `{"telegram":"https://evil.example"}`, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := validateContacts(json.RawMessage(tt.raw))
-			if (got != "") != tt.wantErr {
-				t.Fatalf("validateContacts(%s) = %q, wantErr %v", tt.raw, got, tt.wantErr)
+			code, msg := validateContacts(json.RawMessage(tt.raw))
+			if (code != "") != tt.wantErr {
+				t.Fatalf("validateContacts(%s) = %q (%q), wantErr %v", tt.raw, code, msg, tt.wantErr)
 			}
 		})
 	}

@@ -170,8 +170,8 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	if len(contacts) == 0 {
 		contacts = json.RawMessage(`{}`)
 	}
-	if msg := validateContacts(contacts); msg != "" {
-		apiError(w, http.StatusBadRequest, "invalid_contacts", msg)
+	if code, msg := validateContacts(contacts); code != "" {
+		apiError(w, http.StatusBadRequest, code, msg)
 		return
 	}
 
@@ -292,8 +292,8 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 		description = *req.Description
 	}
 	if req.Contacts != nil {
-		if msg := validateContacts(*req.Contacts); msg != "" {
-			apiError(w, http.StatusBadRequest, "invalid_contacts", msg)
+		if code, msg := validateContacts(*req.Contacts); code != "" {
+			apiError(w, http.StatusBadRequest, code, msg)
 			return
 		}
 		contacts = *req.Contacts
