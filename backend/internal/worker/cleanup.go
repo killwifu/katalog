@@ -90,7 +90,7 @@ func (p *Processor) HandleStoragePurge(ctx context.Context, t *asynq.Task) error
 	}
 
 	for _, id := range payload.PhotoIDs {
-		if err := p.Store.RemovePhoto(ctx, payload.ShopID, id, imagingmeta.DerivativeSizes); err != nil {
+		if err := p.Store.RemovePhoto(ctx, payload.ShopID, id, imagingmeta.DerivativeSizes()); err != nil {
 			return fmt.Errorf("purge photo %s: %w", id, err)
 		}
 	}

@@ -12,8 +12,8 @@ export function AlbumGrid({ shopSlug, albums }: { shopSlug: string; albums: Albu
           <a href={`/${encodeURIComponent(shopSlug)}/a/${album.id}`}>
             {album.cover_urls ? (
               <img
-                src={album.cover_urls.thumb}
-                srcSet={`${album.cover_urls.thumb} 300w, ${album.cover_urls.medium} 800w`}
+                src={album.cover_urls.small}
+                srcSet={`${album.cover_urls.small} 500w, ${album.cover_urls.medium} 800w`}
                 sizes="(max-width: 860px) 50vw, 25vw"
                 alt=""
                 loading="lazy"

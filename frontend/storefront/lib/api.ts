@@ -28,7 +28,7 @@ export type AlbumPublic = {
   cover_urls?: PhotoUrls
 }
 
-export type PhotoUrls = { thumb: string; medium: string; large: string }
+export type PhotoUrls = { small: string; medium: string; large: string }
 
 export type PhotoPublic = {
   id: string

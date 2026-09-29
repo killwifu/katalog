@@ -1,5 +1,6 @@
 // Package storage — S3-совместимое хранилище (MinIO локально).
-// Ключи: orig/{shop_id}/{photo_id}, drv/{shop_id}/{photo_id}/{size}.webp.
+// Ключи: orig/{shop_id}/{photo_id}, drv/{shop_id}/{photo_id}/{name}.webp,
+// где name — small/medium/large (см. imagingmeta.Derivatives).
 package storage
 
 import (
@@ -14,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"katalog/backend/internal/imagingmeta"
 )
 
 type Client struct {
@@ -69,7 +72,7 @@ func OrigKey(shopID, photoID uuid.UUID) string {
 }
 
 func DerivativeKey(shopID, photoID uuid.UUID, size int) string {
-	return fmt.Sprintf("drv/%s/%s/%d.webp", shopID, photoID, size)
+	return fmt.Sprintf("drv/%s/%s/%s.webp", shopID, photoID, imagingmeta.DerivativeName(size))
 }
 
 // PresignPut возвращает URL для прямой загрузки оригинала из браузера.

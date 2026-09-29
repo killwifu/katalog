@@ -313,8 +313,8 @@ function PhotoTile({
       <div className="aspect-square bg-surface-alt">
         {photo.status === 'ready' && photo.urls ? (
           <img
-            src={photo.urls.thumb}
-            srcSet={`${photo.urls.thumb} 300w, ${photo.urls.medium} 800w`}
+            src={photo.urls.small}
+            srcSet={`${photo.urls.small} 500w, ${photo.urls.medium} 800w`}
             sizes="(max-width: 640px) 33vw, 20vw"
             alt={photo.caption || 'Фото'}
             loading="lazy"

@@ -177,7 +177,8 @@ cd frontend/storefront && npm install && npm run dev   # http://localhost:3000
      `storage.editor`.
 
 3. *(можно отложить)* CDN-домен на этот же бакет, **без переписывания пути**:
-   адрес дериватива — `MEDIA_BASE_URL/{shop_id}/{photo_id}/{size}.webp`, ключ
+   адрес дериватива — `MEDIA_BASE_URL/{shop_id}/{photo_id}/{name}.webp`
+   (name — small/medium/large), ключ
    в бакете — `drv/{shop_id}/...`, поэтому `MEDIA_BASE_URL` оканчивается
    на `/drv`. Origin — `<bucket>.storage.yandexcloud.net`, Host-заголовок
    оставить origin'ный. До CDN `MEDIA_BASE_URL` может смотреть прямо в бакет
