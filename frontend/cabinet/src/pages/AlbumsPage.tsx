@@ -85,9 +85,9 @@ export function AlbumsPage() {
         <button onClick={() => setCreating(true)} className="btn btn--primary">
           Создать альбом
         </button>
-        <Link to="/albums" className="btn btn--ghost">
-          Загрузить фото
-        </Link>
+        {/* Кнопки «Загрузить фото» здесь нет намеренно: в макете она открывает
+            массовую загрузку с раскладкой по альбомам, а её пока нет. Фото
+            грузятся в конкретный альбом — с его страницы или при создании. */}
         <input
           className="inp albar__search"
           value={query}
