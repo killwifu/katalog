@@ -73,7 +73,9 @@ func TestFullPipeline(t *testing.T) {
 	}
 
 	// Деривативы публично доступны напрямую (эмуляция CDN-пути).
-	resp, err := http.Get(env.store.PublicDerivativeURL(sid, pid, 300))
+	// Размер берём из сетки, а не числом: захардкоженные 300 пережили
+	// переименование деривативов и молча просили несуществующий объект.
+	resp, err := http.Get(env.store.PublicDerivativeURL(sid, pid, imagingmeta.Derivatives[0].Px))
 	if err != nil {
 		t.Fatalf("GET derivative: %v", err)
 	}
