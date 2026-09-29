@@ -142,6 +142,11 @@ export function CategoriesPage() {
             {all.length - roots.length}{' '}
             {plural(all.length - roots.length, 'подкатегория', 'подкатегории', 'подкатегорий')}
           </div>
+          {roots.length === 0 && (
+            <p className="px-4 py-6 text-center text-sm text-ink-2">
+              Категорий пока нет. По ним покупатель находит товар в меню витрины.
+            </p>
+          )}
           {roots.map((c) => (
             <div key={c.id}>
               <button

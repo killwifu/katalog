@@ -178,11 +178,17 @@ export function OverviewPage() {
             <h2>За последние 7 дней</h2>
             <Link to="/stats">Вся статистика</Link>
           </div>
-          <p>
-            <b className="bignum">{num(sum(week, 'views'))}</b>
-            <span>просмотров витрины</span>
-          </p>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 py-2 text-sm">
+          {/* Молчаливые нули при отказе статистики продавец читает как
+              «витрину никто не смотрит» и идёт разбираться не туда. */}
+          {stats.isError ? (
+            <p className="text-sm text-danger">Не удалось загрузить статистику.</p>
+          ) : (
+            <p>
+              <b className="bignum">{num(sum(week, 'views'))}</b>
+              <span>просмотров витрины</span>
+            </p>
+          )}
+          <div className={`mt-2 flex flex-wrap gap-x-5 gap-y-1 py-2 text-sm ${stats.isError ? 'hidden' : ''}`}>
             <p className={delta(sum(week, 'views'), sum(prevWeek, 'views')).up ? 'text-[#1B6B3A]' : 'text-ink-3'}>
               <b className="font-semibold">{delta(sum(week, 'views'), sum(prevWeek, 'views')).label}</b>
               <span className="text-ink-3"> к прошлой неделе</span>

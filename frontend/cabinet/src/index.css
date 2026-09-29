@@ -69,6 +69,12 @@ body { min-height: 100vh; }
 
 .app { min-height: 100vh; }
 .app__aside { display: none; }
+/* Выдвижное меню телефона скрывается ровно там, где появляется боковое.
+   Было завязано на Tailwind-класс md:hidden — это 768px, а боковое меню
+   включается с 860px: в полосе между ними навигации не было никакой,
+   бургер открывал пустоту. Ровно на этой ширине нарисованы планшетные
+   макеты, поэтому промах и не был виден на десктопе. */
+.app__menu { display: block; }
 .app__main { min-width: 0; padding: 16px 16px 90px; }
 
 .app__bar {
@@ -93,6 +99,7 @@ body { min-height: 100vh; }
 @media (min-width: 860px) {
   .app { display: grid; grid-template-columns: 236px 1fr; }
   .app__aside { display: block; }
+  .app__menu { display: none; }
   .app__main { padding: 26px 30px 60px; }
   .app__bar { display: none; }
 }
@@ -368,7 +375,7 @@ select.inp { appearance: auto; }
 .albar__search { flex: 1 1 220px; min-width: 160px; }
 .albar__sel { flex: 0 0 auto; width: auto; }
 
-.alhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: var(--text-xs); color: var(--color-ink-3); }
+.alhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; font-size: var(--text-xs); color: var(--color-ink-3); }
 .alhead label { display: inline-flex; align-items: center; gap: 8px; color: var(--color-ink-2); cursor: pointer; }
 .alhead .spacer { flex: 1; }
 
@@ -409,8 +416,11 @@ select.inp { appearance: auto; }
    не теряет из виду, что у него уже есть, и возвращается туда же.
    -------------------------------------------------------------------------- */
 
-.modal__back { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(26 26 24 / 45%); overflow: auto; }
-.modal { width: 100%; max-width: 760px; background: var(--color-surface); border-radius: var(--radius-card); box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
+/* flex + margin:auto вместо place-items:center: при центрировании в grid
+   окно выше экрана обрезается сверху и докрутить туда нельзя — шапка
+   и крестик становятся недоступны. */
+.modal__back { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; padding: 20px; background: rgb(26 26 24 / 45%); overflow: auto; }
+.modal { width: 100%; margin: auto; max-width: 760px; background: var(--color-surface); border-radius: var(--radius-card); box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
 .modal__head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 0; }
 .modal__head h2 { font-size: var(--text-h3); font-weight: 600; }
 .modal__head p { font-size: var(--text-sm); color: var(--color-ink-2); margin-top: 4px; }
@@ -507,3 +517,12 @@ select.inp { appearance: auto; }
 .chips button[aria-pressed="true"] { background: var(--color-ink); border-color: var(--color-ink); color: #fff; }
 .chips button .cnt { color: var(--color-ink-3); }
 .chips button[aria-pressed="true"] .cnt { color: rgb(255 255 255 / 70%); }
+
+/* Чекбокс и «редактировать» на карточке альбома — тап-цели меньше 44px.
+   Общее мобильное правило поднимает до 44 только button, а здесь
+   input[type=checkbox] и ссылка. Промах по 18px рядом с удалением
+   на телефоне — вопрос времени. */
+@media (max-width: 859px) {
+  .alcard__pick { width: 24px; height: 24px; }
+  .alcard__edit { width: 40px; height: 40px; font-size: 15px; }
+}

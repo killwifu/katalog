@@ -40,6 +40,18 @@ export function NewAlbumDialog({
   const [busy, setBusy] = useState<'no' | 'album' | 'photos'>('no')
   const [error, setError] = useState('')
   const [outcome, setOutcome] = useState<UploadOutcome | null>(null)
+  const [confirmClose, setConfirmClose] = useState(false)
+
+  // Закрытие с набранной формой спрашивает подтверждение: выбранные файлы
+  // и текст иначе пропадали молча, а заново тащить полсотни снимков обидно.
+  const dirty = files.length > 0 || title.trim() !== '' || description.trim() !== ''
+  const close = () => {
+    if (dirty && !confirmClose) {
+      setConfirmClose(true)
+      return
+    }
+    onClose()
+  }
 
   // Без фотографий публиковать нечего: покупатель попадёт в пустой альбом.
   const forcedDraft = files.length === 0
@@ -128,7 +140,7 @@ export function NewAlbumDialog({
             <p>Добавьте фото и заполните данные — всё можно изменить позже в самом альбоме</p>
           </div>
           <span className="spacer" />
-          <button className="modal__x" onClick={() => onClose()} aria-label="Закрыть">
+          <button className="modal__x" onClick={close} aria-label="Закрыть">
             ✕
           </button>
         </div>
@@ -257,16 +269,24 @@ export function NewAlbumDialog({
         </div>
 
         <div className="modal__foot">
-          <p className="hint">Обязательно только название</p>
+          <p className="hint">
+            {confirmClose ? 'Закрыть без сохранения?' : 'Обязательно только название'}
+          </p>
           <span className="spacer" />
           {error && <p className="hint text-danger">{error}</p>}
           {outcome?.reason && <p className="hint text-danger">Загрузка прервана: {outcome.reason}</p>}
-          <button className="btn btn--ghost" onClick={() => onClose()} disabled={busy !== 'no'}>
-            Отмена
+          <button className="btn btn--ghost" onClick={close} disabled={busy !== 'no'}>
+            {confirmClose ? 'Да, закрыть' : 'Отмена'}
           </button>
-          <button className="btn btn--primary" onClick={() => void submit()} disabled={disabled}>
-            {busy === 'photos' ? 'Загружаем фото…' : busy === 'album' ? 'Создаём…' : 'Создать альбом'}
-          </button>
+          {confirmClose ? (
+            <button className="btn btn--primary" onClick={() => setConfirmClose(false)}>
+              Продолжить
+            </button>
+          ) : (
+            <button className="btn btn--primary" onClick={() => void submit()} disabled={disabled}>
+              {busy === 'photos' ? 'Загружаем фото…' : busy === 'album' ? 'Создаём…' : 'Создать альбом'}
+            </button>
+          )}
         </div>
       </div>
     </div>

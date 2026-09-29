@@ -128,7 +128,7 @@ export function AppLayout() {
           {/* «Выйти» переехало из полосы в меню: в шапке телефона было три
               цели, и самой опасной из них досталось постоянное место. */}
           {menuOpen && (
-            <div className="side mb-4 rounded-card border md:hidden">
+            <div className="side app__menu mb-4 rounded-card border">
               {nav}
               <button onClick={() => void logout()} className="btn btn--quiet mt-2">
                 Выйти
