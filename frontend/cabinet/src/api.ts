@@ -206,6 +206,10 @@ export type Album = {
   description: string
   category_id: string | null
   photo_count: number
+  // Обложку собирает сервер: базовый префикс медиа кабинету неизвестен.
+  cover_urls?: { small: string; medium: string; large: string }
+  created_at: string
+  updated_at: string
 }
 
 export type Category = {
@@ -254,6 +258,15 @@ export type PhotoPage = {
   page: number
   per_page: number
   total: number
+}
+
+export type TrashPage = {
+  photos: Photo[]
+  total: number
+  page: number
+  per_page: number
+  // Сколько дней фотография лежит в корзине до окончательной уборки.
+  keep_days: number
 }
 
 export type ConfirmResult = { photo_id: string; status: string; error?: string; code?: string }
@@ -306,6 +319,14 @@ export const api = {
     }),
   // Страницами: альбом может содержать тысячи фото, выдача целиком
   // вешала кабинет.
+  // Корзина: удаление обратимо, пока ночная уборка не вынесет фото по сроку.
+  listTrash: (shopId: string, page = 1) =>
+    request<TrashPage>('GET', `/shops/${shopId}/trash?page=${page}`),
+  restorePhoto: (shopId: string, photoId: string) =>
+    request<Photo>('POST', `/shops/${shopId}/trash/${photoId}/restore`),
+  purgePhoto: (shopId: string, photoId: string) =>
+    request<void>('DELETE', `/shops/${shopId}/trash/${photoId}`),
+  emptyTrash: (shopId: string) => request<void>('DELETE', `/shops/${shopId}/trash`),
   listPhotos: (shopId: string, albumId: string, page = 1) =>
     request<PhotoPage>('GET', `/shops/${shopId}/albums/${albumId}/photos?page=${page}`),
 

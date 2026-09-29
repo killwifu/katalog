@@ -324,5 +324,5 @@ func (a *API) handleSetAlbumCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, toAlbumResponse(album))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(album))
 }

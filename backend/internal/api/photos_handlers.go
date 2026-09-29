@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"katalog/backend/internal/db"
-	"katalog/backend/internal/imagingmeta"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
 )
@@ -426,7 +425,10 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	n, err := a.Q.DeletePhoto(r.Context(), db.DeletePhotoParams{
+	// Удаление обратимо: фотография уезжает в «Удаленное». Объекты в S3
+	// остаются на месте, поэтому место в квоте не возвращаем — вернёт его
+	// окончательная уборка, своя или ночная по сроку хранения.
+	n, err := a.Q.SoftDeletePhoto(r.Context(), db.SoftDeletePhotoParams{
 		ID:     photo.ID,
 		ShopID: photo.ShopID,
 	})
@@ -438,7 +440,6 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "photo not found")
 		return
 	}
-	// Возврат квоты и снятие счётчика альбома.
 	if photo.Status == db.PhotoStatusReady {
 		if err := a.Q.AddAlbumPhotoCount(r.Context(), db.AddAlbumPhotoCountParams{
 			ID:         photo.AlbumID,
@@ -446,15 +447,6 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 		}); err != nil {
 			a.Log.Error("delete: decrement album count failed", "error", err)
 		}
-	}
-	if err := a.Q.AddShopStorageUsed(r.Context(), db.AddShopStorageUsedParams{
-		ID:          photo.ShopID,
-		StorageUsed: -(photo.OrigSize + photo.DrvSize),
-	}); err != nil {
-		a.Log.Error("delete: release storage failed", "error", err)
-	}
-	if err := a.Store.RemovePhoto(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes()); err != nil {
-		a.Log.Error("delete: remove s3 objects failed", "error", err)
 	}
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)

@@ -401,6 +401,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /api/v1/shops/{shopID}/trash:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: listTrash
+      description: >
+        Корзина магазина. Фотография попадает сюда при удалении и лежит
+        keep_days дней, всё это время занимая место в хранилище: объекты
+        в S3 остаются до окончательной уборки.
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [photos, total, page, per_page, keep_days]
+                properties:
+                  photos:
+                    type: array
+                    items: { $ref: "#/components/schemas/Photo" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  per_page: { type: integer }
+                  keep_days:
+                    type: integer
+                    description: срок хранения до окончательной уборки, дней
+    delete:
+      operationId: emptyTrash
+      description: >
+        Очищает корзину целиком. Необратимо: объекты уходят из S3,
+        освободившееся место возвращается в квоту магазина.
+      responses:
+        "204":
+          description: Очищено
+
+  /api/v1/shops/{shopID}/trash/{photoID}:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: purgePhoto
+      description: Удаляет одну фотографию из корзины навсегда.
+      responses:
+        "204":
+          description: Удалено
+
+  /api/v1/shops/{shopID}/trash/{photoID}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - in: path
+        name: photoID
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: restorePhoto
+      description: >
+        Возвращает фотографию из корзины в её альбом и на витрину.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Photo" }
+
   /api/v1/shops/{shopID}/albums:
     parameters:
       - $ref: "#/components/parameters/ShopID"
@@ -1798,6 +1870,17 @@ components:
           description: Условия покупки; на витрине показывается над фотографиями
         category_id: { type: string, format: uuid, nullable: true }
         photo_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        cover_urls:
+          type: object
+          description: >
+            Адреса деривативов обложки (small/medium/large). Отдаются только
+            когда у альбома есть обложка: базовый префикс медиа знает сервер.
+          properties:
+            small: { type: string }
+            medium: { type: string }
+            large: { type: string }
 
     ShopSettings:
       type: object

@@ -17,7 +17,7 @@ WHERE id = $1 AND shop_id = $2;
 -- начала, у кабинета её не было.
 -- name: ListPhotosByAlbum :many
 SELECT * FROM photos
-WHERE album_id = $1 AND shop_id = $2
+WHERE album_id = $1 AND shop_id = $2 AND deleted_at IS NULL
 -- id в сортировке — не украшение: при одинаковых sort_order и created_at
 -- порядок между запросами не определён, и фото на границе страниц может
 -- задвоиться или пропасть. У публичной выборки это уже учтено.
@@ -26,7 +26,7 @@ LIMIT $3 OFFSET $4;
 
 -- name: CountPhotosByAlbum :one
 SELECT count(*) FROM photos
-WHERE album_id = $1 AND shop_id = $2;
+WHERE album_id = $1 AND shop_id = $2 AND deleted_at IS NULL;
 
 -- Переход uploading -> processing после подтверждения загрузки в S3.
 -- Здесь же фотография занимает место в альбоме: sort_order приходит
@@ -107,3 +107,49 @@ SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint);
 -- с возвратом байтов в квоту, иначе повторная обработка учтёт их дважды.
 -- name: ResetPhotoDerivativeSize :exec
 UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1;
+
+-- --- Корзина ---------------------------------------------------------------
+-- Удаление в два шага: сначала пометка, потом ночная уборка по сроку. Место
+-- в хранилище при пометке не возвращаем — объекты в S3 никуда не делись.
+
+-- name: SoftDeletePhoto :execrows
+UPDATE photos
+SET deleted_at = now(), updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL;
+
+-- name: ListDeletedPhotos :many
+SELECT * FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+ORDER BY deleted_at DESC, id
+LIMIT $2 OFFSET $3;
+
+-- name: CountDeletedPhotos :one
+SELECT count(*) FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL;
+
+-- Возврат из корзины. Альбом мог уехать вместе с удалением самого альбома —
+-- тогда каскад унёс и строку фотографии, и возвращать нечего.
+-- name: RestorePhoto :one
+UPDATE photos
+SET deleted_at = NULL, updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+RETURNING *;
+
+-- Окончательное удаление одной фотографии из корзины.
+-- name: PurgePhoto :one
+DELETE FROM photos
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+RETURNING id, album_id, status, (orig_size + drv_size)::bigint AS bytes;
+
+-- Очистить корзину целиком: id и байты нужны для уборки S3 и возврата квоты.
+-- name: PurgeShopTrash :many
+DELETE FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+RETURNING id, (orig_size + drv_size)::bigint AS bytes;
+
+-- Ночная уборка: всё, что пролежало в корзине дольше срока хранения.
+-- name: PurgeExpiredTrash :many
+DELETE FROM photos
+WHERE deleted_at IS NOT NULL
+  AND deleted_at < now() - make_interval(days => $1::int)
+RETURNING id, shop_id, (orig_size + drv_size)::bigint AS bytes;

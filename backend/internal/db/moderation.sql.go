@@ -16,7 +16,7 @@ const adminBlockPhoto = `-- name: AdminBlockPhoto :one
 UPDATE photos
 SET status = 'blocked', updated_at = now()
 WHERE id = $1 AND status != 'blocked'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
 // Блокировка фото модератором: исчезает с витрины (status фильтруется
@@ -42,6 +42,7 @@ func (q *Queries) AdminBlockPhoto(ctx context.Context, id uuid.UUID) (Photo, err
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -201,7 +202,7 @@ const adminUnblockPhoto = `-- name: AdminUnblockPhoto :one
 UPDATE photos
 SET status = 'processing', updated_at = now()
 WHERE id = $1 AND status = 'blocked'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
 // Снятие блокировки: жалоба бывает необоснованной, а обратного действия
@@ -227,6 +228,7 @@ func (q *Queries) AdminUnblockPhoto(ctx context.Context, id uuid.UUID) (Photo, e
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -486,7 +488,7 @@ func (q *Queries) ListComplaints(ctx context.Context, status NullComplaintStatus
 }
 
 const listFlaggedPhotos = `-- name: ListFlaggedPhotos :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason, s.slug AS shop_slug
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason, p.deleted_at, s.slug AS shop_slug
 FROM photos p
 JOIN shops s ON s.id = p.shop_id
 WHERE p.flagged
@@ -512,6 +514,7 @@ type ListFlaggedPhotosRow struct {
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
 	FailReason string             `json:"fail_reason"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 	ShopSlug   string             `json:"shop_slug"`
 }
 
@@ -542,6 +545,7 @@ func (q *Queries) ListFlaggedPhotos(ctx context.Context) ([]ListFlaggedPhotosRow
 			&i.Flagged,
 			&i.DrvSize,
 			&i.FailReason,
+			&i.DeletedAt,
 			&i.ShopSlug,
 		); err != nil {
 			return nil, err

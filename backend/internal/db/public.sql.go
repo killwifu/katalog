@@ -14,7 +14,7 @@ import (
 
 const countPublicPhotos = `-- name: CountPublicPhotos :one
 SELECT count(*) FROM photos
-WHERE album_id = $1 AND status = 'ready'
+WHERE album_id = $1 AND status = 'ready' AND deleted_at IS NULL
 `
 
 func (q *Queries) CountPublicPhotos(ctx context.Context, albumID uuid.UUID) (int64, error) {
@@ -144,7 +144,7 @@ func (q *Queries) ListActiveShopSlugs(ctx context.Context) ([]ListActiveShopSlug
 const listFirstReadyPhotos = `-- name: ListFirstReadyPhotos :many
 SELECT DISTINCT ON (album_id) album_id, id
 FROM photos
-WHERE shop_id = $1 AND status = 'ready'
+WHERE shop_id = $1 AND status = 'ready' AND deleted_at IS NULL
 ORDER BY album_id, sort_order, created_at
 `
 
@@ -180,7 +180,7 @@ const listPublicAlbums = `-- name: ListPublicAlbums :many
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
        c.id AS cover_id
 FROM albums a
-LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
   AND (a.photo_count > 0 OR EXISTS (
@@ -241,7 +241,7 @@ const listPublicChildAlbums = `-- name: ListPublicChildAlbums :many
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
        c.id AS cover_id
 FROM albums a
-LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.parent_id = $1 AND a.status = 'published'
   AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
   -- Глубже двух уровней альбомов не бывает, поэтому здесь достаточно
@@ -291,8 +291,8 @@ func (q *Queries) ListPublicChildAlbums(ctx context.Context, parentID uuid.NullU
 }
 
 const listPublicPhotos = `-- name: ListPublicPhotos :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
-WHERE album_id = $1 AND status = 'ready'
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
+WHERE album_id = $1 AND status = 'ready' AND deleted_at IS NULL
 ORDER BY sort_order, created_at, id
 LIMIT $2 OFFSET $3
 `
@@ -330,6 +330,7 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 			&i.Flagged,
 			&i.DrvSize,
 			&i.FailReason,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -342,12 +343,13 @@ func (q *Queries) ListPublicPhotos(ctx context.Context, arg ListPublicPhotosPara
 }
 
 const searchPhotosFTS = `-- name: SearchPhotosFTS :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason, p.deleted_at,
        ts_rank(p.caption_tsv, websearch_to_tsquery('russian', $2)) AS rank
 FROM photos p
 JOIN albums a ON a.id = p.album_id
 WHERE p.shop_id = $1
   AND p.status = 'ready'
+  AND p.deleted_at IS NULL
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
@@ -380,6 +382,7 @@ type SearchPhotosFTSRow struct {
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
 	FailReason string             `json:"fail_reason"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 	Rank       float32            `json:"rank"`
 }
 
@@ -411,6 +414,7 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 			&i.Flagged,
 			&i.DrvSize,
 			&i.FailReason,
+			&i.DeletedAt,
 			&i.Rank,
 		); err != nil {
 			return nil, err
@@ -424,12 +428,13 @@ func (q *Queries) SearchPhotosFTS(ctx context.Context, arg SearchPhotosFTSParams
 }
 
 const searchPhotosTrgm = `-- name: SearchPhotosTrgm :many
-SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason,
+SELECT p.id, p.album_id, p.shop_id, p.caption, p.caption_tsv, p.status, p.orig_size, p.width, p.height, p.phash, p.source, p.sort_order, p.created_at, p.updated_at, p.flagged, p.drv_size, p.fail_reason, p.deleted_at,
        word_similarity($2, p.caption) AS sim
 FROM photos p
 JOIN albums a ON a.id = p.album_id
 WHERE p.shop_id = $1
   AND p.status = 'ready'
+  AND p.deleted_at IS NULL
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
@@ -462,6 +467,7 @@ type SearchPhotosTrgmRow struct {
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
 	FailReason string             `json:"fail_reason"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 	Sim        float32            `json:"sim"`
 }
 
@@ -494,6 +500,7 @@ func (q *Queries) SearchPhotosTrgm(ctx context.Context, arg SearchPhotosTrgmPara
 			&i.Flagged,
 			&i.DrvSize,
 			&i.FailReason,
+			&i.DeletedAt,
 			&i.Sim,
 		); err != nil {
 			return nil, err

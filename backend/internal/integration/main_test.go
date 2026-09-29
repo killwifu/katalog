@@ -206,6 +206,7 @@ func run(m *testing.M) int {
 		TrafficAlertMultiplier: 5,
 		TrafficAlertMinViews:   100,
 		// Сроки хранения аналитики — как в проде по умолчанию.
+		TrashKeepDays:           30,
 		RetentionLeadClicksDays: 90,
 		RetentionDailyStatsDays: 400,
 		Billing: config.BillingConfig{

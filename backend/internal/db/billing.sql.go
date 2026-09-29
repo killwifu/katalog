@@ -29,7 +29,7 @@ func (q *Queries) CancelSubscription(ctx context.Context, shopID uuid.UUID) (int
 
 const countShopPhotos = `-- name: CountShopPhotos :one
 SELECT count(*) FROM photos
-WHERE shop_id = $1 AND status != 'failed'
+WHERE shop_id = $1 AND status != 'failed' AND deleted_at IS NULL
 `
 
 // Лимит фото тарифа: слот занимают все фото, кроме failed.

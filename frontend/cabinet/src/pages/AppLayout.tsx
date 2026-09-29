@@ -16,15 +16,18 @@ export function useShop(): Shop {
 
 // Пункты меню одним списком: боковое меню на десктопе и выдвижное на телефоне
 // строятся из него же, чтобы не разъезжались при правках.
+// Порядок и названия — по макету 09 · v2: «Подписка» вместо «Тарифа»
+// и «Аналитика» вместо «Статистики», аналитика ушла в конец списка.
 const NAV = [
   { to: '/', label: 'Обзор' },
   { to: '/albums', label: 'Альбомы' },
   { to: '/categories', label: 'Категории' },
   { to: '/tabs', label: 'Вкладки' },
-  { to: '/stats', label: 'Статистика' },
   { to: '/contacts', label: 'Контакты' },
   { to: '/settings', label: 'Настройки' },
-  { to: '/billing', label: 'Тариф' },
+  { to: '/billing', label: 'Подписка' },
+  { to: '/stats', label: 'Аналитика' },
+  { to: '/trash', label: 'Удаленное' },
 ] as const
 
 export function AppLayout() {
@@ -91,16 +94,16 @@ export function AppLayout() {
         <aside className="app__aside side">
           <div className="side__logo">{shop.name}</div>
           {nav}
+          {/* Макет 09 · v2: в меню осталось «сколько занято», а тариф и место
+              в гигабайтах переехали в «Обзор» — там для них есть строка. */}
           <div className="side__usage">
-            <p>
-              {photos === undefined ? '…' : photos.toLocaleString('ru-RU')} из{' '}
-              {maxPhotos.toLocaleString('ru-RU')} фото
-            </p>
+            <p>Использовано</p>
             <div className="prog mt-2" aria-hidden="true">
               <span style={{ width: `${usedPct}%` }} />
             </div>
-            <p>
-              {usedMB} из {maxMB} МБ · тариф «{PLAN_NAMES[shop.plan]}»
+            <p title={`${usedMB} из ${maxMB} МБ · тариф «${PLAN_NAMES[shop.plan]}»`}>
+              {photos === undefined ? '…' : photos.toLocaleString('ru-RU')} из{' '}
+              {maxPhotos.toLocaleString('ru-RU')} фото
             </p>
           </div>
           <button onClick={() => void logout()} className="btn btn--quiet mt-4">

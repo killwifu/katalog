@@ -58,6 +58,9 @@ type Config struct {
 	TrafficAlertMinViews int64
 	// RetentionLeadClicksDays — сколько хранить сырые переходы в мессенджеры
 	// (в них visitor_hash). Агрегат за день остаётся в daily_stats.
+	// TrashKeepDays — сколько «Удаленное» держит фотографию до окончательной
+	// уборки. Всё это время она занимает место в хранилище.
+	TrashKeepDays           int64
 	RetentionLeadClicksDays int64
 	// RetentionDailyStatsDays — сколько хранить дневные агрегаты. Больше
 	// года кабинет всё равно не показывает (максимум days=365).
@@ -129,6 +132,7 @@ func Load() Config {
 		StopWords:               splitList(os.Getenv("STOP_WORDS")),
 		TrafficAlertMultiplier:  getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),
 		TrafficAlertMinViews:    getenvInt64("TRAFFIC_ALERT_MIN_VIEWS", 1000),
+		TrashKeepDays:           getenvInt64("TRASH_KEEP_DAYS", 30),
 		RetentionLeadClicksDays: getenvInt64("RETENTION_LEAD_CLICKS_DAYS", 90),
 		RetentionDailyStatsDays: getenvInt64("RETENTION_DAILY_STATS_DAYS", 400),
 		Mail: MailConfig{

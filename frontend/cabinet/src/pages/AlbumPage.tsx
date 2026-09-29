@@ -2,13 +2,16 @@ import { Dashboard } from '@uppy/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import { api, errorText, type AlbumStatus, type Photo } from '../api'
+import { api, errorText, type Photo } from '../api'
 import { createPhotoUppy, type UploadOutcome } from '../lib/uppy'
-import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
+import { EditAlbumDialog } from './EditAlbumDialog'
 import '@uppy/core/dist/style.min.css'
 import '@uppy/dashboard/dist/style.min.css'
 
+// Страница альбома по макету 13 · Desktop · v2. Шапка отвечает «что это за
+// альбом и что с ним делать», ниже сразу фотографии: правка названия и
+// описания уехала в окно (макет 12), чтобы форма не отжимала сетку вниз.
 export function AlbumPage() {
   const shop = useShop()
   const { albumId } = useParams({ from: '/app/albums/$albumId' })
@@ -45,6 +48,19 @@ export function AlbumPage() {
   )
   useEffect(() => () => uppy.destroy(), [uppy])
 
+  const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
+  const album = albums.data?.find((a) => a.id === albumId)
+  const categories = useQuery({
+    queryKey: ['categories', shop.id],
+    queryFn: () => api.listCategories(shop.id),
+  })
+  const stats = useQuery({ queryKey: ['stats', shop.id, 14], queryFn: () => api.getStats(shop.id, 14) })
+
+  const [editing, setEditing] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [copied, setCopied] = useState(false)
+
   const totalPages = photos.data
     ? Math.max(1, Math.ceil(photos.data.total / photos.data.per_page))
     : 1
@@ -60,97 +76,83 @@ export function AlbumPage() {
     },
   })
 
-  const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
-  const album = albums.data?.find((a) => a.id === albumId)
-  const categories = useQuery({
-    queryKey: ['categories', shop.id],
-    queryFn: () => api.listCategories(shop.id),
-  })
-
-  // Название и описание: описание показывается покупателю над фотографиями
-  // и это единственное место, где продавец объясняет условия покупки.
-  const [title, setTitle] = useState<string | null>(null)
-  const [description, setDescription] = useState<string | null>(null)
-  const titleValue = title ?? album?.title ?? ''
-  const descValue = description ?? album?.description ?? ''
-  const infoDirty = title !== null || description !== null
-  useUnsavedGuard(infoDirty)
-
-  const saveInfo = useMutation({
-    mutationFn: () =>
-      api.updateAlbum(shop.id, albumId, {
-        ...(title !== null ? { title: titleValue.trim() } : {}),
-        ...(description !== null ? { description: descValue } : {}),
-      }),
-    onSuccess: () => {
-      setTitle(null)
-      setDescription(null)
-      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
-    },
-  })
-
-  // Без этого категории оставались витриной без товара: создать их
-  // продавец мог, а положить туда альбом — нет.
-  const setCategory = useMutation({
-    mutationFn: (categoryId: string | null) => api.setAlbumCategory(shop.id, albumId, categoryId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
-    },
-  })
-
   const setCover = useMutation({
-    mutationFn: (photoId: string) =>
-      api.updateAlbum(shop.id, albumId, { cover_photo_id: photoId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
-    },
+    mutationFn: (photoId: string) => api.updateAlbum(shop.id, albumId, { cover_photo_id: photoId }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] }),
   })
 
-  const setStatus = useMutation({
-    mutationFn: (status: AlbumStatus) => api.setAlbumStatus(shop.id, albumId, status),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['albums', shop.id] })
-    },
-  })
+  const shown = photos.data?.photos ?? []
+  const allPicked = shown.length > 0 && shown.every((p) => picked.has(p.id))
+  const toggleAll = () => {
+    const next = new Set(picked)
+    for (const p of shown) {
+      if (allPicked) next.delete(p.id)
+      else next.add(p.id)
+    }
+    setPicked(next)
+  }
+  const removePicked = async () => {
+    for (const id of picked) await api.deletePhoto(id)
+    setPicked(new Set())
+    refreshQuota()
+  }
+
+  const albumUrl = `${location.origin}/${shop.slug}/a/${albumId}`
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(albumUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* буфер недоступен — ссылка остаётся видимой в адресе альбома */
+    }
+  }
+
+  const views = stats.data?.top_albums.find((a) => a.album_id === albumId)?.views
+  const watermark = shop.settings.watermark
+  const category = album?.category_id
+    ? categories.data?.find((c) => c.id === album.category_id)?.title
+    : undefined
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <Link to="/albums" className="text-sm text-brand hover:underline">
-            ← Альбомы
-          </Link>
-          <h1 className="text-h1 font-semibold">{album?.title ?? 'Альбом'}</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Три статуса: «по ссылке» не показывает альбом в списках витрины,
-              но прямая ссылка работает — её можно разослать до публикации. */}
-          <select
-            value={album?.status ?? 'published'}
-            onChange={(e) => setStatus.mutate(e.target.value as AlbumStatus)}
-            disabled={!album || setStatus.isPending}
-            className="inp !w-auto"
-            aria-label="Видимость альбома"
-          >
-            <option value="published">Опубликован</option>
-            <option value="unlisted">По ссылке</option>
-            <option value="draft">Черновик</option>
-          </select>
-          {/* Селект сам вернётся к прежнему значению, но молча: без текста
-              продавец жмёт «Опубликован» ещё раз и не понимает, почему
-              альбом остаётся черновиком. */}
-          {setStatus.isError && (
-            <p className="hint text-danger">{errorText(setStatus.error)}</p>
-          )}
-          <Link
-            to="/albums/$albumId/captions"
-            params={{ albumId }}
-            className="btn btn--primary"
-          >
-            Проставить подписи
-          </Link>
-        </div>
+      <nav className="alpage__crumbs">
+        <Link to="/albums">‹ Альбомы</Link>
+        <span>/</span>
+        <span>{album?.title ?? 'Альбом'}</span>
+      </nav>
+
+      <div className="alpage__top">
+        <h1>{album?.title ?? 'Альбом'}</h1>
+        {album && <span className={STATUS[album.status].cls}>{STATUS[album.status].label}</span>}
+        {album?.blocked_by_moderator && <span className="badge badge--warn">Скрыт модератором</span>}
+        <span className="spacer" />
+        <button className="btn btn--ghost btn--sm" onClick={() => void share()}>
+          {copied ? 'Скопировано' : 'Поделиться'}
+        </button>
+        <button className="btn btn--ghost btn--sm" onClick={() => setEditing(true)} disabled={!album}>
+          Редактировать
+        </button>
+        <button className="btn btn--primary btn--sm" onClick={() => setUploading((v) => !v)}>
+          Загрузить фото
+        </button>
+        <Link to="/albums/$albumId/captions" params={{ albumId }} className="btn btn--ghost btn--sm">
+          Подписи
+        </Link>
       </div>
+
+      <p className="alpage__meta">
+        {[
+          category ?? 'Без категории',
+          `${album?.photo_count ?? 0} фото`,
+          album?.created_at ? `создан ${dateRu(album.created_at)}` : null,
+          album?.updated_at ? `обновлён ${dateRu(album.updated_at)}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+
+      {album?.description && <p className="alpage__desc">{album.description}</p>}
 
       {album?.blocked_by_moderator && (
         <div className="alert alert--warn">
@@ -162,63 +164,23 @@ export function AlbumPage() {
         </div>
       )}
 
-      <section className="box">
-        <label className="field">
-          <span>Название альбома</span>
-          <input
-            className="inp"
-            value={titleValue}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={200}
-          />
-        </label>
-        <label className="field !mb-2">
-          <span>Описание — покажется покупателю над фотографиями</span>
-          <textarea
-            className="inp"
-            rows={3}
-            value={descValue}
-            onChange={(e) => setDescription(e.target.value)}
-            maxLength={2000}
-            placeholder="Размеры, цена, условия отправки"
-          />
-          <p className="hint">Переносы строк сохранятся.</p>
-        </label>
-        <label className="field">
-          <span>Категория — по ней покупатель найдёт альбом в меню витрины</span>
-          <select
-            className="inp"
-            value={album?.category_id ?? ''}
-            onChange={(e) => setCategory.mutate(e.target.value || null)}
-            disabled={!album || setCategory.isPending}
-          >
-            <option value="">Без категории</option>
-            {(categories.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-          {categories.data?.length === 0 && (
-            <p className="hint">
-              Категорий пока нет — <Link to="/categories" className="underline">создайте первую</Link>.
-            </p>
+      <div className="alstats">
+        <div className="alstat">
+          <span>Просмотры за 7 дней</span>
+          {views === undefined ? (
+            <em>нет данных за период</em>
+          ) : (
+            <b>{views.toLocaleString('ru-RU')}</b>
           )}
-          {setCategory.isError && (
-            <p className="hint text-danger">{errorText(setCategory.error)}</p>
-          )}
-        </label>
-        {infoDirty && (
-          <button
-            className="btn btn--primary btn--sm"
-            onClick={() => saveInfo.mutate()}
-            disabled={saveInfo.isPending || !titleValue.trim()}
-          >
-            {saveInfo.isPending ? 'Сохраняю…' : 'Сохранить'}
-          </button>
-        )}
-        {saveInfo.isError && <p className="hint text-danger">{errorText(saveInfo.error)}</p>}
-      </section>
+        </div>
+        <div className="alstat">
+          <span>Водяной знак</span>
+          <b style={{ fontSize: 22 }}>{watermark?.enabled ? 'Включён' : 'Выключен'}</b>
+          <Link to="/settings" className="ml-2 text-sm font-medium text-brand">
+            Настроить
+          </Link>
+        </div>
+      </div>
 
       {outcome && (
         <div className="alert alert--warn">
@@ -238,8 +200,27 @@ export function AlbumPage() {
         </div>
       )}
 
-      <div className="mb-6">
-        <Dashboard uppy={uppy} height={260} proudlyDisplayPoweredByUppy={false} note="JPEG, PNG, WebP или HEIC, до 50 МБ" />
+      {uploading && (
+        <div className="mb-6">
+          <Dashboard uppy={uppy} height={260} proudlyDisplayPoweredByUppy={false} note="JPEG, PNG, WebP или HEIC, до 50 МБ" />
+        </div>
+      )}
+
+      <div className="alhead">
+        <label>
+          <input type="checkbox" checked={allPicked} onChange={toggleAll} disabled={shown.length === 0} />
+          Выбрать все
+        </label>
+        {picked.size > 0 && (
+          <>
+            <span>Выбрано: {picked.size}</span>
+            <button className="btn btn--danger btn--sm" onClick={() => void removePicked()}>
+              Удалить выбранные
+            </button>
+          </>
+        )}
+        <span className="spacer" />
+        {photos.data && <span>{photos.data.total} фото</span>}
       </div>
 
       {photos.isPending && <p className="text-ink-2">Загрузка…</p>}
@@ -247,16 +228,25 @@ export function AlbumPage() {
       {remove.isError && <p className="text-danger">{errorText(remove.error)}</p>}
       {setCover.isError && <p className="text-danger">{errorText(setCover.error)}</p>}
 
-      {photos.data && photos.data.total === 0 && (
-        <p className="text-ink-2">В альбоме пока нет фото — загрузите пачку выше.</p>
-      )}
-
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-        {photos.data?.photos.map((p) => (
+      <div className="algallery">
+        {/* Плитка загрузки — первой в сетке, как в макете. */}
+        <button className="uptile" onClick={() => setUploading(true)}>
+          <i aria-hidden="true">＋</i>
+          <span>Загрузить фото</span>
+          <small>или перетащите сюда</small>
+        </button>
+        {shown.map((p) => (
           <PhotoTile
             key={p.id}
             photo={p}
             isCover={album?.cover_photo_id === p.id}
+            picked={picked.has(p.id)}
+            onPick={() => {
+              const next = new Set(picked)
+              if (next.has(p.id)) next.delete(p.id)
+              else next.add(p.id)
+              setPicked(next)
+            }}
             onSetCover={() => setCover.mutate(p.id)}
             onDelete={() => remove.mutate(p.id)}
           />
@@ -286,20 +276,44 @@ export function AlbumPage() {
           </button>
         </nav>
       )}
+
+      {editing && album && (
+        <EditAlbumDialog
+          shopId={shop.id}
+          album={album}
+          categories={categories.data ?? []}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </div>
   )
+}
+
+const STATUS = {
+  published: { label: 'Опубликован', cls: 'badge badge--live' },
+  unlisted: { label: 'По ссылке', cls: 'badge badge--link' },
+  draft: { label: 'Черновик', cls: 'badge badge--draft' },
+} as const
+
+function dateRu(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
 }
 
 function PhotoTile({
   photo,
   onDelete,
   onSetCover,
+  onPick,
   isCover,
+  picked,
 }: {
   photo: Photo
   onDelete: () => void
   onSetCover: () => void
+  onPick: () => void
   isCover: boolean
+  picked: boolean
 }) {
   const [armed, setArmed] = useState(false)
   useEffect(() => {
@@ -310,6 +324,13 @@ function PhotoTile({
 
   return (
     <figure className="group relative overflow-hidden rounded-lg border border-line bg-white">
+      <input
+        type="checkbox"
+        className="alcard__pick"
+        checked={picked}
+        onChange={onPick}
+        aria-label="Выбрать фото"
+      />
       <div className="aspect-square bg-surface-alt">
         {photo.status === 'ready' && photo.urls ? (
           <img
@@ -331,16 +352,19 @@ function PhotoTile({
       )}
       {/* Обложка — то, что покупатель видит в сетке альбомов. Без выбора
           ею всегда оказывалось первое загруженное фото. */}
-      {photo.status === 'ready' && (
-        <button
-          onClick={onSetCover}
-          title={isCover ? 'Это обложка альбома' : 'Сделать обложкой'}
-          disabled={isCover}
-          className="photo-tile__act absolute top-1 left-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block disabled:opacity-100"
-        >
-          {isCover ? '★' : '☆'}
-        </button>
-      )}
+      {photo.status === 'ready' &&
+        (isCover ? (
+          <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
+            Обложка
+          </span>
+        ) : (
+          <button
+            onClick={onSetCover}
+            className="photo-tile__act absolute bottom-1 left-1 hidden rounded bg-black/60 px-1.5 py-0.5 text-xs text-white group-hover:block"
+          >
+            Сделать обложкой
+          </button>
+        ))}
       {/* Два тапа, не один: на телефоне кнопка видна всегда (наводить нечем),
           а промах по ней стоил фотографии — восстановить её нельзя.
           Взвод сам спадает через три секунды, чтобы красный крест

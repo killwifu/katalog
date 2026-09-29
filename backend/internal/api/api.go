@@ -125,6 +125,13 @@ func (a *API) Router() http.Handler {
 						r.Delete("/{categoryID}", a.handleDeleteCategory)
 					})
 
+					r.Route("/trash", func(r chi.Router) {
+						r.Get("/", a.handleListTrash)
+						r.Delete("/", a.handleEmptyTrash)
+						r.Post("/{photoID}/restore", a.handleRestorePhoto)
+						r.Delete("/{photoID}", a.handlePurgePhoto)
+					})
+
 					r.Route("/albums", func(r chi.Router) {
 						r.Post("/", a.handleCreateAlbum)
 						r.Get("/", a.handleListAlbums)

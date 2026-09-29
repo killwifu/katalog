@@ -12,9 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDeletedPhotos = `-- name: CountDeletedPhotos :one
+SELECT count(*) FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+`
+
+func (q *Queries) CountDeletedPhotos(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countDeletedPhotos, shopID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPhotosByAlbum = `-- name: CountPhotosByAlbum :one
 SELECT count(*) FROM photos
-WHERE album_id = $1 AND shop_id = $2
+WHERE album_id = $1 AND shop_id = $2 AND deleted_at IS NULL
 `
 
 type CountPhotosByAlbumParams struct {
@@ -32,7 +44,7 @@ func (q *Queries) CountPhotosByAlbum(ctx context.Context, arg CountPhotosByAlbum
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photos (album_id, shop_id, orig_size, source, sort_order)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
 type CreatePhotoParams struct {
@@ -70,6 +82,7 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -164,7 +177,7 @@ func (q *Queries) FailStaleProcessing(ctx context.Context, dollar_1 int32) ([]uu
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
 WHERE id = $1
 `
 
@@ -189,12 +202,13 @@ func (q *Queries) GetPhoto(ctx context.Context, id uuid.UUID) (Photo, error) {
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getPhotoForShop = `-- name: GetPhotoForShop :one
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -225,6 +239,7 @@ func (q *Queries) GetPhotoForShop(ctx context.Context, arg GetPhotoForShopParams
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -262,9 +277,61 @@ func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([
 	return items, nil
 }
 
+const listDeletedPhotos = `-- name: ListDeletedPhotos :many
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+ORDER BY deleted_at DESC, id
+LIMIT $2 OFFSET $3
+`
+
+type ListDeletedPhotosParams struct {
+	ShopID uuid.UUID `json:"shop_id"`
+	Limit  int32     `json:"limit"`
+	Offset int32     `json:"offset"`
+}
+
+func (q *Queries) ListDeletedPhotos(ctx context.Context, arg ListDeletedPhotosParams) ([]Photo, error) {
+	rows, err := q.db.Query(ctx, listDeletedPhotos, arg.ShopID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Photo
+	for rows.Next() {
+		var i Photo
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlbumID,
+			&i.ShopID,
+			&i.Caption,
+			&i.CaptionTsv,
+			&i.Status,
+			&i.OrigSize,
+			&i.Width,
+			&i.Height,
+			&i.Phash,
+			&i.Source,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Flagged,
+			&i.DrvSize,
+			&i.FailReason,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPhotosByAlbum = `-- name: ListPhotosByAlbum :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason FROM photos
-WHERE album_id = $1 AND shop_id = $2
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
+WHERE album_id = $1 AND shop_id = $2 AND deleted_at IS NULL
 ORDER BY sort_order, created_at, id
 LIMIT $3 OFFSET $4
 `
@@ -314,6 +381,7 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 			&i.Flagged,
 			&i.DrvSize,
 			&i.FailReason,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -352,6 +420,103 @@ func (q *Queries) NextAlbumSortOrder(ctx context.Context, albumID uuid.UUID) (in
 	return column_1, err
 }
 
+const purgeExpiredTrash = `-- name: PurgeExpiredTrash :many
+DELETE FROM photos
+WHERE deleted_at IS NOT NULL
+  AND deleted_at < now() - make_interval(days => $1::int)
+RETURNING id, shop_id, (orig_size + drv_size)::bigint AS bytes
+`
+
+type PurgeExpiredTrashRow struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+	Bytes  int64     `json:"bytes"`
+}
+
+// Ночная уборка: всё, что пролежало в корзине дольше срока хранения.
+func (q *Queries) PurgeExpiredTrash(ctx context.Context, dollar_1 int32) ([]PurgeExpiredTrashRow, error) {
+	rows, err := q.db.Query(ctx, purgeExpiredTrash, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PurgeExpiredTrashRow
+	for rows.Next() {
+		var i PurgeExpiredTrashRow
+		if err := rows.Scan(&i.ID, &i.ShopID, &i.Bytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const purgePhoto = `-- name: PurgePhoto :one
+DELETE FROM photos
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+RETURNING id, album_id, status, (orig_size + drv_size)::bigint AS bytes
+`
+
+type PurgePhotoParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+type PurgePhotoRow struct {
+	ID      uuid.UUID   `json:"id"`
+	AlbumID uuid.UUID   `json:"album_id"`
+	Status  PhotoStatus `json:"status"`
+	Bytes   int64       `json:"bytes"`
+}
+
+// Окончательное удаление одной фотографии из корзины.
+func (q *Queries) PurgePhoto(ctx context.Context, arg PurgePhotoParams) (PurgePhotoRow, error) {
+	row := q.db.QueryRow(ctx, purgePhoto, arg.ID, arg.ShopID)
+	var i PurgePhotoRow
+	err := row.Scan(
+		&i.ID,
+		&i.AlbumID,
+		&i.Status,
+		&i.Bytes,
+	)
+	return i, err
+}
+
+const purgeShopTrash = `-- name: PurgeShopTrash :many
+DELETE FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+RETURNING id, (orig_size + drv_size)::bigint AS bytes
+`
+
+type PurgeShopTrashRow struct {
+	ID    uuid.UUID `json:"id"`
+	Bytes int64     `json:"bytes"`
+}
+
+// Очистить корзину целиком: id и байты нужны для уборки S3 и возврата квоты.
+func (q *Queries) PurgeShopTrash(ctx context.Context, shopID uuid.UUID) ([]PurgeShopTrashRow, error) {
+	rows, err := q.db.Query(ctx, purgeShopTrash, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PurgeShopTrashRow
+	for rows.Next() {
+		var i PurgeShopTrashRow
+		if err := rows.Scan(&i.ID, &i.Bytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetPhotoDerivativeSize = `-- name: ResetPhotoDerivativeSize :exec
 UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1
 `
@@ -361,6 +526,46 @@ UPDATE photos SET drv_size = 0, updated_at = now() WHERE id = $1
 func (q *Queries) ResetPhotoDerivativeSize(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, resetPhotoDerivativeSize, id)
 	return err
+}
+
+const restorePhoto = `-- name: RestorePhoto :one
+UPDATE photos
+SET deleted_at = NULL, updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
+`
+
+type RestorePhotoParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Возврат из корзины. Альбом мог уехать вместе с удалением самого альбома —
+// тогда каскад унёс и строку фотографии, и возвращать нечего.
+func (q *Queries) RestorePhoto(ctx context.Context, arg RestorePhotoParams) (Photo, error) {
+	row := q.db.QueryRow(ctx, restorePhoto, arg.ID, arg.ShopID)
+	var i Photo
+	err := row.Scan(
+		&i.ID,
+		&i.AlbumID,
+		&i.ShopID,
+		&i.Caption,
+		&i.CaptionTsv,
+		&i.Status,
+		&i.OrigSize,
+		&i.Width,
+		&i.Height,
+		&i.Phash,
+		&i.Source,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Flagged,
+		&i.DrvSize,
+		&i.FailReason,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const setPhotoFailed = `-- name: SetPhotoFailed :exec
@@ -383,7 +588,7 @@ const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
 SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
 type SetPhotoProcessingParams struct {
@@ -418,6 +623,7 @@ func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessing
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -447,11 +653,34 @@ func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) er
 	return err
 }
 
+const softDeletePhoto = `-- name: SoftDeletePhoto :execrows
+
+UPDATE photos
+SET deleted_at = now(), updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
+`
+
+type SoftDeletePhotoParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// --- Корзина ---------------------------------------------------------------
+// Удаление в два шага: сначала пометка, потом ночная уборка по сроку. Место
+// в хранилище при пометке не возвращаем — объекты в S3 никуда не делись.
+func (q *Queries) SoftDeletePhoto(ctx context.Context, arg SoftDeletePhotoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeletePhoto, arg.ID, arg.ShopID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updatePhotoCaption = `-- name: UpdatePhotoCaption :one
 UPDATE photos
 SET caption = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason
+RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
 type UpdatePhotoCaptionParams struct {
@@ -481,6 +710,7 @@ func (q *Queries) UpdatePhotoCaption(ctx context.Context, arg UpdatePhotoCaption
 		&i.Flagged,
 		&i.DrvSize,
 		&i.FailReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }

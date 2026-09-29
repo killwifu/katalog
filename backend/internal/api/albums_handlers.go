@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,9 +25,15 @@ type albumResponse struct {
 	CategoryID         *string `json:"category_id"`
 	PhotoCount         int32   `json:"photo_count"`
 	BlockedByModerator bool    `json:"blocked_by_moderator"`
+	// CoverUrls — адреса деривативов обложки. Кабинет рисует сетку
+	// альбомов превью, а базовый префикс медиа знает только сервер
+	// (локально «/media», в проде домен CDN).
+	CoverUrls map[string]string `json:"cover_urls,omitempty"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
 }
 
-func toAlbumResponse(al db.Album) albumResponse {
+func (a *API) toAlbumResponse(al db.Album) albumResponse {
 	resp := albumResponse{
 		ID:          al.ID.String(),
 		Title:       al.Title,
@@ -38,6 +45,12 @@ func toAlbumResponse(al db.Album) albumResponse {
 		// понимать, почему альбома нет на витрине, но снять её не может.
 		BlockedByModerator: al.BlockedByModerator,
 	}
+	if al.CreatedAt.Valid {
+		resp.CreatedAt = al.CreatedAt.Time.Format(time.RFC3339)
+	}
+	if al.UpdatedAt.Valid {
+		resp.UpdatedAt = al.UpdatedAt.Time.Format(time.RFC3339)
+	}
 	if al.ParentID.Valid {
 		s := al.ParentID.UUID.String()
 		resp.ParentID = &s
@@ -45,6 +58,7 @@ func toAlbumResponse(al db.Album) albumResponse {
 	if al.CoverPhotoID.Valid {
 		s := al.CoverPhotoID.UUID.String()
 		resp.CoverPhotoID = &s
+		resp.CoverUrls = a.mediaURLs(al.ShopID, al.CoverPhotoID.UUID)
 	}
 	if al.CategoryID.Valid {
 		s := al.CategoryID.UUID.String()
@@ -128,18 +142,39 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusCreated, toAlbumResponse(album))
+	writeJSON(w, http.StatusCreated, a.toAlbumResponse(album))
 }
 
 func (a *API) handleListAlbums(w http.ResponseWriter, r *http.Request) {
-	albums, err := a.Q.ListAlbumsByShop(r.Context(), shopFromCtx(r).ID)
+	shopID := shopFromCtx(r).ID
+	albums, err := a.Q.ListAlbumsByShop(r.Context(), shopID)
 	if err != nil {
 		a.internalError(w, "list albums", err)
 		return
 	}
+	// Обложка по умолчанию — первое готовое фото альбома, ровно как на
+	// витрине (handleListPublicAlbums). Без этого сетка в кабинете стояла
+	// в заглушках у всех альбомов, где продавец не выбрал обложку руками,
+	// хотя покупатель на тех же альбомах видел картинки.
+	firstPhotos, err := a.Q.ListFirstReadyPhotos(r.Context(), shopID)
+	if err != nil {
+		a.internalError(w, "list first photos", err)
+		return
+	}
+	fallbackCover := make(map[uuid.UUID]uuid.UUID, len(firstPhotos))
+	for _, fp := range firstPhotos {
+		fallbackCover[fp.AlbumID] = fp.ID
+	}
+
 	out := make([]albumResponse, 0, len(albums))
 	for _, al := range albums {
-		out = append(out, toAlbumResponse(al))
+		resp := a.toAlbumResponse(al)
+		if resp.CoverUrls == nil {
+			if pid, ok := fallbackCover[al.ID]; ok {
+				resp.CoverUrls = a.mediaURLs(shopID, pid)
+			}
+		}
+		out = append(out, resp)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -149,7 +184,7 @@ func (a *API) handleGetAlbum(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, toAlbumResponse(album))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(album))
 }
 
 type updateAlbumRequest struct {
@@ -309,7 +344,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, toAlbumResponse(updated))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(updated))
 }
 
 func (a *API) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {

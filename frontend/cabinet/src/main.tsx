@@ -13,6 +13,7 @@ import { api } from './api'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { TabsPage } from './pages/TabsPage'
+import { TrashPage } from './pages/TrashPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ContactsPage } from './pages/ContactsPage'
@@ -176,6 +177,12 @@ const statsRoute = createRoute({
   ),
 })
 
+const trashRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/trash',
+  component: TrashPage,
+})
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     loginRoute,
@@ -183,7 +190,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, downgradeRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute]),
+    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, downgradeRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
   ]),
   basepath: '/app',
   defaultErrorComponent: ({ error }) => <ErrorPage error={error} />,

@@ -323,3 +323,187 @@ select.inp { appearance: auto; }
 .choice input { margin-top: 3px; }
 .choice b { display: block; font-weight: 500; margin-bottom: 3px; }
 .choice p { font-size: var(--text-sm); line-height: 1.55; color: var(--color-ink-2); }
+
+/* --- Обзор витрины (макет 09 · Desktop · v2) -------------------------------
+   Плоские строки с разделителями вместо карточек: у продавца это первый
+   экран каждый день, и рамка вокруг каждого блока только дробила его.
+   Левая колонка фиксированная (540px в макете), правая тянется.
+   -------------------------------------------------------------------------- */
+
+.ov { display: flex; flex-direction: column; gap: 28px; }
+.ov__row { display: grid; gap: 28px 40px; grid-template-columns: 1fr; }
+@media (min-width: 1100px) { .ov__row { grid-template-columns: 540px 1fr; } }
+.ov__sep { height: 1px; background: var(--color-line); }
+.ov__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.ov__head h2 { font-size: var(--text-h3); font-weight: 600; letter-spacing: -0.17px; }
+.ov__head a { font-size: var(--text-sm); font-weight: 500; color: var(--color-brand); }
+.ov__head a:hover { text-decoration: underline; }
+.ov__head .spacer { flex: 1; }
+
+/* Крупное число — единственный акцент в строке: продавец считывает его
+   с расстояния, не вчитываясь в подписи. */
+.bignum { font-size: 52px; font-weight: 600; line-height: 1.1; letter-spacing: -1.5px; color: var(--color-brand); }
+.bignum + span { font-size: 16px; color: var(--color-ink-3); margin-left: 8px; }
+
+.counts { display: flex; flex-wrap: wrap; gap: 20px; align-items: baseline; }
+.counts span { font-size: var(--text-sm); color: var(--color-ink-3); }
+.counts b { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; color: var(--color-brand); }
+
+.seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--color-surface-alt); border-radius: var(--radius-pill); }
+.seg button { padding: 4px 12px; min-height: 0; border: 1px solid transparent; border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: 500; color: var(--color-ink-3); background: none; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--color-surface); border-color: var(--color-line); color: var(--color-ink); }
+
+.ovcards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.ovcard { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--color-line); border-radius: 12px; color: inherit; min-width: 0; }
+.ovcard i { width: 44px; height: 44px; flex: none; background: var(--color-surface-alt); border: 1px solid var(--color-line); border-radius: 10px; }
+.ovcard b { display: block; font-size: var(--text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ovcard span { font-size: var(--text-xs); color: var(--color-ink-3); }
+
+/* --- Сетка альбомов (макет 10 · Desktop · v2) ------------------------------
+   Список превратился в сетку обложек: продавец узнаёт альбом по фотографии,
+   а не по названию — это и есть «логика Yupoo» из комментариев к макету.
+   -------------------------------------------------------------------------- */
+
+.albar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.albar__search { flex: 1 1 220px; min-width: 160px; }
+.albar__sel { flex: 0 0 auto; width: auto; }
+
+.alhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: var(--text-xs); color: var(--color-ink-3); }
+.alhead label { display: inline-flex; align-items: center; gap: 8px; color: var(--color-ink-2); cursor: pointer; }
+.alhead .spacer { flex: 1; }
+
+.algrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+.alcard { position: relative; border: 1px solid var(--color-line); border-radius: 12px; overflow: hidden; background: var(--color-surface); }
+.alcard:has(input:checked) { border-color: var(--color-brand); }
+.alcard__cover { position: relative; display: block; aspect-ratio: 1; background: var(--color-surface-alt); }
+.alcard__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Заглушка вместо обложки: у альбома без фотографий её просто нет. */
+.alcard__cover--empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-line-strong); font-size: 22px; }
+.alcard__count {
+  position: absolute; right: 8px; bottom: 8px;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  background: rgb(0 0 0 / 55%); color: #fff; font-size: 11px;
+}
+.alcard__pick { position: absolute; left: 8px; top: 8px; z-index: 1; width: 18px; height: 18px; }
+.alcard__edit {
+  position: absolute; right: 8px; top: 8px; z-index: 1;
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 8px; background: rgb(255 255 255 / 92%);
+  border: 1px solid var(--color-line); font-size: 12px; line-height: 1;
+}
+.alcard__body { padding: 10px; }
+.alcard__body b { display: block; font-size: var(--text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alcard__cat { display: block; font-size: var(--text-xs); color: var(--color-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 8px; }
+.alcard__foot { display: flex; align-items: center; gap: 6px; }
+.alcard__foot .spacer { flex: 1; }
+
+.alpager { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; font-size: var(--text-xs); color: var(--color-ink-3); }
+.alpager .spacer { flex: 1; }
+.alpager button { min-height: 32px; min-width: 32px; padding: 0 8px; border: 1px solid var(--color-line); border-radius: 8px; background: var(--color-surface); font-size: var(--text-xs); cursor: pointer; }
+.alpager button[aria-current="true"] { background: var(--color-brand); border-color: var(--color-brand); color: var(--color-on-brand); }
+.alpager button:disabled { opacity: .45; cursor: default; }
+
+/* --- Модальные окна (макет 11 · Создание альбома) --------------------------
+   Создание альбома живёт поверх сетки, а не на отдельной странице: продавец
+   не теряет из виду, что у него уже есть, и возвращается туда же.
+   -------------------------------------------------------------------------- */
+
+.modal__back { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(26 26 24 / 45%); overflow: auto; }
+.modal { width: 100%; max-width: 760px; background: var(--color-surface); border-radius: var(--radius-card); box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
+.modal__head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 20px 0; }
+.modal__head h2 { font-size: var(--text-h3); font-weight: 600; }
+.modal__head p { font-size: var(--text-sm); color: var(--color-ink-2); margin-top: 4px; }
+.modal__head .spacer { flex: 1; }
+.modal__x { background: none; border: 0; font-size: 18px; line-height: 1; color: var(--color-ink-3); cursor: pointer; padding: 4px 6px; }
+.modal__x:hover { color: var(--color-ink); }
+.modal__body { display: grid; gap: 20px; padding: 16px 20px 20px; grid-template-columns: 1fr; }
+@media (min-width: 860px) { .modal__body { grid-template-columns: 1fr 1fr; } }
+.modal__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); }
+.modal__foot .spacer { flex: 1; }
+.modal__foot .hint { margin: 0; }
+
+/* Счётчик символов рядом с подписью поля. */
+.field__row,
+.field > span.field__row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.field__row > span:first-child { font-size: var(--text-sm); color: var(--color-ink-2); }
+.field__row .spacer { flex: 1; }
+.field__cnt { font-size: var(--text-xs); color: var(--color-ink-3); }
+.req { color: var(--color-danger); }
+
+/* Зона перетаскивания: главный элемент окна, поэтому во всю высоту колонки. */
+.drop { display: grid; place-items: center; gap: 10px; min-height: 260px; padding: 24px; text-align: center; background: var(--color-surface-alt); border: 1px dashed var(--color-line-strong); border-radius: 12px; }
+.drop--over { border-color: var(--color-brand); background: var(--color-brand-soft); }
+.drop p { font-size: var(--text-sm); font-weight: 500; }
+.drop small { font-size: var(--text-xs); color: var(--color-ink-3); }
+
+/* Сегментированный выбор: доступ, единицы, пароль. */
+.segbar { display: flex; gap: 2px; padding: 3px; background: var(--color-surface-alt); border-radius: var(--radius-pill); }
+.segbar button { flex: 1; min-height: 32px; padding: 4px 10px; border: 1px solid transparent; border-radius: var(--radius-pill); background: none; font-size: var(--text-xs); font-weight: 500; color: var(--color-ink-3); cursor: pointer; }
+.segbar button[aria-pressed="true"] { background: var(--color-surface); border-color: var(--color-line); color: var(--color-ink); }
+.segbar button:disabled { opacity: .45; cursor: default; }
+
+/* --- Страница альбома (макет 13 · Desktop · v2) ----------------------------
+   Шапка отвечает на «что это за альбом и что с ним можно сделать», дальше
+   сразу сетка фотографий: правка названия и описания уехала в окно, чтобы
+   форма не отжимала фотографии вниз.
+   -------------------------------------------------------------------------- */
+
+.alpage__crumbs { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-ink-3); margin-bottom: 10px; }
+.alpage__crumbs a { color: var(--color-ink-2); }
+.alpage__crumbs a:hover { color: var(--color-ink); }
+.alpage__top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
+.alpage__top h1 { font-size: var(--text-h1); font-weight: 600; }
+.alpage__top .spacer { flex: 1; }
+.alpage__meta { font-size: var(--text-sm); color: var(--color-ink-3); margin-bottom: 10px; }
+.alpage__desc { font-size: var(--text-sm); line-height: 1.6; color: var(--color-ink-2); white-space: pre-wrap; max-width: 78ch; margin-bottom: 18px; }
+
+.alstats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-bottom: 20px; }
+.alstat { padding: 14px 16px; border: 1px solid var(--color-line); border-radius: 12px; }
+.alstat > span { display: block; font-size: var(--text-xs); color: var(--color-ink-2); margin-bottom: 6px; }
+.alstat b { font-size: 26px; font-weight: 600; letter-spacing: -0.3px; color: var(--color-brand); }
+.alstat em { font-style: normal; font-size: var(--text-xs); color: var(--color-ink-3); margin-left: 8px; }
+.alstat .up { color: #1B6B3A; font-weight: 600; }
+
+.algallery { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+/* Плитка «загрузить» стоит первой в сетке: место для новых фотографий там
+   же, где лежат старые, и не нужно искать кнопку глазами. */
+.uptile { display: grid; place-items: center; gap: 4px; aspect-ratio: 1; border: 1px dashed var(--color-line-strong); border-radius: 12px; background: var(--color-surface-alt); color: var(--color-ink-2); cursor: pointer; }
+.uptile:hover { border-color: var(--color-brand); color: var(--color-brand); }
+.uptile i { font-size: 22px; font-style: normal; line-height: 1; }
+.uptile span { font-size: var(--text-xs); font-weight: 500; }
+.uptile small { font-size: 11px; color: var(--color-ink-3); }
+
+/* --- Категории (макет 14 · Desktop) ----------------------------------------
+   Две панели: слева дерево, справа содержимое выбранной категории. Плоский
+   список не давал понять, что лежит внутри, — приходилось открывать альбомы
+   и смотреть у каждого категорию.
+   -------------------------------------------------------------------------- */
+
+.cats { display: grid; gap: 20px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1000px) { .cats { grid-template-columns: 330px 1fr; } }
+
+.cattree { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
+.cattree__sum { padding: 12px 14px; font-size: var(--text-xs); color: var(--color-ink-3); border-bottom: 1px solid var(--color-line); }
+.cattree__row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 14px; background: none; border: 0; text-align: left; font: inherit; cursor: pointer; color: var(--color-ink); }
+.cattree__row:hover { background: var(--color-surface-alt); }
+.cattree__row[aria-current="true"] { background: var(--color-brand-soft); color: var(--color-brand-ink); font-weight: 500; }
+.cattree__row--sub { padding-left: 34px; font-size: var(--text-sm); }
+.cattree__row .spacer { flex: 1; }
+.cattree__row .cnt { font-size: var(--text-xs); color: var(--color-ink-3); }
+.cattree__add { display: block; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--color-line); background: none; font: inherit; font-size: var(--text-sm); color: var(--color-brand); text-align: left; cursor: pointer; }
+.cattree__add:hover { background: var(--color-surface-alt); }
+.cattree__none { border-top: 1px solid var(--color-line); }
+
+.catpane { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); padding: 18px; min-height: 320px; }
+.catpane__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 4px; }
+.catpane__head h2 { font-size: var(--text-h1); font-weight: 600; }
+.catpane__head .spacer { flex: 1; }
+.catpane__meta { font-size: var(--text-sm); color: var(--color-ink-3); margin-bottom: 14px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.chips button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 14px; border: 1px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-surface); font-size: var(--text-xs); cursor: pointer; }
+.chips button[aria-pressed="true"] { background: var(--color-ink); border-color: var(--color-ink); color: #fff; }
+.chips button .cnt { color: var(--color-ink-3); }
+.chips button[aria-pressed="true"] .cnt { color: rgb(255 255 255 / 70%); }

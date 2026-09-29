@@ -58,7 +58,7 @@ WHERE id = $1;
 -- Лимит фото тарифа: слот занимают все фото, кроме failed.
 -- name: CountShopPhotos :one
 SELECT count(*) FROM photos
-WHERE shop_id = $1 AND status != 'failed';
+WHERE shop_id = $1 AND status != 'failed' AND deleted_at IS NULL;
 
 -- Жизненный цикл: оплата истекла -> grace (загрузка заблокирована).
 -- name: ShopsEnterGrace :many

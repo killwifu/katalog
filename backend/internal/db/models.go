@@ -642,6 +642,7 @@ type Photo struct {
 	Flagged    bool               `json:"flagged"`
 	DrvSize    int64              `json:"drv_size"`
 	FailReason string             `json:"fail_reason"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type ReleasedSlug struct {

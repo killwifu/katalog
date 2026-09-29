@@ -9,7 +9,7 @@
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
        c.id AS cover_id
 FROM albums a
-LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
 -- Пустой альбом покупателю показывать незачем: тап по нему упирается
@@ -28,7 +28,7 @@ LIMIT 1000;
 -- name: ListFirstReadyPhotos :many
 SELECT DISTINCT ON (album_id) album_id, id
 FROM photos
-WHERE shop_id = $1 AND status = 'ready'
+WHERE shop_id = $1 AND status = 'ready' AND deleted_at IS NULL
 ORDER BY album_id, sort_order, created_at;
 
 -- name: GetPublicAlbum :one
@@ -38,13 +38,13 @@ WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
 
 -- name: ListPublicPhotos :many
 SELECT * FROM photos
-WHERE album_id = $1 AND status = 'ready'
+WHERE album_id = $1 AND status = 'ready' AND deleted_at IS NULL
 ORDER BY sort_order, created_at, id
 LIMIT $2 OFFSET $3;
 
 -- name: CountPublicPhotos :one
 SELECT count(*) FROM photos
-WHERE album_id = $1 AND status = 'ready';
+WHERE album_id = $1 AND status = 'ready' AND deleted_at IS NULL;
 
 -- Поиск по подписям: FTS с русской конфигурацией (основной путь).
 -- name: SearchPhotosFTS :many
@@ -54,6 +54,7 @@ FROM photos p
 JOIN albums a ON a.id = p.album_id
 WHERE p.shop_id = $1
   AND p.status = 'ready'
+  AND p.deleted_at IS NULL
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
@@ -70,6 +71,7 @@ FROM photos p
 JOIN albums a ON a.id = p.album_id
 WHERE p.shop_id = $1
   AND p.status = 'ready'
+  AND p.deleted_at IS NULL
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
@@ -99,7 +101,7 @@ LIMIT 50000;
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
        c.id AS cover_id
 FROM albums a
-LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready'
+LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.parent_id = $1 AND a.status = 'published'
   AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
   -- Глубже двух уровней альбомов не бывает, поэтому здесь достаточно

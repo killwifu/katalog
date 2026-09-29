@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+
+	"katalog/backend/internal/db"
+	"katalog/backend/internal/imagingmeta"
 )
 
 // HandleRetentionPurge — уборка аналитики по сроку хранения.
@@ -41,5 +45,47 @@ func (p *Processor) HandleRetentionPurge(ctx context.Context, _ *asynq.Task) err
 			"lead_clicks", clicks, "lead_clicks_keep_days", p.Cfg.RetentionLeadClicksDays,
 			"daily_stats", stats, "daily_stats_keep_days", p.Cfg.RetentionDailyStatsDays)
 	}
+	return p.purgeExpiredTrash(ctx)
+}
+
+// purgeExpiredTrash — окончательная уборка «Удаленного».
+//
+// До срока фотография занимает место в хранилище: объекты в S3 никуда не
+// девались, и возвращать квоту раньше времени значит обещать продавцу
+// место, которого нет. Здесь оно возвращается по-настоящему.
+//
+// Строки уносятся одним запросом, а объекты — по одному: провал уборки
+// в S3 не должен оставлять в базе записи о фотографиях, которых уже нет
+// в кабинете. Осиротевший объект переживём, он попадёт в отчёт по бакету.
+func (p *Processor) purgeExpiredTrash(ctx context.Context) error {
+	if p.Cfg.TrashKeepDays <= 0 {
+		p.Log.Warn("trash purge skipped: keep days must be positive",
+			"trash_keep_days", p.Cfg.TrashKeepDays)
+		return nil
+	}
+	rows, err := p.Q.PurgeExpiredTrash(ctx, int32(p.Cfg.TrashKeepDays))
+	if err != nil {
+		return fmt.Errorf("purge expired trash: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	freed := make(map[uuid.UUID]int64, len(rows))
+	for _, row := range rows {
+		freed[row.ShopID] += row.Bytes
+		if err := p.Store.RemovePhoto(ctx, row.ShopID, row.ID, imagingmeta.DerivativeSizes()); err != nil {
+			p.Log.Error("trash purge: remove s3 objects failed", "error", err, "photo", row.ID)
+		}
+	}
+	for shopID, bytes := range freed {
+		if err := p.Q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{
+			ID:          shopID,
+			StorageUsed: -bytes,
+		}); err != nil {
+			p.Log.Error("trash purge: release storage failed", "error", err, "shop", shopID)
+		}
+	}
+	p.Log.Info("trash purge done", "photos", len(rows), "shops", len(freed),
+		"trash_keep_days", p.Cfg.TrashKeepDays)
 	return nil
 }
