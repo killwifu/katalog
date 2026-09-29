@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/imagingmeta"
 )
 
 // Публичные хендлеры витрины. Отдельные response-типы: наружу уходят только
@@ -76,11 +77,11 @@ func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
 	if base == "" {
 		base = "/media"
 	}
-	return map[string]string{
-		"thumb":  fmt.Sprintf("%s/%s/%s/300.webp", base, shopID, photoID),
-		"medium": fmt.Sprintf("%s/%s/%s/800.webp", base, shopID, photoID),
-		"large":  fmt.Sprintf("%s/%s/%s/1600.webp", base, shopID, photoID),
+	urls := make(map[string]string, len(imagingmeta.Derivatives))
+	for _, d := range imagingmeta.Derivatives {
+		urls[d.Name] = fmt.Sprintf("%s/%s/%s/%s.webp", base, shopID, photoID, d.Name)
 	}
+	return urls
 }
 
 func toPublicShopResponse(s db.Shop) publicShopResponse {

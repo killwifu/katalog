@@ -145,7 +145,7 @@ function CaptionWalker({
 
       <div className="mb-4 overflow-hidden rounded-lg border border-line bg-white">
         <img
-          src={photo.urls?.medium ?? photo.urls?.thumb}
+          src={photo.urls?.medium ?? photo.urls?.small}
           alt=""
           className="mx-auto max-h-96 w-full object-contain"
         />

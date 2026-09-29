@@ -72,8 +72,8 @@ export function PhotoGrid({ photos, shop, albumTitles }: Props) {
           <li key={p.id} className="photo-card">
             <button type="button" className="photo-open" onClick={() => open(i)}>
               <img
-                src={p.urls.thumb}
-                srcSet={`${p.urls.thumb} 300w, ${p.urls.medium} 800w`}
+                src={p.urls.small}
+                srcSet={`${p.urls.small} 500w, ${p.urls.medium} 800w`}
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 width={p.width || undefined}
                 height={p.height || undefined}

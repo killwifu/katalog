@@ -244,7 +244,7 @@ export type Photo = {
   width: number
   height: number
   sort_order: number
-  urls?: { thumb: string; medium: string; large: string }
+  urls?: { small: string; medium: string; large: string }
   // Код причины отказа обработки; приходит только при status = failed.
   fail_reason?: string
 }

@@ -84,7 +84,7 @@ func TestComplaintTakedownFlow(t *testing.T) {
 		Status string `json:"status"`
 	}
 	reporter.mustJSON("POST", "/api/v1/public/complaints", map[string]string{
-		"url":            "http://katalog.test/media/" + shop.ID + "/" + photoID + "/800.webp",
+		"url":            "http://katalog.test/media/" + shop.ID + "/" + photoID + "/medium.webp",
 		"reporter_name":  "ООО Правообладатель",
 		"reporter_email": "legal@brand.test",
 		"reason":         "Фото нарушает наши исключительные права на товарный знак.",
@@ -143,7 +143,7 @@ func TestComplaintTakedownFlow(t *testing.T) {
 		t.Fatalf("blocked photo still on storefront: %+v", pub.Photos)
 	}
 	// Деривативы удалены из S3, оригинал остался.
-	for _, size := range []string{"300", "800", "1600"} {
+	for _, size := range []string{"small", "medium", "large"} {
 		if _, exists, err := env.store.StatSize(ctx, "drv/"+shop.ID+"/"+photoID+"/"+size+".webp"); err != nil || exists {
 			t.Fatalf("derivative %s: exists=%v err=%v, want removed", size, exists, err)
 		}
@@ -535,10 +535,10 @@ func TestComplaintResolvesProductionMediaURL(t *testing.T) {
 
 	cases := map[string]string{
 		"бакет S3 (deploy/s3/setup.sh)": "https://storage.yandexcloud.net/katalog/drv/" +
-			shop.ID + "/" + photoID + "/800.webp",
-		"домен CDN": "https://cdn.katalog.test/drv/" + shop.ID + "/" + photoID + "/300.webp",
+			shop.ID + "/" + photoID + "/medium.webp",
+		"домен CDN": "https://cdn.katalog.test/drv/" + shop.ID + "/" + photoID + "/small.webp",
 		"локальная раскладка": "http://katalog.test/media/" +
-			shop.ID + "/" + photoID + "/1600.webp",
+			shop.ID + "/" + photoID + "/large.webp",
 	}
 
 	for name, url := range cases {

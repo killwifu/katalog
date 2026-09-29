@@ -28,7 +28,7 @@ func TestFullPipeline(t *testing.T) {
 	if photo.Width != 1200 || photo.Height != 900 {
 		t.Errorf("dimensions: %dx%d, want 1200x900", photo.Width, photo.Height)
 	}
-	for _, key := range []string{"thumb", "medium", "large"} {
+	for _, key := range []string{"small", "medium", "large"} {
 		if photo.Urls[key] == "" {
 			t.Errorf("missing %s url in ready photo", key)
 		}
@@ -38,7 +38,7 @@ func TestFullPipeline(t *testing.T) {
 	ctx := context.Background()
 	pid := uuid.MustParse(photoID)
 	sid := uuid.MustParse(shop.ID)
-	for _, size := range imagingmeta.DerivativeSizes {
+	for _, size := range imagingmeta.DerivativeSizes() {
 		key := storage.DerivativeKey(sid, pid, size)
 		n, exists, err := env.store.StatSize(ctx, key)
 		if err != nil {

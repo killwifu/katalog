@@ -21,7 +21,7 @@ const (
 )
 
 // DerivativeSizes — деривативы (longest side, px). Покупателю уходят только они.
-var DerivativeSizes = imagingmeta.DerivativeSizes
+var DerivativeSizes = imagingmeta.DerivativeSizes()
 
 // Код причины отказа. Хранится у фотографии и переводится в кабинете:
 // продавцу нужно понять, что чинить, а не читать английскую диагностику.

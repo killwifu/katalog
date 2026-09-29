@@ -23,22 +23,22 @@ func TestMediaURLs(t *testing.T) {
 		{
 			name:      "относительный путь по умолчанию",
 			base:      "/media",
-			wantThumb: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/300.webp",
-			wantLarge: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/1600.webp",
+			wantThumb: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/small.webp",
+			wantLarge: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/large.webp",
 		},
 		{
 			// API собирают и напрямую, минуя config.Load: пустой префикс
 			// не должен превращаться в битые адреса.
 			name:      "пустой префикс — как относительный",
 			base:      "",
-			wantThumb: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/300.webp",
-			wantLarge: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/1600.webp",
+			wantThumb: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/small.webp",
+			wantLarge: "/media/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/large.webp",
 		},
 		{
 			name:      "отдельный CDN-домен",
 			base:      "https://cdn.example.com/drv",
-			wantThumb: "https://cdn.example.com/drv/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/300.webp",
-			wantLarge: "https://cdn.example.com/drv/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/1600.webp",
+			wantThumb: "https://cdn.example.com/drv/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/small.webp",
+			wantLarge: "https://cdn.example.com/drv/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/large.webp",
 		},
 	}
 
@@ -46,8 +46,8 @@ func TestMediaURLs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &API{Cfg: config.Config{MediaBaseURL: tt.base}}
 			got := a.mediaURLs(shop, photo)
-			if got["thumb"] != tt.wantThumb {
-				t.Errorf("thumb = %q, want %q", got["thumb"], tt.wantThumb)
+			if got["small"] != tt.wantThumb {
+				t.Errorf("small = %q, want %q", got["small"], tt.wantThumb)
 			}
 			if got["large"] != tt.wantLarge {
 				t.Errorf("large = %q, want %q", got["large"], tt.wantLarge)

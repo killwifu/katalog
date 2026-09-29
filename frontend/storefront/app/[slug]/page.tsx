@@ -101,8 +101,8 @@ export default async function ShopPage({ params }: Props) {
               <a href={`/${encodeURIComponent(slug)}/a/${album.id}`}>
                 {album.cover_urls ? (
                   <img
-                    src={album.cover_urls.thumb}
-                    srcSet={`${album.cover_urls.thumb} 300w, ${album.cover_urls.medium} 800w`}
+                    src={album.cover_urls.small}
+                    srcSet={`${album.cover_urls.small} 500w, ${album.cover_urls.medium} 800w`}
                     sizes="(max-width: 640px) 50vw, 25vw"
                     loading="lazy"
                     decoding="async"

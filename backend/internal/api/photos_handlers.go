@@ -453,7 +453,7 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		a.Log.Error("delete: release storage failed", "error", err)
 	}
-	if err := a.Store.RemovePhoto(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes); err != nil {
+	if err := a.Store.RemovePhoto(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes()); err != nil {
 		a.Log.Error("delete: remove s3 objects failed", "error", err)
 	}
 	a.Revalidate.Shop(shop.Slug)

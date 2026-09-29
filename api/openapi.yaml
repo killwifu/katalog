@@ -1964,7 +1964,7 @@ components:
         относительный /media локально, абсолютный URL CDN-домена в проде —
         клиент должен подставлять значение как есть, не достраивая его.
       properties:
-        thumb: { type: string }
+        small: { type: string }
         medium: { type: string }
         large: { type: string }
 
@@ -1991,6 +1991,6 @@ components:
           type: object
           description: Только для status=ready; деривативы WebP (300/800/1600)
           properties:
-            thumb: { type: string }
+            small: { type: string }
             medium: { type: string }
             large: { type: string }

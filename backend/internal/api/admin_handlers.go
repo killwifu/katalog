@@ -200,7 +200,7 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 	// из выдачи немедленно, а из раздачи по прямой ссылке — нет. Для
 	// notice-and-takedown это дыра: нужен вызов purge у CDN, и он зависит
 	// от провайдера, который в проекте пока не выбран.
-	if err := a.Store.RemoveDerivatives(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes); err != nil {
+	if err := a.Store.RemoveDerivatives(r.Context(), photo.ShopID, photo.ID, imagingmeta.DerivativeSizes()); err != nil {
 		a.Log.Error("block: remove derivatives failed", "photo_id", photo.ID, "error", err)
 	}
 	// Байты деривативов возвращаются в квоту: файлов больше нет, и держать

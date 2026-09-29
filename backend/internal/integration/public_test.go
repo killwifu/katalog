@@ -114,9 +114,9 @@ func TestPublicShopPage(t *testing.T) {
 		t.Errorf("album mismatch: %+v", al)
 	}
 	// Обложка не назначалась — берётся первое ready-фото.
-	wantCover := fmt.Sprintf("/media/%s/%s/300.webp", shop.ID, photoID)
-	if al.CoverUrls["thumb"] != wantCover {
-		t.Errorf("cover thumb = %q, want %q", al.CoverUrls["thumb"], wantCover)
+	wantCover := fmt.Sprintf("/media/%s/%s/small.webp", shop.ID, photoID)
+	if al.CoverUrls["small"] != wantCover {
+		t.Errorf("cover small = %q, want %q", al.CoverUrls["small"], wantCover)
 	}
 
 	// Скрытый альбом недоступен и напрямую.
@@ -154,7 +154,7 @@ func TestPublicAlbumPagination(t *testing.T) {
 		t.Fatalf("page1: %d photos, total %d, page %d", len(page1.Photos), page1.Total, page1.Page)
 	}
 	for _, p := range page1.Photos {
-		if p.Urls["large"] == "" || !strings.Contains(p.Urls["large"], "1600.webp") {
+		if p.Urls["large"] == "" || !strings.Contains(p.Urls["large"], "large.webp") {
 			t.Errorf("photo %s: bad urls %+v", p.ID, p.Urls)
 		}
 	}

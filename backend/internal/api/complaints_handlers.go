@@ -77,7 +77,7 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveComplaintTarget — best-effort привязка жалобы к магазину/фото по URL:
-// .../{shop_id}/{photo_id}/{size}.webp -> конкретное фото,
+// .../{shop_id}/{photo_id}/{name}.webp -> конкретное фото,
 // /{slug}[/...] -> магазин. Нераспознанное — жалоба без привязки.
 //
 // Адрес дериватива узнаём по хвосту, а не по первому сегменту: префикс
