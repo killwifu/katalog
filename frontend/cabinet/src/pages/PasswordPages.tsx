@@ -2,18 +2,19 @@ import { useMutation } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
+import { setFlash } from '../lib/flash'
 
 // Страницы почтовых auth-потоков: запрос сброса пароля, установка нового
 // пароля по токену из письма, подтверждение email.
 
 function AuthShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
+    <main className="flex min-h-screen items-center justify-center bg-surface-alt px-4">
       <div className="box w-full max-w-sm !mb-0">
         <h1 className="mb-4 text-h1 font-semibold">{title}</h1>
         {children}
       </div>
-    </div>
+    </main>
   )
 }
 
@@ -52,7 +53,7 @@ export function ForgotPasswordPage() {
             Отправить ссылку
           </button>
           {send.isError && (
-            <p className="text-sm text-danger">Не удалось отправить. Попробуйте ещё раз.</p>
+            <p className="text-sm text-danger" role="alert">Не удалось отправить. Попробуйте ещё раз.</p>
           )}
         </form>
       )}
@@ -71,7 +72,12 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState('')
   const reset = useMutation({
     mutationFn: () => api.resetPassword(token, password),
-    onSuccess: () => void navigate({ to: '/login' }),
+    onSuccess: () => {
+      // Без этого после смены пароля открывалась обычная форма входа —
+      // непонятно, сработало ли.
+      setFlash({ text: 'Пароль изменён — войдите с новым паролем' })
+      void navigate({ to: '/login' })
+    },
   })
 
   const submit = (e: FormEvent) => {
@@ -105,7 +111,7 @@ export function ResetPasswordPage() {
           Сохранить пароль
         </button>
         {reset.isError && (
-          <p className="text-sm text-danger">
+          <p className="text-sm text-danger" role="alert">
             Ссылка недействительна или устарела. Запросите сброс заново.
           </p>
         )}
@@ -141,7 +147,7 @@ export function VerifyEmailPage() {
             Подтвердить
           </button>
           {(verify.isError || !token) && (
-            <p className="text-sm text-danger">
+            <p className="text-sm text-danger" role="alert">
               Ссылка недействительна или устарела.
             </p>
           )}

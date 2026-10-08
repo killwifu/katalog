@@ -10,6 +10,7 @@ import {
 import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api } from './api'
+import { installModalFocusTrap } from './lib/focusTrap'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { TabsPage } from './pages/TabsPage'
@@ -40,15 +41,37 @@ const queryClient = new QueryClient({
 
 const rootRoute = createRootRoute({ component: Outlet })
 
+// Куда вернуть после входа: продавец открывал ссылку из письма (жалоба →
+// /admin, оплата → /billing) и после входа оказывался на «Обзоре».
+const redirectSearch = (s: Record<string, unknown>): { redirect?: string } =>
+  typeof s.redirect === 'string' && s.redirect.startsWith('/') && !s.redirect.startsWith('//')
+    ? { redirect: s.redirect }
+    : {}
+
+// Уже вошедшему форма входа ни к чему. Спрашиваем сервер, только если есть
+// подсказка katalog_signed: иначе каждый аноним на форме входа получал
+// 401 в консоли.
+const skipIfSignedIn = async () => {
+  if (!document.cookie.split('; ').some((c) => c.startsWith('katalog_signed='))) return
+  const signedIn = await api.me().then(
+    () => true,
+    () => false,
+  )
+  if (signedIn) throw redirect({ to: '/' })
+}
+
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
+  validateSearch: redirectSearch,
+  beforeLoad: skipIfSignedIn,
   component: () => <AuthPage mode="login" />,
 })
 
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
+  beforeLoad: skipIfSignedIn,
   component: () => <AuthPage mode="register" />,
 })
 
@@ -81,11 +104,11 @@ const verifyEmailRoute = createRoute({
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     try {
       await api.me()
     } catch {
-      throw redirect({ to: '/login' })
+      throw redirect({ to: '/login', search: location.href === '/' ? {} : { redirect: location.href } })
     }
   },
   component: AppLayout,
@@ -100,6 +123,12 @@ const overviewRoute = createRoute({
 const albumsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/albums',
+  // ?upload=1 — открыть «Загрузить фото» сразу (ярлык «Быстрого доступа» на обзоре);
+  // ?create=1 — «Создать альбом» (кнопка приветствия нового продавца).
+  validateSearch: (search: Record<string, unknown>): { upload?: boolean; create?: boolean } => {
+    const on = (v: unknown) => v === true || v === 1 || v === '1'
+    return { ...(on(search.upload) ? { upload: true } : {}), ...(on(search.create) ? { create: true } : {}) }
+  },
   component: AlbumsPage,
 })
 
@@ -202,6 +231,8 @@ declare module '@tanstack/react-router' {
     router: typeof router
   }
 }
+
+installModalFocusTrap()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

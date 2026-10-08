@@ -4,12 +4,6 @@ import { api, type Plan, type PlanInfo, errorText } from '../api'
 import { PLAN_NAMES } from '../lib/plans'
 import { useShop } from './AppLayout'
 
-const STATE_LABELS = {
-  ok: null,
-  grace: 'Подписка не оплачена: загрузка фото заблокирована. Витрина пока работает.',
-  suspended: 'Подписка не оплачена: витрина скрыта. Фото сохранены и вернутся после оплаты.',
-} as const
-
 function formatGB(bytes: number): string {
   const gb = bytes / 1024 / 1024 / 1024
   return gb >= 1 ? `${Math.round(gb)} ГБ` : `${Math.round(bytes / 1024 / 1024)} МБ`
@@ -44,10 +38,9 @@ export function BillingPage() {
   })
 
   if (billing.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (billing.isError) return <p className="text-danger">Не удалось загрузить тариф.</p>
+  if (billing.isError) return <p className="text-danger" role="alert">Не удалось загрузить тариф.</p>
 
   const b = billing.data
-  const stateMessage = STATE_LABELS[b.billing_state]
   const photoPct = Math.min(100, Math.round((b.usage.photos / b.limits.max_photos) * 100))
   const storagePct = Math.min(
     100,
@@ -60,14 +53,11 @@ export function BillingPage() {
         <h1>Тариф и оплата</h1>
       </div>
 
-      {stateMessage && (
-        <div className="alert alert--danger">
-          {stateMessage}
-        </div>
-      )}
-
+      {/* Статус неоплаты здесь не повторяем: его показывает баннер
+          AppLayout на всех экранах, и на этой странице было два почти
+          одинаковых предупреждения подряд. */}
       <section className="box">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <span className="font-medium text-ink">
               Текущий тариф: {PLAN_NAMES[b.plan]}
@@ -92,7 +82,7 @@ export function BillingPage() {
           </p>
         )}
         <UsageBar
-          label={`Фото: ${b.usage.photos} из ${b.limits.max_photos}`}
+          label={`Фото: ${b.usage.photos.toLocaleString('ru-RU')} из ${b.limits.max_photos.toLocaleString('ru-RU')}`}
           pct={photoPct}
         />
         <UsageBar
@@ -118,7 +108,7 @@ export function BillingPage() {
           платежах отправляет продавца в бесконечный цикл — повтор
           не поможет никогда. */}
       {subscribe.isError && (
-        <p className="mt-4 text-sm text-danger">{errorText(subscribe.error)}</p>
+        <p className="mt-4 text-sm text-danger" role="alert">{errorText(subscribe.error)}</p>
       )}
       <p className="mt-4 text-sm text-ink-2">
         Оплата проходит через ЮKassa. Тариф активируется автоматически после
@@ -163,12 +153,14 @@ function CancelRenew({
     )
   }
   return (
-    <div className="text-right">
+    // На телефоне подтверждение сжималось в узкую колонку рядом с названием
+    // тарифа — переносим его на свою строку во всю ширину.
+    <div className="w-full sm:w-auto sm:text-right">
       <p className="text-sm text-ink-2">
         Тариф продолжит действовать{paidUntil ? ` до ${formatDate(paidUntil)}` : ''}, дальше
         витрина перейдёт на бесплатный.
       </p>
-      <div className="mt-2 flex justify-end gap-2">
+      <div className="mt-2 flex gap-2 sm:justify-end">
         <button onClick={() => setAsking(false)} className="btn btn--ghost btn--sm">
           Оставить
         </button>
@@ -197,7 +189,7 @@ function PlanCard({
 }) {
   return (
     <div
-      className={`box ${current ? 'border-brand' : 'border-line'}`}
+      className={`box !mb-0 ${current ? 'border-brand' : 'border-line'}`}
     >
       <div className="mb-1 font-semibold text-ink">{PLAN_NAMES[plan.id]}</div>
       <div className="mb-3 text-2xl font-bold text-ink">

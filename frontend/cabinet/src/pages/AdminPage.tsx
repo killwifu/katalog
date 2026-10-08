@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, type AdminComplaint , errorText } from '../api'
+import { api, type AdminComplaint, errorText } from '../api'
+import { PLAN_NAMES } from '../lib/plans'
+import { ConfirmDialog } from './ConfirmDialog'
 
 // Админ-зона: жалобы правообладателей и фото, помеченные стоп-словами.
 // Доступ только для role=admin (бэкенд отвечает 404 остальным).
@@ -14,6 +16,11 @@ const STATUS_LABELS: Record<AdminComplaint['status'], string> = {
 
 export function AdminPage() {
   const [tab, setTab] = useState<'overview' | 'complaints' | 'flagged' | 'sellers'>('overview')
+  // Продавец, открывший адрес вручную, видел вкладки модерации и «Не удалось
+  // загрузить сводку». Сервер и так отвечает 404 — говорим то же самое.
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
+  if (me.isPending) return <p className="text-ink-2">Загрузка…</p>
+  if (me.data?.role !== 'admin') return <p className="text-ink-2">Страница не найдена.</p>
   return (
     <div>
       <div className="page__head">
@@ -67,18 +74,19 @@ function TabButton({
 function ActionError({ of }: { of: { isError: boolean; error: Error | null }[] }) {
   const failed = of.find((m) => m.isError)
   if (!failed) return null
-  return <p className="mb-3 text-sm text-danger">{errorText(failed.error!)}</p>
+  return <p className="mb-3 text-sm text-danger" role="alert">{errorText(failed.error!)}</p>
 }
 
 function ComplaintsTab() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState('open')
   const complaints = useQuery({
-    queryKey: ['admin-complaints', status],
+    queryKey: ['admin', 'complaints', status],
     queryFn: () => api.adminListComplaints(status || undefined),
   })
-  const refresh = () =>
-    void queryClient.invalidateQueries({ queryKey: ['admin-complaints'] })
+  // Любое действие модератора меняет и сводку, и список продавцов
+  // (блокировка), поэтому сбрасываем всю админ-зону, а не одну вкладку.
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['admin'] })
 
   const setComplaintStatus = useMutation({
     mutationFn: ({ id, st }: { id: string; st: string }) =>
@@ -101,12 +109,29 @@ function ComplaintsTab() {
     onSuccess: refresh,
   })
 
+  // Блокировка снимает с публикации весь магазин и пишет продавцу письмо —
+  // одним случайным кликом такое делать нельзя.
+  const [suspending, setSuspending] = useState<{ shopId: string; complaintId: string; slug: string | null } | null>(null)
+
   if (complaints.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (complaints.isError) return <p className="text-danger">Не удалось загрузить жалобы.</p>
+  if (complaints.isError) return <p className="text-danger" role="alert">Не удалось загрузить жалобы.</p>
 
   return (
     <div>
       <ActionError of={[setComplaintStatus, blockPhoto, hideAlbum, suspendShop]} />
+      {suspending && (
+        <ConfirmDialog
+          title="Заблокировать магазин?"
+          icon="warn"
+          text={`Витрина ${suspending.slug ? `/${suspending.slug} ` : ''}перестанет открываться покупателям, продавцу уйдёт письмо. Снять блокировку можно на вкладке «Продавцы».`}
+          confirmLabel="Заблокировать"
+          onConfirm={() => {
+            suspendShop.mutate({ shopId: suspending.shopId, complaintId: suspending.complaintId })
+            setSuspending(null)
+          }}
+          onCancel={() => setSuspending(null)}
+        />
+      )}
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value)}
@@ -143,7 +168,7 @@ function ComplaintsTab() {
             <p className="mb-1 text-sm break-all text-ink-2">{c.content_url}</p>
             <p className="mb-2 text-sm whitespace-pre-wrap text-ink">{c.reason}</p>
             <p className="mb-3 text-sm text-ink-2">
-              Заявитель: {c.reporter_name} &lt;{c.reporter_email}&gt;
+              Заявитель: {c.reporter_name ? `${c.reporter_name} <${c.reporter_email}>` : c.reporter_email}
             </p>
             <div className="flex flex-wrap gap-2 text-sm">
               {c.status === 'open' && (
@@ -177,7 +202,7 @@ function ComplaintsTab() {
                 <ActionButton
                   danger
                   onClick={() =>
-                    suspendShop.mutate({ shopId: c.shop_id!, complaintId: c.id })
+                    setSuspending({ shopId: c.shop_id!, complaintId: c.id, slug: c.shop_slug })
                   }
                 >
                   Заблокировать магазин
@@ -205,13 +230,21 @@ function ComplaintsTab() {
   )
 }
 
+const PHOTO_STATUS_LABELS: Record<string, string> = {
+  uploading: 'загружается',
+  processing: 'обрабатывается',
+  ready: 'на витрине',
+  failed: 'не обработано',
+  blocked: 'скрыто',
+}
+
 function FlaggedTab() {
   const queryClient = useQueryClient()
   const flagged = useQuery({
-    queryKey: ['admin-flagged'],
+    queryKey: ['admin', 'flagged'],
     queryFn: api.adminListFlagged,
   })
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['admin-flagged'] })
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['admin'] })
   const block = useMutation({
     mutationFn: (photoId: string) => api.adminBlockPhoto(photoId),
     onSuccess: refresh,
@@ -222,7 +255,7 @@ function FlaggedTab() {
   })
 
   if (flagged.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (flagged.isError) return <p className="text-danger">Не удалось загрузить список.</p>
+  if (flagged.isError) return <p className="text-danger" role="alert">Не удалось загрузить список.</p>
   if (flagged.data.length === 0)
     return <p className="text-ink-2">Нет фото на ручной проверке.</p>
 
@@ -233,7 +266,7 @@ function FlaggedTab() {
         <li key={p.id} className="box">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-sm text-ink-2">
-              /{p.shop_slug} · статус {p.status}
+              /{p.shop_slug} · {PHOTO_STATUS_LABELS[p.status] ?? p.status}
             </span>
           </div>
           <p className="mb-3 text-sm whitespace-pre-wrap text-ink">{p.caption}</p>
@@ -280,7 +313,7 @@ function formatBytes(bytes: number): string {
 function OverviewTab() {
   const q = useQuery({ queryKey: ['admin', 'overview'], queryFn: () => api.adminOverview() })
   if (q.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (q.isError) return <p className="text-danger">Не удалось загрузить сводку.</p>
+  if (q.isError) return <p className="text-danger" role="alert">Не удалось загрузить сводку.</p>
 
   const cards = [
     { label: 'Активные магазины', value: String(q.data.active_shops) },
@@ -310,10 +343,10 @@ function SellersTab() {
   // блокировка означала мёртвый магазин без доступа к базе.
   const unsuspend = useMutation({
     mutationFn: (shopId: string) => api.adminUnsuspendShop(shopId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'shops'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin'] }),
   })
   if (q.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (q.isError) return <p className="text-danger">Не удалось загрузить продавцов.</p>
+  if (q.isError) return <p className="text-danger" role="alert">Не удалось загрузить продавцов.</p>
   if (q.data.length === 0) return <p className="text-ink-2">Продавцов пока нет.</p>
 
   return (
@@ -322,19 +355,19 @@ function SellersTab() {
       <table className="w-full text-sm">
         <thead className="text-left text-ink-2">
           <tr>
-            <th className="py-2">Магазин</th>
-            <th className="py-2">Почта</th>
-            <th className="py-2">Тариф</th>
-            <th className="py-2">Фото</th>
-            <th className="py-2">Место</th>
-            <th className="py-2">Жалобы</th>
-            <th className="py-2"></th>
+            <th className="py-2 pr-3">Магазин</th>
+            <th className="py-2 pr-3">Почта</th>
+            <th className="py-2 pr-3">Тариф</th>
+            <th className="py-2 pr-3">Фото</th>
+            <th className="py-2 pr-3">Место</th>
+            <th className="py-2 pr-3">Жалобы</th>
+            <th className="py-2 pr-3"></th>
           </tr>
         </thead>
         <tbody>
           {q.data.map((s) => (
             <tr key={s.id} className="border-t border-line">
-              <td className="py-2">
+              <td className="py-2 pr-3">
                 <a href={`/${s.slug}`} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                   {s.name}
                 </a>
@@ -348,14 +381,14 @@ function SellersTab() {
                   <span className="ml-2 badge badge--warn">скрыт за неоплату</span>
                 )}
               </td>
-              <td className="py-2 text-ink-2">{s.email}</td>
-              <td className="py-2 text-ink-2">{s.plan}</td>
-              <td className="py-2 text-ink-2">{s.photos}</td>
-              <td className="py-2 text-ink-2">{formatBytes(s.storage_used)}</td>
-              <td className={`py-2 ${s.complaints > 0 ? 'font-medium text-danger' : 'text-ink-3'}`}>
+              <td className="py-2 pr-3 text-ink-2">{s.email}</td>
+              <td className="py-2 pr-3 text-ink-2">{PLAN_NAMES[s.plan]}</td>
+              <td className="py-2 pr-3 text-ink-2">{s.photos}</td>
+              <td className="py-2 pr-3 text-ink-2">{formatBytes(s.storage_used)}</td>
+              <td className={`py-2 pr-3 ${s.complaints > 0 ? 'font-medium text-danger' : 'text-ink-3'}`}>
                 {s.complaints}
               </td>
-              <td className="py-2">
+              <td className="py-2 pr-3">
                 {s.status === 'suspended' && (
                   <button
                     onClick={() => unsuspend.mutate(s.id)}

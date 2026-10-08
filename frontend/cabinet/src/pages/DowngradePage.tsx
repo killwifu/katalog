@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, errorText, type DowngradeAlbum } from '../api'
 import { PLAN_NAMES } from '../lib/plans'
+import { plural } from '../lib/uploadRun'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
@@ -26,7 +27,7 @@ export function DowngradePage() {
   const queryClient = useQueryClient()
   const state = useQuery({ queryKey: ['downgrade', shop.id], queryFn: () => api.getDowngrade(shop.id) })
 
-  const [strategy, setStrategy] = useState<Strategy>('viewed')
+  const [chosen, setStrategy] = useState<Strategy | null>(null)
   const [manual, setManual] = useState<string[] | null>(null)
   // Ручной выбор — это несколько минут работы при большом числе альбомов,
   // терять его при случайном переходе нельзя. Хук стоит до ранних return
@@ -42,9 +43,12 @@ export function DowngradePage() {
   })
 
   if (state.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (state.isError) return <p className="text-danger">Не удалось загрузить данные тарифа.</p>
+  if (state.isError) return <p className="text-danger" role="alert">Не удалось загрузить данные тарифа.</p>
 
   const { albums, max_photos, total_photos, over_limit } = state.data
+  // Выбор уже сохраняли — показываем его, а не стратегию по умолчанию:
+  // иначе экран выглядел так, будто сохранённое не применилось.
+  const strategy: Strategy = chosen ?? (albums.some((a) => a.hidden_by_plan) ? 'manual' : 'viewed')
   // Приходят уже отсортированными по просмотрам; для «самых свежих»
   // достаточно перевернуть по дате создания — она в порядке добавления.
   const byViews = albums
@@ -127,7 +131,7 @@ export function DowngradePage() {
               <span className="rows__main">
                 <b>{a.title}</b>
                 <span className="rows__meta">
-                  {a.photo_count} фото · {a.views} просмотров за 30 дней
+                  {a.photo_count} фото · {a.views} {plural(a.views, 'просмотр', 'просмотра', 'просмотров')} за 30 дней
                 </span>
               </span>
             </label>
@@ -137,7 +141,7 @@ export function DowngradePage() {
 
       <div className="box">
         <p className="text-sm text-ink-2">
-          Останется видимыми: <b className="text-ink">{selectedPhotos}</b> из {total_photos} фотографий
+          Останутся видимыми: <b className="text-ink">{selectedPhotos}</b> из {total_photos} фотографий
           {selectedPhotos > max_photos && (
             <span className="text-danger"> — это больше лимита {max_photos}</span>
           )}
@@ -160,7 +164,7 @@ export function DowngradePage() {
         </Link>
       </div>
       {save.isSuccess && <p className="hint">Выбор сохранён. Изменить можно в любой момент.</p>}
-      {save.isError && <p className="hint text-danger">{errorText(save.error)}</p>}
+      {save.isError && <p className="hint text-danger" role="alert">{errorText(save.error)}</p>}
       </>
       )}
 

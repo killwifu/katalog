@@ -2,6 +2,7 @@
 /* Шрифт самохостится пакетом, а не тянется с fonts.googleapis.com:
    кабинет должен открываться без внешних запросов. */
 @import "@fontsource-variable/golos-text";
+@import "@fontsource-variable/inter";
 
 /* ==========================================================================
    Дизайн-система кабинета
@@ -27,12 +28,18 @@
   --color-surface-alt: #F1F0EC;
   --color-ink: #1A1A18;
   --color-ink-2: #62615C;
+  /* Приглушённый текст. В макете #90908A, но это 3.2:1 на белом — ниже AA
+     (4.5:1); по решению владельца оставлен #6E6D67 (UX-аудит #66). Все тексты
+     берут цвет из токена; #90908A остался только у иконок и рамок. */
   --color-ink-3: #6E6D67;
   --color-line: #E4E2DC;
   --color-line-strong: #CFCCC4;
   --color-danger: #B00020;
 
-  --font-sans: 'Golos Text Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Макет v2: весь интерфейс — Inter, Golos Text — только пункты бокового
+     меню (92% текстов макета — Inter; см. журнал, аудит по Figma). */
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-nav: 'Golos Text Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   --text-h1: 22px;
   --text-h3: 17px;
@@ -58,6 +65,10 @@ html {
 }
 
 body { min-height: 100vh; }
+/* Названия без пробелов (артикулы, слитные слова, длинные ссылки)
+   растягивали страницу вбок на телефоне — переносим где угодно. */
+h1, h2, h3, .alpage__crumbs span, .alpage__desc { overflow-wrap: anywhere; }
+.alpage__crumbs span { min-width: 0; }
 
 /* Видимый фокус — требование доступности из макетов, не украшение. */
 :focus-visible {
@@ -134,7 +145,9 @@ body { min-height: 100vh; }
 .inp:disabled { background: var(--color-surface-alt); color: var(--color-ink-3); }
 .inp::placeholder { color: var(--color-ink-3); }
 
-select.inp { appearance: auto; }
+/* Селекты с шевроном макета (icon / chevron-down, #90908A) вместо системной стрелки. */
+select.inp { appearance: none; -webkit-appearance: none; padding-right: 38px; background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2390908A' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") right 14px center / 16px no-repeat; cursor: pointer; }
+select.inp:disabled { background-color: var(--color-surface-alt); }
 
 /* --- Кнопки --------------------------------------------------------------- */
 
@@ -239,21 +252,30 @@ select.inp { appearance: auto; }
 
 /* --- Пустые состояния ----------------------------------------------------- */
 
-.emptybox {
-  padding: 40px 20px; text-align: center;
-  background: var(--color-surface); border: 1px dashed var(--color-line-strong);
-  border-radius: var(--radius-card);
-}
-.emptybox__ico { font-size: 28px; margin-bottom: 10px; }
-.emptybox h3 { font-size: var(--text-h3); font-weight: 500; margin-bottom: 6px; }
-.emptybox p { font-size: var(--text-sm); color: var(--color-ink-2); max-width: 46ch; margin: 0 auto 16px; }
+/* Макет 10 · «Ничего не найдено» / «Нет альбомов»: без рамки, иконка в
+   круге 64px, заголовок 20/600, серый текст, кнопка-таблетка. */
+.emptybox { display: grid; justify-items: center; gap: 16px; padding: 96px 24px; text-align: center; }
+.emptybox__ico { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #F1F0EC; color: var(--color-ink-3); }
+.emptybox__ico--brand { background: #E9ECFB; color: #2547CE; }
+.emptybox h2, .emptybox h3 { font-size: 20px; line-height: 26px; font-weight: 600; margin-bottom: -10px; }
+.emptybox p { font-size: 14px; line-height: 21px; color: var(--color-ink-3); max-width: 420px; margin: 0; }
+.emptybox .btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 999px; }
 
 /* --- Плашки --------------------------------------------------------------- */
 
-.alert { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius-el); font-size: var(--text-sm); margin-bottom: 14px; }
-.alert--warn { background: #FBF0DC; color: #6B4A0E; }
-.alert--danger { background: #FBE4E6; color: #7A1220; }
-.alert--info { background: var(--color-brand-soft); color: var(--color-brand-ink); }
+/* Баннеры (макет 09 · «Тариф скоро закончится» и др.): иконка 20px в цвет
+   баннера слева, жирный заголовок, текст #62615C. Иконка — маской, чтобы
+   не размечать её в каждом из баннеров. */
+.alert { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; border-radius: 12px; font-size: 13.5px; line-height: 20px; color: var(--color-ink-2); margin-bottom: 14px; }
+.alert b, .alert strong { color: var(--color-ink); font-weight: 600; }
+.alert__body { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.alert__body > b { font-size: 15px; line-height: 22px; }
+.alert__actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+.alert__actions .btn { height: 40px; }
+.alert::before { content: ''; flex: none; width: 20px; height: 20px; background: var(--alert-icon); -webkit-mask: var(--alert-mask) center / contain no-repeat; mask: var(--alert-mask) center / contain no-repeat; }
+.alert--warn { background: #FBEEDA; --alert-icon: #8A5A00; --alert-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E"); }
+.alert--danger { background: #FEF3F2; --alert-icon: #D92D20; --alert-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"); }
+.alert--info { background: #E9ECFB; --alert-icon: #2547CE; --alert-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E"); }
 
 /* --- Прогресс ------------------------------------------------------------- */
 
@@ -371,33 +393,46 @@ select.inp { appearance: auto; }
    а не по названию — это и есть «логика Yupoo» из комментариев к макету.
    -------------------------------------------------------------------------- */
 
-.albar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
-.albar__search { flex: 1 1 220px; min-width: 160px; }
+.albar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+/* Панель «Альбомов» (макет 10 · toolbar): кнопки-таблетки с иконками слева,
+   справа поиск 320px, сортировка и фильтр. */
+.albar > .btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px 0 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
+.albar > .btn--ghost { border-color: #CFCCC4; color: var(--color-ink-2); }
+.albar__search { flex: 0 1 320px; min-width: 160px; height: 48px; margin-left: auto; margin-right: 4px; padding: 0 14px; border-radius: 12px; border-color: #E4E2DC; font-size: 15px; }
+.albar .pop__btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; border-color: #CFCCC4; font-size: 12.5px; font-weight: 500; color: var(--color-ink-2); background: #fff; }
+.pop__icon, .pop__chev { display: grid; place-items: center; }
+.pop__chev .lucide { color: var(--color-ink-3); }
 .albar__sel { flex: 0 0 auto; width: auto; }
 
-.alhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; font-size: var(--text-xs); color: var(--color-ink-3); }
-.alhead label { display: inline-flex; align-items: center; gap: 8px; color: var(--color-ink-2); cursor: pointer; }
+.alhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid #E4E2DC; font-size: 13.5px; color: var(--color-ink-3); }
+.alhead label { display: inline-flex; align-items: center; gap: 10px; margin-right: 12px; color: var(--color-ink-2); cursor: pointer; }
+.selall:has(input:checked), .selall:has(input:indeterminate) { color: var(--color-ink); font-weight: 500; }
+.alhead__tip { align-items: center; gap: 6px; }
+.alhead__tip .lucide { color: var(--color-ink-3); }
 .alhead .spacer { flex: 1; }
 
-.algrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+/* 186px — ширина карточки макета (шесть в ряд на 1440): в неё в одну
+   строку помещаются статус, замок и ссылка. */
+.algrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
 
 .alcard { position: relative; border: 1px solid var(--color-line); border-radius: 12px; overflow: hidden; background: var(--color-surface); }
 .alcard:has(input:checked) { border-color: var(--color-brand); }
 .alcard__cover { position: relative; display: block; aspect-ratio: 1; background: var(--color-surface-alt); }
 .alcard__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Заглушка вместо обложки: у альбома без фотографий её просто нет. */
-.alcard__cover--empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-line-strong); font-size: 22px; }
+.alcard__cover--empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-ink-3); }
 .alcard__count {
   position: absolute; right: 8px; bottom: 8px;
   padding: 2px 8px; border-radius: var(--radius-pill);
-  background: rgb(0 0 0 / 55%); color: #fff; font-size: 11px;
+  background: #1A1A18; color: #fff; font-size: 11.5px; font-weight: 500;
 }
-.alcard__pick { position: absolute; left: 8px; top: 8px; z-index: 1; width: 18px; height: 18px; }
+.alcard__pick { position: absolute; left: 10px; top: 10px; z-index: 1; }
+/* Карандаш (макет 10 · edit): квадрат 20px, r6, белый, рамка #CFCCC4. */
 .alcard__edit {
-  position: absolute; right: 8px; top: 8px; z-index: 1;
-  display: grid; place-items: center; width: 26px; height: 26px;
-  border-radius: 8px; background: rgb(255 255 255 / 92%);
-  border: 1px solid var(--color-line); font-size: 12px; line-height: 1;
+  position: absolute; right: 10px; top: 10px; z-index: 1;
+  display: grid; place-items: center; width: 20px; height: 20px; padding: 0;
+  border-radius: 6px; background: #fff; color: var(--color-ink-2);
+  border: 1px solid #CFCCC4; line-height: 1;
 }
 .alcard__body { padding: 10px; }
 .alcard__body b { display: block; font-size: var(--text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -425,8 +460,8 @@ select.inp { appearance: auto; }
 .modal__head h2 { font-size: var(--text-h3); font-weight: 600; }
 .modal__head p { font-size: var(--text-sm); color: var(--color-ink-2); margin-top: 4px; }
 .modal__head .spacer { flex: 1; }
-.modal__x { background: none; border: 0; font-size: 18px; line-height: 1; color: var(--color-ink-3); cursor: pointer; padding: 4px 6px; }
-.modal__x:hover { color: var(--color-ink); }
+.modal__x { display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 999px; background: none; font-size: 18px; line-height: 1; color: var(--color-ink-2); cursor: pointer; }
+.modal__x:hover { background: var(--color-surface-alt); color: var(--color-ink); }
 .modal__body { display: grid; gap: 20px; padding: 16px 20px 20px; grid-template-columns: 1fr; }
 @media (min-width: 860px) { .modal__body { grid-template-columns: 1fr 1fr; } }
 .modal__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--color-line); }
@@ -442,10 +477,13 @@ select.inp { appearance: auto; }
 .req { color: var(--color-danger); }
 
 /* Зона перетаскивания: главный элемент окна, поэтому во всю высоту колонки. */
-.drop { display: grid; place-items: center; gap: 10px; min-height: 260px; padding: 24px; text-align: center; background: var(--color-surface-alt); border: 1px dashed var(--color-line-strong); border-radius: 12px; }
+.drop { display: grid; justify-items: center; align-content: center; gap: 12px; min-height: 230px; padding: 24px; text-align: center; background: #F6F5F3; border: 1px dashed #CFCCC4; border-radius: 16px; }
+/* Иконка зоны загрузки (макет 10 · dropzone): круг 56px, светло-синий. */
+.drop__ico { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #E9ECFB; color: #2547CE; }
+.drop .btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px 0 14px; border-radius: 999px; border-color: #CFCCC4; color: var(--color-ink-2); font-size: 13.5px; font-weight: 500; }
 .drop--over { border-color: var(--color-brand); background: var(--color-brand-soft); }
-.drop p { font-size: var(--text-sm); font-weight: 500; }
-.drop small { font-size: var(--text-xs); color: var(--color-ink-3); }
+.drop p { font-size: 15px; font-weight: 600; color: var(--color-ink); margin-bottom: -8px; }
+.drop small { font-size: 13.5px; color: var(--color-ink-3); }
 
 /* Сегментированный выбор: доступ, единицы, пароль. */
 .segbar { display: flex; gap: 2px; padding: 3px; background: var(--color-surface-alt); border-radius: var(--radius-pill); }
@@ -475,7 +513,7 @@ select.inp { appearance: auto; }
 .alstat em { font-style: normal; font-size: var(--text-xs); color: var(--color-ink-3); margin-left: 8px; }
 .alstat .up { color: #1B6B3A; font-weight: 600; }
 
-.algallery { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.algallery { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
 
 /* Плитка «загрузить» стоит первой в сетке: место для новых фотографий там
    же, где лежат старые, и не нужно искать кнопку глазами. */
@@ -526,3 +564,1794 @@ select.inp { appearance: auto; }
   .alcard__pick { width: 24px; height: 24px; }
   .alcard__edit { width: 40px; height: 40px; font-size: 15px; }
 }
+
+/* --- Окно «Загрузить фото» (макет 10 · Desktop · v2 · Загрузить фото) ------
+   Две вкладки в одном окне: обычная загрузка в готовые альбомы и массовая,
+   где каждая папка становится альбомом.
+   -------------------------------------------------------------------------- */
+
+.updlg__tabs { padding: 14px 20px 0; }
+.updlg__tabs .segbar { border-radius: 12px; }
+.updlg__tabs .segbar button { min-height: 38px; border-radius: 10px; font-size: var(--text-sm); }
+.updlg__body { padding: 16px 20px 20px; }
+.updlg__body > .hint { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: 10px; }
+.updlg__top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 20px; margin-bottom: 16px; }
+.updlg__listhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 32px; margin-bottom: 8px; font-size: var(--text-sm); color: var(--color-ink-2); }
+.updlg__listhead .spacer { flex: 1; }
+
+/* Водяной знак: переключатель и сетка положений 3×3. */
+.wm { display: flex; gap: 20px; }
+.wm__label { display: block; font-size: var(--text-xs); color: var(--color-ink-2); margin-bottom: 8px; }
+.wm__info { display: inline-grid; place-items: center; vertical-align: -2px; color: var(--color-ink-3); cursor: help; }
+.wm__err { font-size: var(--text-xs); color: var(--color-danger); margin-top: 4px; }
+.switch { display: inline-flex; align-items: center; gap: 10px; font-size: var(--text-sm); cursor: pointer; }
+.switch input { appearance: none; position: relative; flex: none; width: 36px; height: 20px; border-radius: var(--radius-pill); background: var(--color-line-strong); cursor: pointer; transition: background .15s; }
+.switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked { background: var(--color-brand); }
+.switch input:checked::after { transform: translateX(16px); }
+.switch input:disabled { opacity: .5; cursor: default; }
+.wmgrid { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; padding: 4px; border: 1px solid var(--color-line); border-radius: 8px; background: var(--color-surface); }
+.wmgrid button { width: 26px; height: 18px; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: var(--color-surface-alt); cursor: pointer; }
+.wmgrid button[aria-checked="true"] { background: var(--color-brand); }
+.wmgrid button:disabled { cursor: default; opacity: .5; }
+
+/* Выбор альбомов: поле с плашками и выпадающий список с поиском. */
+.apick { position: relative; flex: 1 1 280px; min-width: 0; }
+.apick__field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 42px; padding: 5px 12px; border: 1px solid var(--color-line-strong); border-radius: var(--radius-el); background: var(--color-surface); font-size: var(--text-sm); cursor: pointer; }
+.apick__field--open { border-color: var(--color-brand); }
+.apick__field--bad { border-color: var(--color-danger); }
+.apick__field[aria-disabled="true"] { cursor: default; background: var(--color-surface-alt); }
+.apick__field .spacer { flex: 1; }
+.apick__ph { color: var(--color-ink-3); }
+.apick__chip { display: inline-flex; align-items: center; gap: 6px; max-width: 180px; padding: 3px 8px; border-radius: 6px; background: var(--color-brand-soft); color: var(--color-brand-ink); font-size: var(--text-xs); }
+.apick__chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apick__chip button { min-height: 0; padding: 0; border: 0; background: none; font-size: 10px; color: inherit; cursor: pointer; }
+.apick__menu { position: absolute; z-index: 2; left: 0; right: 0; top: calc(100% + 4px); padding: 8px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+.apick__new { display: block; width: 100%; padding: 10px 8px; border: 0; border-bottom: 1px solid var(--color-line); background: none; font: inherit; font-size: var(--text-sm); color: var(--color-brand); text-align: left; cursor: pointer; }
+.apick__list { max-height: 264px; overflow: auto; margin-top: 4px; }
+.apick__row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.apick__row:hover { background: var(--color-surface-alt); }
+.apick__row[aria-selected="true"] { background: var(--color-brand-soft); }
+.apick__row img, .apick__row i { flex: none; width: 36px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--color-surface-alt); }
+.apick__row > span { min-width: 0; }
+.apick__row b { display: block; font-size: var(--text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apick__row small { font-size: var(--text-xs); color: var(--color-ink-3); }
+.apick__none { padding: 14px 8px; font-size: var(--text-sm); color: var(--color-ink-3); }
+
+/* Плитки выбранных фото: прогресс и причина отказа прямо на снимке. */
+.upgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); max-height: 380px; overflow: auto; padding: 12px; border: 1px dashed var(--color-line-strong); border-radius: 12px; background: var(--color-surface-alt); }
+.upgrid--over, .frows--over { border-color: var(--color-brand); background: var(--color-brand-soft); }
+.upgrid .uptile { background: var(--color-surface); font: inherit; }
+.uptile2 { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--color-surface); }
+.uptile2 img, .uptile2__blank { display: block; width: 100%; height: 100%; object-fit: cover; }
+.uptile2__pct, .uptile2__ok { position: absolute; left: 6px; bottom: 6px; padding: 1px 7px; border-radius: var(--radius-pill); background: rgb(0 0 0 / 60%); color: #fff; font-size: 11px; }
+.uptile2__ok { background: #1B6B3A; }
+.uptile2__x { position: absolute; right: 6px; top: 6px; display: grid; place-items: center; width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: #fff; color: var(--color-ink-2); box-shadow: 0 1px 3px rgb(0 0 0 / 18%); cursor: pointer; }
+.uptile2__x .lucide { width: 14px; height: 14px; }
+.uptile2--bad { outline: 1px solid #D92D20; outline-offset: -1px; background: #FEF3F2; }
+.uptile2--bad img { opacity: .25; }
+.uptile2__msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; text-align: center; font-size: 11.5px; line-height: 14px; color: #D92D20; }
+.uptile2__msg b { font-weight: 500; }
+.uptile2__msg small { color: var(--color-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uptile2--more { display: grid; place-items: center; font-size: var(--text-xs); color: var(--color-ink-3); }
+
+/* Папки массовой загрузки: строка = будущий альбом. */
+.frows { display: grid; gap: 8px; max-height: 420px; overflow: auto; padding: 0; border: 1px solid transparent; border-radius: 12px; list-style: none; }
+.frow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 12px; padding: 12px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); }
+.frow--empty { background: var(--color-surface-alt); }
+.frow__ico { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: var(--color-brand-soft); color: var(--color-brand); }
+.frow__main { flex: 1 1 220px; min-width: 0; display: grid; gap: 3px; }
+.frow__main small { font-size: var(--text-xs); color: var(--color-ink-3); }
+.frow__main small.text-danger { color: var(--color-danger); }
+.frow__warn { color: #8A5A00 !important; }
+.frow__title { display: flex; align-items: center; gap: 8px; }
+.frow__title .inp { flex: 1; min-width: 0; padding-top: 6px; padding-bottom: 6px; font-weight: 500; }
+.frow__title .inp[aria-invalid="true"] { border-color: var(--color-danger); }
+.frow__cat { flex: 0 1 190px; width: auto; }
+.frow__state { flex: none; min-width: 84px; padding-top: 8px; text-align: right; font-size: var(--text-xs); color: var(--color-ink-2); }
+.frow__ok { color: #1B6B3A; font-weight: 500; }
+.frow__retry { min-height: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--color-brand); text-decoration: underline; cursor: pointer; }
+
+/* Подтверждение сделанного поверх страницы — уходит само. */
+.toast { position: fixed; z-index: 60; left: 50%; top: 16px; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 12px 12px 12px 16px; border-radius: 14px; background: #1A1A18; color: #fff; font-size: 14px; font-weight: 500; line-height: 22px; box-shadow: 0 10px 30px rgb(0 0 0 / 25%); }
+
+@media (max-width: 859px) {
+  .frow__cat { flex: 1 1 100%; }
+  .uptile2__x { width: 32px; height: 32px; }
+  .wmgrid { grid-template-columns: repeat(3, 34px); }
+  .wmgrid button { width: 34px; height: 28px; }
+}
+
+/* --- Экран альбомов: сортировка, фильтр, действия над выбранными -----------
+   Макет 10 · Desktop · v2 — кадры «Сортировка», «Фильтр», «Фильтр применён»,
+   «Удаление — подтверждение», «Загрузка списка (скелетон)».
+   -------------------------------------------------------------------------- */
+
+.pop { position: relative; }
+.pop__btn { font-size: var(--text-sm); font-weight: 400; white-space: nowrap; }
+.pop__btn--on { background: var(--color-brand-soft); border-color: var(--color-brand); color: var(--color-brand-ink); }
+.pop__panel { position: absolute; z-index: 20; right: 0; top: calc(100% + 6px); min-width: 232px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+.popmenu { padding: 6px; }
+.popmenu__group { padding: 8px 10px 2px; font-size: 11px; color: var(--color-ink-3); }
+.popmenu button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.popmenu button:hover { background: var(--color-surface-alt); }
+.popmenu button[aria-checked="true"] { color: var(--color-brand); font-weight: 500; }
+.fpanel { width: 300px; max-width: calc(100vw - 32px); padding: 16px; }
+.fpanel__set { margin: 0 0 14px; padding: 0; border: 0; }
+.fpanel__set legend { font-size: var(--text-sm); color: var(--color-ink-2); margin-bottom: 6px; }
+.fpanel__set label { display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: var(--text-sm); cursor: pointer; }
+.fpanel__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 14px; border-top: 1px solid var(--color-line); }
+.fpanel__foot .btn { white-space: nowrap; }
+.fpanel__foot .btn--primary { height: 40px; padding: 0 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
+.fpanel__foot .btn--quiet { padding: 0; color: var(--color-brand); font-size: 13.5px; font-weight: 500; }
+.fpanel select.inp { height: 44px; border-radius: 12px; background-color: #F6F5F3; }
+
+.chips--applied { margin-bottom: 12px; }
+.chips--applied button span { color: var(--color-ink-3); font-size: 10px; }
+.chips--applied .chips__reset { border-color: transparent; background: none; color: var(--color-brand); }
+
+/* Действия с выбранным (макет 10/13 · bulk actions): синие таблетки 32px. */
+.alhead__act { display: inline-flex; align-items: center; gap: 6px; height: 32px; min-height: 0; padding: 0 14px 0 12px; border: 0; border-radius: 999px; background: var(--color-brand); font: inherit; font-size: 13.5px; font-weight: 500; color: #fff; cursor: pointer; }
+.alhead__act:hover { filter: brightness(1.08); }
+/* Плашка статуса лежит внутри кнопки, а не является ею: на телефоне
+   кнопки растут до 44px, и плашка-кнопка превращалась в круг с обрезанным
+   текстом. Так растёт только область нажатия. */
+.alcard__status { flex: none; padding: 0; border: 0; background: none; min-height: 0; font-family: inherit; cursor: pointer; }
+.alcard__status:hover .badge { filter: brightness(.96); }
+.alcard__status .badge { white-space: nowrap; }
+/* Одна строка, как в макете: статус слева, замок и ссылка справа. */
+.alcard__foot { flex-wrap: nowrap; gap: 2px; min-width: 0; }
+.alcard__ico { display: grid; place-items: center; width: 26px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: none; font-size: 12px; color: var(--color-ink-3); cursor: pointer; }
+.alcard__ico:hover { background: var(--color-surface-alt); color: var(--color-ink); }
+.alcard__ico--danger:hover { color: var(--color-danger); }
+
+.modal--sm { max-width: 480px; }
+.modal__text { padding: 12px 20px 18px; font-size: var(--text-sm); line-height: 1.55; color: var(--color-ink-2); }
+.modal__text .field { margin: 0; }
+
+.skel { display: block; background: linear-gradient(90deg, var(--color-surface-alt), #E9E7E1, var(--color-surface-alt)); background-size: 200% 100%; border-radius: 8px; animation: skel 1.3s linear infinite; }
+.skel--btn { width: 140px; height: 40px; }
+.skel--inp { flex: 1; height: 40px; }
+.skel--line { height: 12px; margin-bottom: 8px; }
+.skel--short { width: 60%; }
+.alcard__cover.skel { border-radius: 0; }
+@keyframes skel { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast__ico { color: #DFF3E4; }
+.toast__ico--err { color: #FF7366; }
+.toast__act { min-height: 0; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: rgb(255 255 255 / 12%); font: inherit; font-size: 13px; font-weight: 500; color: #fff; white-space: nowrap; cursor: pointer; }
+.toast__act:hover { background: rgb(255 255 255 / 20%); }
+.toast__close { display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; }
+
+@media (max-width: 859px) {
+  .alcard__ico { width: 36px; height: 36px; }
+  .pop__panel { right: auto; left: 0; }
+}
+
+/* --- «Поделиться» (макеты 09 и 13) ---------------------------------------- */
+.modal--share { max-width: 720px; }
+.share { display: flex; gap: 28px; padding: 24px 28px 28px; }
+.share__main { flex: 1 1 0; min-width: 0; display: grid; align-content: start; gap: 8px; }
+.share__main .field { margin-bottom: 0; }
+/* Поле ссылки с иконкой внутри (макет 09/13 · input: 44px, r12, #F6F5F3). */
+.share__inp { display: flex !important; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid #CFCCC4; border-radius: 12px; background: #F6F5F3; margin: 0 !important; }
+.share__inp .lucide { color: var(--color-ink-3); }
+.share__inp input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--color-ink); outline: none; }
+.btn--block { display: flex; justify-content: center; width: 100%; }
+.share__main .btn { height: 44px; gap: 8px; border-radius: 999px; }
+.btn--copied { background: #E3F1E7; color: #1B6B3A; }
+.share__note { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+.share__note .lucide { margin-top: 2px; }
+/* Колонка QR отделена вертикальной линией (макет 09 · divider #E4E2DC). */
+.share__qr { flex: 0 0 224px; display: grid; justify-items: center; align-content: start; gap: 12px; padding-left: 28px; border-left: 1px solid #E4E2DC; }
+.share__code { display: grid; place-items: center; width: 170px; height: 170px; padding: 12px; border: 1px solid var(--color-line); border-radius: 12px; background: #fff; }
+.share__code canvas { width: 144px; height: 144px; }
+.share__qr p { display: grid; gap: 2px; text-align: center; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+.share__qr p b { font-size: 14px; line-height: 22px; font-weight: 500; color: var(--color-ink); white-space: nowrap; }
+.btn--pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; white-space: nowrap; }
+/* Окно «Поделиться» (макет 09/13): поля 28px и у шапки, и у тела. */
+.modal--share .modal__head, .share-dialog .modal__head { padding: 28px 28px 0; }
+@media (max-width: 640px) {
+  .share { flex-direction: column; padding: 20px; }
+  .share__qr { flex-basis: auto; padding: 20px 0 0; border-left: 0; border-top: 1px solid #E4E2DC; }
+}
+
+/* --- Верхняя полоса и меню аккаунта (макет 09 · v2 · Меню аккаунта) -------
+   Только с 860px: на телефоне её роль играет полоса с бургером. */
+.app__top { display: none; }
+@media (min-width: 860px) {
+  .app__top { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin: -10px 0 16px; }
+}
+.acct { position: relative; }
+.acct__btn { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 8px 2px 2px; border: 0; border-radius: var(--radius-pill); background: none; font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+.acct__btn:hover { background: var(--color-surface-alt); }
+.acct__btn i { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--color-brand-soft); color: var(--color-brand-ink); font-size: 11px; font-style: normal; font-weight: 600; }
+.acct__menu { position: absolute; z-index: 20; right: 0; top: calc(100% + 6px); width: 240px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+.acct__menu a, .acct__menu button { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: var(--text-sm); }
+.acct__menu .lucide, .acct__btn .lucide { color: var(--color-ink-2); }
+.acct__menu a:hover { background: var(--color-surface-alt); }
+.acct__menu button { border-top: 1px solid var(--color-line); border-radius: 0 0 8px 8px; margin-top: 4px; padding-top: 10px; }
+
+/* --- Страница альбома: перетаскивание файлов (макет 13 · «Перетаскивание фото») */
+.alpage { position: relative; }
+/* Перетаскивание файлов на страницу альбома (макет 13): рабочая область
+   справа от меню заливается непрозрачным голубым с пунктирной рамкой,
+   по центру экрана — карточка. */
+.alpage__drop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: var(--color-brand-soft); border: 2px dashed var(--color-brand); border-radius: 16px; pointer-events: none; }
+.alpage__drop > div { display: grid; justify-items: center; gap: 6px; padding: 28px 40px; border-radius: 16px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(37 71 206 / 14%); text-align: center; }
+.alpage__drop i { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 6px; border-radius: 50%; background: var(--color-brand-soft); color: var(--color-brand); font-style: normal; font-size: 24px; }
+.alpage__drop b { font-size: var(--text-h3); font-weight: 600; color: var(--color-ink); }
+.alpage__drop small { color: var(--color-ink-2); font-size: var(--text-sm); }
+@media (min-width: 860px) { .alpage__drop { inset: 12px 12px 12px calc(236px + 12px); } }
+
+@keyframes toastspin { to { transform: rotate(360deg); } }
+.toast .toast__close { color: rgb(255 255 255 / 70%); }
+.popmenu button:disabled { opacity: .45; cursor: default; }
+
+/* --- Обзор: приветствие нового аккаунта (макет 09 · «Новый аккаунт») ------ */
+.welcome { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; padding: 18px 20px; margin-bottom: 20px; border-radius: var(--radius-card); background: var(--color-brand-soft); }
+.welcome h2 { font-size: var(--text-h3); font-weight: 600; color: var(--color-brand-ink); }
+.welcome p { margin-top: 4px; font-size: var(--text-sm); color: var(--color-ink-2); max-width: 60ch; }
+
+/* --- Создание альбома: сетка выбранных фото (макет 11 · «Заполнено») ------ */
+.upgrid--side { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); max-height: 320px; }
+.uptile2__cover { position: absolute; left: 6px; bottom: 6px; display: none; min-height: 0; padding: 1px 7px; border: 0; border-radius: var(--radius-pill); background: rgb(0 0 0 / 60%); color: #fff; font-size: 11px; cursor: pointer; }
+.uptile2:hover .uptile2__cover, .uptile2__cover:focus-visible { display: block; }
+@media (hover: none) { .uptile2__cover { display: block; } }
+/* С уточнением: .field > span красит любой span в поле серым. */
+.field > span.field__err { display: block; margin: 6px 0 0; font-size: var(--text-xs); color: var(--color-danger); }
+.inp[aria-invalid="true"] { border-color: var(--color-danger); }
+.uptile2--gone img { opacity: .2; }
+.uptile2--gone { outline: 1px dashed var(--color-danger); outline-offset: -1px; }
+.uptile:disabled { opacity: .5; cursor: default; }
+
+/* --- Телефон: поправки к новым окнам ---------------------------------------
+   Общее правило выше растит любую кнопку кабинета до 44×44. Для сетки
+   положений знака, крестиков на плашках и плитках это ломает раскладку:
+   ячейки сетки налезали друг на друга, крестик закрывал полплитки. Здесь
+   цели оставлены крупными, но в размер своего контейнера. Двойной :not —
+   чтобы перевесить общее правило по специфичности. */
+@media (max-width: 859px) {
+  .app .wmgrid { grid-template-columns: repeat(3, 40px); }
+  .app .wmgrid button:not(.hidden):not([hidden]) { min-width: 0; min-height: 0; width: 40px; height: 34px; }
+  .app .apick__chip button:not(.hidden):not([hidden]) { min-width: 28px; min-height: 28px; }
+  .app .uptile2__x:not(.hidden):not([hidden]) { min-width: 32px; min-height: 32px; width: 32px; height: 32px; }
+  .app .uptile2__cover:not(.hidden):not([hidden]) { min-width: 0; min-height: 26px; }
+  .app .frow__retry:not(.hidden):not([hidden]) { min-width: 0; min-height: 32px; }
+  .app .toast button:not(.hidden):not([hidden]) { min-width: 0; }
+  .upgrid .uptile { flex-direction: column; }
+  /* Панель фильтра и меню — во всю ширину полосы: привязанная к кнопке,
+     она уезжала за правый край экрана. */
+  .albar, .alpage__top { position: relative; }
+  .albar .pop, .alpage__top .pop { position: static; }
+  .albar .pop__panel, .alpage__top .pop__panel { left: 0; right: 0; }
+  .fpanel { width: auto; max-width: none; }
+}
+
+/* Предпросмотр знака в настройках повторяет выбранное положение. */
+.wmprev { padding: 10px 14px; }
+.wmprev--tl, .wmprev--tc, .wmprev--tr { align-items: start; }
+.wmprev--bl, .wmprev--bc, .wmprev--br { align-items: end; }
+.wmprev--tl, .wmprev--ml, .wmprev--bl { justify-items: start; }
+.wmprev--tr, .wmprev--mr, .wmprev--br { justify-items: end; }
+
+/* Подсказка о перестановке — только там, где есть мышь: на телефоне
+   перетаскивания плиток нет, и обещать его нельзя. */
+.alhead__tip { display: none; }
+@media (hover: hover) and (pointer: fine) { .alhead__tip { display: inline-flex; } }
+.algallery figure[draggable="true"] { cursor: grab; }
+
+.uptile2[draggable="true"] { cursor: grab; }
+.uptile2--drag { opacity: .4; }
+
+/* --- Пароль альбома (макеты 10 · «Изменить доступ», 11, 12) --------------- */
+.pwd__change { display: inline-block; margin-top: 8px; min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: var(--text-sm); font-weight: 500; color: var(--color-brand); cursor: pointer; }
+.modal__text .field + .field { margin-top: 16px; }
+.alcard__ico--on { color: var(--color-brand); }
+.trash__h { font-size: var(--text-h3); font-weight: 600; margin: 4px 0 12px; }
+.pwd__saved { display: flex; align-items: center; gap: 14px; min-height: 42px; margin-top: 8px; padding: 0 12px; border: 1px solid var(--color-line); border-radius: var(--radius-el); background: var(--color-surface-alt); letter-spacing: 2px; color: var(--color-ink-2); }
+.pwd__saved .pwd__change { margin: 0 0 0 auto; letter-spacing: 0; }
+
+/* Телефон: две карточки в ряд уже 186px, статус уходит на свою строку. */
+@media (max-width: 859px) {
+  .algrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .alcard__foot { flex-wrap: wrap; }
+  .alcard__status { flex: 1 0 100%; justify-content: flex-start; }
+}
+
+/* --- Обзор: объявления (макет 09) ----------------------------------------- */
+.ovnews { display: grid; gap: 8px; list-style: none; padding: 0; }
+.ovnews li { display: flex; gap: 14px; font-size: var(--text-sm); }
+.ovnews span { flex: none; width: 96px; color: var(--color-ink-3); }
+.ovnews a:hover { color: var(--color-brand); }
+
+/* Категории: строка дерева, на которую сейчас бросят категорию или альбом. */
+.cattree__row--drop { background: var(--color-brand-soft); box-shadow: inset 0 2px 0 var(--color-brand); }
+.cattree__row[draggable="true"] { cursor: grab; }
+
+/* --- Правки по заметкам макета --------------------------------------------- */
+.wm__warn { color: #7A5310; }
+.btn--ok { background: #1B6B3A; color: #fff; }
+.modal--form { max-width: 520px; }
+button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
+.prog--full > span { background: var(--color-danger); }
+.side__usage--warn p + p { color: #8A5A00; font-weight: 500; }
+.side__usage--full p + p { color: var(--color-danger); font-weight: 500; }
+
+/* Категории · порядок альбомов: синяя линия показывает, куда встанет альбом. */
+.alcard[data-dropbefore] { position: relative; }
+.alcard[data-dropbefore]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-brand, #2547ce);
+}
+
+/* Категории · поле в строке дерева: новая категория и переименование. */
+.cattree__edit { padding: 6px 10px; }
+.cattree__edit--sub { padding-left: 30px; }
+.cattree__editrow { display: flex; align-items: center; gap: 6px; }
+.cattree__editrow .inp { flex: 1; min-width: 0; height: 36px; padding: 0 10px; font-size: var(--text-sm); }
+.cattree__editrow .inp[aria-invalid="true"] { border-color: var(--color-danger); }
+.cattree__ok, .cattree__no { flex: none; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; font-size: 15px; cursor: pointer; }
+.cattree__ok { color: var(--color-brand); }
+.cattree__no { color: var(--color-ink-3); }
+.cattree__ok:hover, .cattree__no:hover { background: var(--color-surface-alt); }
+.cattree__err { margin: 4px 2px 0; font-size: var(--text-xs); color: var(--color-danger); }
+
+/* Категории · «Убрать из категории»: большой круглый крестик по центру
+   обложки, появляется при наведении. */
+.alcard__x { position: absolute; left: 50%; top: 0; z-index: 1; display: grid; place-items: center; width: 52px; height: 52px; margin-left: -26px; border: 0; border-radius: 50%; background: rgb(26 26 24 / 72%); color: #fff; font-size: 20px; cursor: pointer; opacity: 0; transition: opacity 0.12s; }
+/* Обложка квадратная: центр по вертикали — половина ширины карточки. */
+.alcard:has(.alcard__x) { container-type: inline-size; }
+.alcard__x { top: calc(50cqw - 26px); }
+.alcard:hover .alcard__x, .alcard__x:focus-visible { opacity: 1; }
+.alcard__x:hover { background: var(--color-danger); }
+/* На касаниях наведения нет, а постоянного крестика в макете нет
+   (14 · Tablet / Mobile): убирают через выбор и «Убрать из категории». */
+@media (hover: none) { .alcard__x { display: none !important; } }
+
+/* Пустой альбом: большая зона загрузки вместо сетки (макет 13). */
+.bigdrop { display: grid; justify-items: center; gap: 6px; width: 100%; padding: 64px 24px; border: 2px dashed var(--color-line-strong); border-radius: 16px; background: var(--color-surface); font: inherit; color: var(--color-ink); cursor: pointer; text-align: center; }
+.bigdrop:hover { border-color: var(--color-brand); background: var(--color-brand-soft); }
+.bigdrop i { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: 50%; background: var(--color-brand-soft); color: var(--color-brand); font-style: normal; font-size: 26px; }
+.bigdrop b { font-size: var(--text-h3); font-weight: 600; }
+.bigdrop span { color: var(--color-ink-2); }
+.bigdrop small { margin-top: 6px; color: var(--color-ink-3); font-size: var(--text-xs); }
+
+/* Подсказка при наведении на иконки карточки (замок, скрепка). Невидимый
+   мостик снизу держит её открытой, пока курсор идёт к ссылке внутри. */
+.tip { position: relative; display: inline-flex; }
+.tip__body { position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 20; display: none; width: max-content; max-width: 168px; padding: 8px 10px; border-radius: 8px; background: var(--color-ink); color: #fff; font-size: var(--text-xs); line-height: 1.4; text-align: left; box-shadow: 0 8px 20px rgb(0 0 0 / 18%); }
+.tip__body::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 10px; }
+.tip__body b { display: block; font-weight: 600; }
+.tip__body a { color: #9DB2FF; font-weight: 500; text-decoration: underline; }
+@media (hover: hover) { .tip:hover .tip__body, .tip:focus-within .tip__body { display: block; } }
+
+/* Кабинет не загрузился (макет 09): по центру рабочей области. */
+.loadfail { display: grid; justify-items: center; gap: 8px; max-width: 420px; margin: 18vh auto 0; text-align: center; }
+.loadfail i { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 4px; border-radius: 50%; background: #F1F0EC; color: var(--color-ink-2); font-style: normal; }
+.loadfail h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.loadfail p { color: var(--color-ink-2); font-size: 14px; margin-bottom: 4px; }
+.loadfail .btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; }
+
+/* Полоса прогресса на плитке загрузки в сетке альбома. */
+.uptile2__bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--color-brand); transition: width 0.2s; }
+
+/* Массовая загрузка · категории папки: поиск и дерево с галочками. */
+.catpick { width: 260px; padding: 10px; }
+.catpick > .inp { width: 100%; height: 36px; padding: 0 10px; font-size: var(--text-sm); }
+.catpick__list { max-height: 240px; margin-top: 8px; overflow-y: auto; }
+.catpick__list label { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; font-size: var(--text-sm); cursor: pointer; }
+.catpick__list label:hover { background: var(--color-surface-alt); }
+.catpick__list .catpick__sub { padding-left: 26px; }
+.catpick__empty { padding: 8px 4px; font-size: var(--text-sm); color: var(--color-ink-3); }
+.catpick__clear { width: 100%; margin-top: 6px; padding: 8px; border: 0; border-top: 1px solid var(--color-line); background: none; font: inherit; font-size: var(--text-xs); color: var(--color-ink-2); cursor: pointer; }
+.catpick__static { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--color-ink-2); }
+.frow__cat .pop__btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.segbar button:has(.segbar__note) { flex-direction: column; gap: 0; }
+.segbar__note { display: block; font-size: 10.5px; font-weight: 400; color: var(--color-ink-3); line-height: 1.2; }
+
+/* Страница альбома · «Изменить порядок» (планшет и телефон, макет 13).
+   С мышью есть перетаскивание — кнопка не нужна. */
+.alhead__order { display: none; }
+@media (hover: none) { .alhead__order { display: inline-flex; } }
+.algallery--order .alcard__pick { display: none; }
+.photo__handle { position: absolute; top: 6px; left: 6px; z-index: 2; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgb(26 26 24 / 72%); color: #fff; font-size: 20px; touch-action: none; cursor: grab; }
+.photo--over { outline: 2px dashed var(--color-brand); outline-offset: 2px; }
+
+/* Только для тач-экранов: с мышью порядок меняют обычным перетаскиванием. */
+.touch-only { display: none !important; }
+@media (hover: none) { .touch-only { display: flex !important; } button.touch-only { display: block !important; } }
+.cattree__handle { display: grid; place-items: center; width: 32px; height: 32px; margin: -6px 0 -6px -6px; border-radius: 8px; color: var(--color-ink-3); font-size: 18px; touch-action: none; cursor: grab; }
+
+/* Категории на планшете (макет 14 · Tablet): дерево 264 слева, альбомы
+   по 3 в ряд — раньше дерево занимало 330, и альбомы стояли по одному. */
+@media (min-width: 860px) and (max-width: 1199px) {
+  .cats { grid-template-columns: 264px 1fr; }
+  .catpane .algrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+}
+
+/* Загрузка на телефоне — на весь экран (макет 10 · Mobile): шапка с
+   крестиком, прокручиваемое содержимое и закреплённый низ с кнопками. */
+@media (max-width: 640px) {
+  .modal__back:has(.modal--sheet) { padding: 0; }
+  /* align-self: фон окна — flex-строка со stretch: шторка ровно в экран, а
+     длинная форма вылезала за белый фон при прокрутке. */
+  .modal--sheet { display: flex; flex-direction: column; align-self: flex-start; max-width: none; min-height: 100%; margin: 0; border-radius: 0; }
+  .modal--sheet > .modal__foot { position: sticky; bottom: 0; z-index: 2; margin-top: auto; background: var(--color-surface); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .modal--sheet > .modal__head { position: sticky; top: 0; z-index: 2; background: var(--color-surface); }
+  .modal--sheet .upgrid, .modal--sheet .uptiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.skel--inline { display: inline-block; vertical-align: middle; }
+.modal__back--top { z-index: 55; align-items: center; }
+
+/* Тач-экраны (макеты 10–12 · Tablet/Mobile): крестиков и «Сделать обложкой»
+   на плитке нет — нажатие на фото открывает меню из этих же действий. */
+@media (hover: none) {
+  /* !important — общее правило «.app button» для тач-целей сильнее по весу. */
+  .uptile2 .uptile2__x, .uptile2 .uptile2__cover { display: none !important; }
+  .uptile2.is-menu::after { content: ''; position: absolute; inset: 0; background: rgb(26 26 24 / 55%); }
+  .uptile2.is-menu .uptile2__cover, .uptile2.is-menu .uptile2__x { position: absolute; left: 6px; right: 6px; z-index: 1; display: block !important; width: auto !important; min-width: 0 !important; height: auto !important; min-height: 32px; padding: 6px 4px; border-radius: 8px; background: var(--color-surface); color: var(--color-ink); font-size: 11.5px; font-weight: 500; text-align: center; }
+  /* Обложка растёт вверх от середины: на узкой плитке подпись в две строки. */
+  .uptile2.is-menu .uptile2__cover { top: auto; bottom: calc(50% + 2px); line-height: 1.2; }
+  .uptile2.is-menu .uptile2__x { top: calc(50% + 2px); font-size: 0; color: var(--color-danger); }
+  .uptile2.is-menu .uptile2__x::after { content: attr(data-menu); font-size: 12px; }
+  .uptile2.is-menu .uptile2__x:only-of-type, .uptile2.is-menu .uptile2__x:first-of-type:last-of-type { top: calc(50% - 16px); }
+}
+@media (max-width: 640px) {
+  /* Узкая шапка списка фото: подсказка про порядок на телефоне не нужна —
+     там порядок меняется в своём режиме, а строка разваливалась на три. */
+  .modal .field__cnt--tip { display: none; }
+}
+.uptile2--over { outline: 2px dashed var(--color-brand); outline-offset: 2px; }
+.uptile2 .photo__handle { top: 4px; left: 4px; width: 34px; height: 34px; font-size: 17px; }
+.uptile2__retry { margin-top: 6px; padding: 3px 10px; border: 0; border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-brand); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.algallery figure[data-photo-id] { cursor: pointer; }
+
+/* Перетаскивание над зоной фото (макет 11): рамка и фон проявляются за
+   ~0,15 с, иконка «Добавить» слегка подпрыгивает; увели файлы — гаснет. */
+.upgrid, .frows { transition: border-color 0.15s ease, background-color 0.15s ease; }
+.upgrid--over .uptile i, .frows--over .uptile i { animation: dropbounce 0.6s ease-in-out infinite; }
+.alpage__drop { animation: dropfade 0.15s ease-out; }
+.alpage__drop i { animation: dropbounce 0.6s ease-in-out infinite; }
+@keyframes dropbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes dropfade { from { opacity: 0; } to { opacity: 1; } }
+.upgrid--over .uptile i, .frows--over .uptile i { display: inline-block; }
+@media (prefers-reduced-motion: reduce) {
+  .upgrid--over .uptile i, .frows--over .uptile i, .alpage__drop, .alpage__drop i { animation: none; }
+}
+.drop { transition: border-color 0.15s ease, background-color 0.15s ease; }
+.drop--over p { animation: dropbounce 0.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .drop--over p { animation: none; } }
+@media (max-width: 640px) { .upgrid, .upgrid--side { max-height: none; overflow: visible; } }
+
+/* Страница альбома на тач-экране: меню по нажатию на фото, без кнопок
+   «при наведении» (наведения нет). */
+.photo__menu { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 10px; background: rgb(26 26 24 / 55%); }
+.photo__menu button { padding: 8px 6px; border: 0; border-radius: 8px; background: var(--color-surface); font: inherit; font-size: 12.5px; font-weight: 500; color: var(--color-ink); white-space: nowrap; }
+.photo__menu .photo__menu--danger { color: var(--color-danger); }
+@media (hover: none) { .algallery .photo-tile__act { display: none !important; } }
+.touch-only-inline { display: none; }
+@media (hover: none) { .touch-only-inline { display: inline; } .hover-only { display: none; } }
+
+/* Альбомы на телефоне (макет 10 · Mobile). */
+/* На компьютере заголовка страницы в макете нет, но для чтения с экрана он
+   нужен: прячем визуально, а не display:none. */
+.mtitle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.alhead__act--narrow, .selbar { display: none !important; }
+@media (max-width: 640px) {
+  .mtitle { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; display: block; margin: 4px 0 14px; font-size: 24px; font-weight: 600; }
+  .albar > .btn { flex: 1 1 calc(50% - 5px); }
+  .albar__search { flex: 1 1 calc(100% - 108px); min-width: 0; }
+  .albar .pop__icon { display: grid; place-items: center; }
+  .albar .pop__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .albar .pop__btn { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .albar .pop__chev { display: none; }
+  .albar__search { margin: 0; }
+  .albar .pop { flex: none; }
+  .alhead__act--wide { display: none !important; }
+  .alhead__act--narrow { display: inline-flex !important; height: auto; padding: 0; background: none; color: var(--color-brand); }
+  .selbar { display: grid !important; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--color-surface); border-top: 1px solid var(--color-line); box-shadow: 0 -6px 18px rgb(0 0 0 / 8%); }
+  body:has(.selbar) .app__main { padding-bottom: 84px; }
+  .alcard__foot { flex-wrap: nowrap; }
+  .alcard__status { flex: 0 1 auto; min-width: 0; }
+  .alcard__foot .badge { padding-left: 8px; padding-right: 8px; font-size: 11px; }
+  .app .alcard__ico:not(.hidden):not([hidden]) { min-width: 32px; width: 32px; height: 32px; min-height: 32px; }
+}
+.app__bar .app__shop { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; font-weight: 600; }
+@media (max-width: 859px) { .app .alcard__edit:not(.hidden):not([hidden]) { min-width: 32px; min-height: 32px; width: 32px; height: 32px; } }
+
+/* Шапка страницы альбома: название слева, действия справа. */
+.alpage__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-items: center; }
+.alpage__head > .alpage__top { grid-column: 1; grid-row: 1; }
+.alpage__acts { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 6px; }
+.alpage__head > p { grid-column: 1 / -1; }
+.alpage__captions-m, .alhead__tip-touch { display: none !important; }
+.popmenu__link { display: block; padding: 8px 10px; border-radius: 8px; font-size: var(--text-sm); }
+.popmenu__link:hover { background: var(--color-surface-alt); }
+
+/* Страница альбома на телефоне (макет 13 · Mobile). */
+@media (max-width: 640px) {
+  .alpage__head { display: flex; flex-direction: column; align-items: stretch; }
+  .alpage__acts { order: 5; display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin: 2px 0 14px; }
+  .alpage__acts .alpage__upload { order: -1; grid-column: 1 / -1; min-height: 46px; }
+  .alpage__acts .alpage__captions { display: none !important; }
+  .alpage__captions-m { display: block !important; }
+  .alpage__top h1 { flex: 1 1 100%; font-size: 24px; }
+  .alstats { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-left: 16px; margin: 0 -16px 16px; padding: 0 16px; scrollbar-width: none; }
+  .alstats::-webkit-scrollbar { display: none; }
+  .alstats > * { flex: 0 0 72%; scroll-snap-align: start; }
+  .algallery { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .algallery .uptile { flex-direction: column; justify-content: center; gap: 2px; padding: 6px; text-align: center; font-size: 12px; }
+  .algallery .uptile i { font-size: 20px; }
+  .algallery .uptile small { font-size: 10.5px; }
+}
+@media (hover: none) {
+  .alhead__tip-touch { display: flex !important; flex-basis: 100%; order: 10; font-size: var(--text-xs); color: var(--color-ink-3); }
+  .alpage > .alhead__tip-touch { margin: 0 0 20px; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+  .alpage .alhead__order { height: 30px; min-height: 30px; padding: 0 12px 0 10px; border-color: #CFCCC4; font-size: 12.5px; line-height: 18px; }
+}
+
+/* Категории на телефоне (макет 14 · Mobile): сначала дерево, категория —
+   отдельным экраном с «‹ Категории». */
+.catpane__back { display: none; }
+@media (max-width: 640px) {
+  .cats--pane .cattree { display: none; }
+  .cats:not(.cats--pane) .catpane { display: none; }
+  .catpane__back { display: inline-flex !important; margin-bottom: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: var(--text-sm); color: var(--color-ink-2); cursor: pointer; }
+  .page__head:has(+ .page__lead) .btn--primary { width: 100%; }
+}
+@media (max-width: 640px) { div:has(> .cats--pane) > .page__head, div:has(> .cats--pane) > .page__lead { display: none; } }
+.catpane__search { max-width: 260px; }
+@media (max-width: 640px) { .catpane__search { max-width: none; flex: 1 1 100%; } }
+
+/* Обзор на телефоне (макет 09 · Mobile). */
+.ov__until { display: none; }
+@media (max-width: 640px) {
+  .ov__row > section + section { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--color-line); }
+  .ov__until { display: inline; margin-left: auto; font-size: var(--text-sm); color: var(--color-ink-3); }
+  .ov__until b { font-size: 17px; font-weight: 600; color: var(--color-brand); }
+  .ov__validity { display: none; }
+}
+@media (max-width: 640px) { .ov__sep + .ov__row > section + section { border-top: 0; padding-top: 0; } }
+.touch-hint { display: none; }
+@media (hover: none) { .touch-hint { display: block; } }
+@media (max-width: 640px) { .modal .field__row > span:first-child, .modal .field__row .btn { white-space: nowrap; } .modal .field__row { flex-wrap: wrap; row-gap: 4px; } }
+@media (max-width: 640px) { .modal--sheet .modal__foot > .hint { flex-basis: 100%; } .modal--sheet .modal__foot > .spacer { display: none; } .modal--sheet .modal__foot > .btn { flex: 1 1 0; } }
+
+/* Обзор · «Быстрый доступ» (макет 09): шесть ярлыков, иконка над подписью. */
+@media (min-width: 1100px) { .ov__row--news { grid-template-columns: 1fr 532px; } }
+.quick { display: grid; grid-template-columns: repeat(6, minmax(0, 80px)); gap: 10px; }
+.quick a { display: grid; justify-items: center; align-content: start; gap: 10px; padding: 0 2px; font-size: 12.5px; line-height: 1.3; text-align: center; color: var(--color-ink-2); }
+.quick a svg { color: var(--color-brand); }
+.quick a:hover { color: var(--color-ink); }
+@media (max-width: 640px) { .quick { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 16px; } }
+/* Планшет: панель альбомов в одну строку — поиск сжимается. */
+@media (min-width: 641px) and (max-width: 1199px) { .albar__search { flex: 1 1 120px; min-width: 120px; } }
+
+/* Иконки макета (lib/icons.tsx): в строке с текстом не сдвигаются и не сжимаются. */
+.lucide, svg.spin { flex-shrink: 0; }
+.spin { animation: toastspin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
+
+/* Строчная ошибка блока (lib/InlineError). */
+.inlerr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13.5px; line-height: 22px; font-weight: 500; color: var(--color-ink-2); }
+.inlerr .lucide { color: #D92D20; }
+.inlerr button { border: 0; padding: 0; background: none; font: inherit; color: var(--color-brand); cursor: pointer; }
+
+/* Чекбоксы (макет 10/13/14 · checkbox): квадрат 20px, r6, белый с рамкой
+   #CFCCC4; выбран — синий с белой галочкой, «частично» — с минусом. */
+:where(input[type='checkbox']) { appearance: none; -webkit-appearance: none; flex: none; width: 20px; height: 20px; margin: 0; border: 1px solid #CFCCC4; border-radius: 6px; background: #fff center / 14px no-repeat; cursor: pointer; vertical-align: middle; }
+:where(input[type='checkbox']:checked) { border-color: #2547CE; background-color: #2547CE; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.43' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+:where(input[type='checkbox']:indeterminate) { border-color: #2547CE; background-color: #2547CE; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.43' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E"); }
+:where(input[type='checkbox']:disabled) { opacity: .5; cursor: default; }
+:where(input[type='checkbox']:focus-visible) { outline: 2px solid #2547CE; outline-offset: 2px; }
+
+/* Подсказки под полями (макеты 10–13): «i» 14px серым; предупреждение и
+   ошибка — circle-alert своего цвета. Иконка — маской, как у баннеров. */
+.hint--i, .hint--warn, .hint--err, .field__err { display: flex !important; align-items: flex-start; gap: 6px; font-size: 12.5px; line-height: 18px; }
+.hint--i { color: var(--color-ink-3); }
+.hint--warn { color: #8A5A00; }
+.hint--err, .field > span.field__err { color: #D92D20; }
+.hint--i::before, .hint--warn::before, .hint--err::before, .field__err::before { content: ''; flex: none; width: 14px; height: 14px; margin-top: 2px; background: currentColor; -webkit-mask: var(--hint-ico) center / contain no-repeat; mask: var(--hint-ico) center / contain no-repeat; }
+.hint--i { --hint-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E"); }
+.hint--warn, .hint--err, .field__err { --hint-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"); }
+
+/* Поле пароля альбома (макет 10 · «Изменить доступ»): замок слева, глаз
+   справа, серый фон #F6F5F3, высота 44, r12. */
+.pwdfield { display: flex; align-items: center; gap: 8px; height: 44px; margin-top: 10px; padding: 0 12px; border: 1px solid #CFCCC4; border-radius: 12px; background: #F6F5F3; color: var(--color-ink-3); }
+.pwdfield:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-soft); }
+.pwdfield--err { border-color: #D92D20; }
+.pwdfield input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; font: inherit; font-size: 14px; color: var(--color-ink); outline: none; }
+.pwdfield input::placeholder { color: var(--color-ink-3); }
+.pwdfield__eye { display: grid; place-items: center; padding: 4px; margin-right: -4px; border: 0; background: none; color: var(--color-ink-3); cursor: pointer; }
+.pwdfield__eye:hover { color: var(--color-ink); }
+.pwd__saved.pwdfield span { flex: 1; color: var(--color-ink); letter-spacing: 2px; }
+
+/* Кнопки внизу окон (макеты 10–14 · modal footer): таблетки. */
+.modal__foot .btn, .confirm__foot .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding-left: 18px; padding-right: 18px; }
+
+/* Значок подтверждения (макет 10 · «Удалить N альбомов?»): круг 48px #FBEEDA. */
+.confirm__ico { display: grid; place-items: center; width: 48px; height: 48px; margin: 28px 0 -8px 20px; border-radius: 50%; background: #FBEEDA; color: #8A5A00; }
+
+/* Шкала лимита в окне «Достигнут лимит» (макет 11 · quota). */
+.quota { display: grid; gap: 8px; margin: 0 20px 4px; padding: 14px 16px; border-radius: 12px; background: #F6F5F3; }
+.quota p { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; color: var(--color-ink-2); }
+.quota b { font-weight: 600; color: #8A5A00; }
+.quota__track { display: block; height: 6px; border-radius: 999px; background: #E4E2DC; overflow: hidden; }
+.quota__track span { display: block; height: 100%; border-radius: 999px; background: #8A5A00; }
+
+/* Поля в окнах альбома (макет 11/12 · input): серые, r12, рамка #CFCCC4. */
+.modal .inp:not(select) { background-color: #F6F5F3; border-color: #CFCCC4; border-radius: 12px; }
+.modal select.inp { background-color: #F6F5F3; border-color: #CFCCC4; border-radius: 12px; }
+/* «Удалить все» над сеткой фото (макет 10–12): синяя ссылка с корзиной. */
+.modal .btn--quiet.btn--sm { display: inline-flex; align-items: center; gap: 6px; padding: 0; color: var(--color-brand); font-weight: 500; }
+
+/* Шапка альбома (макет 13): кнопки-таблетки с иконками и круглая «⋯». */
+.alpage__acts .btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px 0 16px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
+.alpage__acts .btn--ghost { border-color: #CFCCC4; color: var(--color-ink-2); }
+.pop__btn--icon { width: 42px; height: 42px; padding: 0 !important; justify-content: center; border-radius: 50% !important; }
+.alpage__crumbs a { display: inline-flex; align-items: center; gap: 2px; }
+.alpage__top .badge--link { display: inline-flex; align-items: center; gap: 4px; }
+/* Пункты меню с иконками (макет 13 · Меню «Ещё», 09 · меню аккаунта). */
+.popmenu button, .popmenu .popmenu__link { display: flex; align-items: center; gap: 10px; color: var(--color-ink); font-size: 14px; }
+.popmenu .lucide { color: var(--color-ink-2); }
+.popmenu__sep { margin: 6px 6px; border: 0; border-top: 1px solid #E4E2DC; }
+
+/* Плитка фото (макет 13): «Обложка» — тёмная плашка слева внизу,
+   «Сделать обложкой» — полоса во всю ширину, удалить — белый кружок с x. */
+.photo__badge { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 6px; background: rgb(26 26 24 / 72%); color: #fff; font-size: 12px; font-weight: 500; }
+.photo__setcover { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 8px; border: 0; background: rgb(26 26 24 / 72%); color: #fff; font: inherit; font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; }
+.photo__del { position: absolute; right: 8px; top: 8px; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: var(--color-ink-2); box-shadow: 0 1px 3px rgb(0 0 0 / 18%); cursor: pointer; }
+.photo__del:hover { color: #D92D20; }
+.alstat b.alstat__wm { font-size: 26px; color: var(--color-ink); }
+
+.alert__x { display: grid; place-items: center; padding: 2px; border: 0; background: none; color: var(--color-ink-2); cursor: pointer; }
+.alhead__loading { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; color: var(--color-brand); }
+/* Плитка «Ошибка сети» (макет 11/13): затемнение, белые иконка и текст,
+   «Повторить» — белая таблетка. */
+.uptile2--net::after { content: ''; position: absolute; inset: 0; background: rgb(26 26 24 / 62%); }
+.uptile2--net .uptile2__msg { z-index: 1; color: #fff; }
+.uptile2__retry { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 3px 10px; border: 0; border-radius: 999px; background: #fff; color: var(--color-ink); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer; }
+.uptile2__x { z-index: 2; }
+
+/* Дерево категорий (макет 14 · categories tree): строки 44/40px, r10,
+   перетаскивание и шеврон слева, «⋯» у выбранной строки. */
+.cattree { padding: 8px; border-color: #E4E2DC; border-radius: 16px; overflow: visible; }
+.cattree__sum { padding: 6px 12px 8px; font-size: 13px; color: var(--color-ink-3); border-bottom: 0; }
+.cattree__item { position: relative; }
+.cattree__row { gap: 6px; min-height: 44px; padding: 0 10px 0 6px; border-radius: 10px; font-size: 14px; }
+.cattree__row--sub { min-height: 40px; padding-left: 30px; font-size: 13.5px; color: var(--color-ink-2); }
+.cattree__row[aria-current="true"] { background: #E9ECFB; color: #1B2F86; font-weight: 500; }
+.cattree__item--on .cattree__row { padding-right: 38px; }
+.cattree__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+.cattree__row .cnt { font-size: 13px; font-weight: 400; color: var(--color-ink-3); }
+.cattree__handle { width: 20px; height: 24px; margin: 0; color: var(--color-ink-3); }
+.cattree__chev { display: grid; place-items: center; flex: none; width: 16px; height: 16px; color: var(--color-ink-2); }
+.cattree__eye, .cattree__only { display: inline-flex; align-items: center; gap: 4px; color: var(--color-ink-3); }
+.cattree__only { font-size: 12px; font-weight: 400; }
+.cattree__badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; background: #F1F0EC; font-size: 11.5px; font-weight: 400; color: var(--color-ink-2); white-space: nowrap; }
+.cattree__more { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.cattree__more .pop__btn--icon { width: 28px; height: 28px; border: 0; background: none; color: #1B2F86; }
+.cattree__more .pop__panel { left: auto; right: 0; min-width: 232px; }
+.cattree__none { margin-top: 8px; padding-top: 8px; border-top: 1px solid #E4E2DC; }
+.cattree__add { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; font-size: 14px; font-weight: 500; }
+/* Переключатель в пункте «На главной» (макет 14 · Меню «⋯» · toggle). */
+.mswitch { position: relative; flex: none; width: 32px; height: 19px; margin-left: auto; border-radius: 10px; background: #CFCCC4; }
+.mswitch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.mswitch--on { background: var(--color-brand); }
+.mswitch--on::after { transform: translateX(13px); }
+.popmenu__danger, .popmenu__danger .lucide { color: #D92D20 !important; }
+/* Правая панель категории (макет 14 · category details). */
+.catpane { padding: 24px; border-color: #E4E2DC; border-radius: 16px; }
+.catpane__head h2 { display: flex; align-items: center; gap: 6px; font-size: 22px; }
+.catpane__rename { display: grid; place-items: center; padding: 2px; border: 0; background: none; color: var(--color-ink-2); cursor: pointer; }
+.catpane__rename:hover { color: var(--color-ink); }
+.catpane__head .btn { height: 42px; }
+.catpane__back { align-items: center; gap: 2px; }
+.catpane__search { display: inline-flex; align-items: center; gap: 8px; width: 260px; height: 40px; padding: 0 12px; border-radius: 10px; background: #F6F5F3; color: var(--color-ink-3); }
+.catpane__search[hidden] { display: none; }
+.catpane__search input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--color-ink); outline: none; }
+.catpane__search input::placeholder { color: var(--color-ink-3); }
+.cattree__item--on { z-index: 5; }
+.cattree__more .pop__panel { z-index: 30; }
+.popmenu button[role='menuitemcheckbox'] { color: var(--color-ink); font-weight: 400; }
+.popmenu button[role='menuitemcheckbox'] svg { color: var(--color-ink-2); }
+
+/* «Сохранено» под формами — с circle-check, как успешные уведомления. */
+p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
+.alstat__link { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 500; color: var(--color-brand); cursor: pointer; }
+
+/* Макет 14 · «Добавить альбомы» и «Без категории — добавить в категории»:
+   места чипсами, дерево категорий с поиском, строки альбомов с превью. */
+.modal--pick { max-width: 560px; }
+.modal--pick .modal__head p.truncate { max-width: 440px; }
+.pick { color: var(--color-ink); }
+.pick__label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--color-ink-2); }
+.pick__places { position: relative; }
+.pick__field { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 8px 12px 8px 8px; border: 1px solid var(--color-line); border-radius: 10px; background: var(--color-surface); cursor: pointer; }
+.pick__field.is-open, .pick__field:has(.pick__toggle:focus-visible) { border-color: var(--color-brand); box-shadow: 0 0 0 3px rgb(37 71 206 / 14%); outline: none; }
+.pick__field > svg, .pick__toggle { flex: none; margin-left: auto; color: var(--color-ink-2); }
+.pick__toggle { display: grid; place-items: center; padding: 0; border: 0; background: none; cursor: pointer; }
+.pick__toggle:focus-visible { outline: none; }
+.pick__chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pick__ph { padding-left: 4px; font-size: var(--text-sm); color: var(--color-ink-3); }
+.placechip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 10px; border-radius: 8px; background: var(--color-brand-soft); color: var(--color-brand-ink); font-size: 13px; font-weight: 500; }
+.placechip button { display: inline-flex; padding: 2px; border-radius: 4px; color: inherit; }
+.placechip button:hover { background: rgb(27 47 134 / 10%); }
+.pick__shade { position: fixed; inset: 0; z-index: 5; }
+.pick__drop { position: absolute; z-index: 6; top: calc(100% + 6px); left: 0; right: 0; padding: 8px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 14%); }
+.placetree__search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--color-surface-alt); color: var(--color-ink-3); }
+.placetree__search input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: var(--text-sm); color: var(--color-ink); outline: none; }
+.placetree__search:focus-within { box-shadow: inset 0 0 0 1px var(--color-line-strong); }
+.placetree__list { max-height: 300px; margin-top: 8px; overflow-y: auto; }
+.placetree__row { display: flex; align-items: center; gap: 4px; min-height: 38px; padding: 0 8px; border-radius: 8px; }
+.placetree__row:hover { background: var(--color-page); }
+.placetree__row.is-on { background: var(--color-brand-soft); }
+.placetree__row--sub { padding-left: 32px; }
+.placetree__row label { display: flex; flex: 1; align-items: center; gap: 10px; min-height: 38px; font-size: var(--text-sm); color: var(--color-ink-2); cursor: pointer; }
+.placetree__row label b { font-weight: 500; color: var(--color-ink); }
+.placetree__chev { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 24px; height: 38px; color: var(--color-ink-2); }
+/* Крестик чипса и стрелка дерева — цель 28–38px, а не общие 44px для
+   касаний: иначе чипс раздувается, а флажки в дереве расползаются. */
+.app .placechip button.placechip__x { min-width: 24px; min-height: 28px; margin-right: -6px; }
+.app .placetree__row button.placetree__chev { min-width: 24px; min-height: 38px; }
+.placetree__empty, .pick__empty { padding: 12px 8px; font-size: var(--text-sm); color: var(--color-ink-2); }
+.pick__list { display: grid; gap: 2px; max-height: 320px; margin-top: 12px; overflow-y: auto; }
+.pickrow { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+.pickrow:hover { background: var(--color-page); }
+.pickrow.is-on { background: var(--color-brand-soft); }
+.pickrow__img { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 8px; background: var(--color-surface-alt); color: var(--color-ink-3); }
+.pickrow__img img { width: 100%; height: 100%; object-fit: cover; }
+.pickrow__main { display: grid; min-width: 0; }
+.pickrow__main b { overflow: hidden; font-size: 14px; font-weight: 500; color: var(--color-ink); white-space: nowrap; text-overflow: ellipsis; }
+.pickrow__main span { overflow: hidden; font-size: 12.5px; color: var(--color-ink-3); white-space: nowrap; text-overflow: ellipsis; }
+
+/* Шапка категории (макет 14): название с карандашом и счётчики слева,
+   кнопки справа; на планшете кнопки под счётчиками, на телефоне — в ряд
+   на всю ширину. Альбомы — без рамки: обложка, название, категории. */
+.catpane__head { align-items: center; margin-bottom: 18px; }
+.catpane__title { min-width: 0; }
+.catpane__title .catpane__meta { margin: 4px 0 0; }
+.catpane__acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.catpane .alhead { padding-bottom: 0; border-bottom: 0; }
+.catpane .alcard { border: 0; border-radius: 0; overflow: visible; background: none; }
+.catpane .alcard__cover { width: auto; overflow: hidden; border-radius: 10px; }
+.catpane .alcard__count { display: none; }
+.catpane .alcard__body { padding: 8px 0 0; }
+.catpane .alcard__body b { font-size: 14px; }
+.catpane .alcard__cat { margin-bottom: 0; font-size: 12.5px; color: var(--color-ink-3); }
+.alhead__order { align-items: center; gap: 6px; height: 32px; min-height: 0; padding: 0 12px; border: 1px solid #C9D1F5; border-radius: 999px; background: var(--color-surface); font: inherit; font-size: 13px; font-weight: 500; color: var(--color-brand); cursor: pointer; }
+@media (max-width: 1199px) {
+  .catpane__head .spacer { display: none; }
+  .catpane__acts { flex-basis: 100%; }
+}
+@media (max-width: 640px) {
+  .catpane { min-height: 0; padding: 0; border: 0; background: none; }
+  .catpane__acts { flex-wrap: nowrap; }
+  .catpane__acts .btn { flex: 1 1 auto; justify-content: center; padding-left: 12px; padding-right: 12px; font-size: 14px; }
+  .catpane .algrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .modal--pick .modal__foot { flex-wrap: nowrap; gap: 8px; }
+  .modal--pick .modal__foot .btn { padding-left: 14px; padding-right: 14px; white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  .catpane__search { background: var(--color-surface); box-shadow: inset 0 0 0 1px var(--color-line); }
+}
+
+/* «⋯» в дереве: на компьютере и планшете — у выбранной строки, на телефоне —
+   у каждой; ручки перетаскивания на телефоне — только в «Изменить порядок»
+   (макет 14 · Mobile · Основной / Изменить порядок категорий). */
+.cattree__item:not(.cattree__item--on) > .cattree__more { display: none; }
+@media (max-width: 640px) {
+  .cattree__item:not(.cattree__item--on) > .cattree__more { display: block; }
+  .cats:not(.cats--pane) .cattree__more .pop__btn--icon { color: var(--color-ink-2); }
+  .cattree__item .cattree__row { padding-right: 38px; }
+  .cats:not(.cats--pane) .cattree__row[aria-current="true"] { background: none; color: inherit; font-weight: inherit; }
+  .cats:not(.cats--pane) .cattree__item--on { z-index: auto; }
+  .cats:not(.cats--pane) .cattree__item:has(.pop__panel) { z-index: 5; }
+}
+@media (hover: none) { button.cattree__add.touch-only { display: flex !important; } }
+/* «⋯» в шапке альбома стоит у правого края — меню раскрывается влево,
+   иначе на телефоне и планшете уезжало за экран. */
+.alpage__acts .pop__panel { left: auto; right: 0; }
+/* На касаниях перетаскивают только в режиме «Изменить порядок» —
+   вне его ручек нет (макет 14 · Tablet / Mobile). */
+@media (hover: none) { .cattree:not(.cattree--ordering) .cattree__handle { display: none; } }
+/* Планшет: «Выбрать все», «Изменить порядок» и поиск — одной строкой. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .catpane .alhead { flex-wrap: nowrap; }
+  .cats { grid-template-columns: 264px minmax(0, 1fr); }
+  .catpane .catpane__search { flex: 1 1 120px; width: auto; min-width: 0; }
+  .catpane .alhead .selall, .catpane .alhead__order { flex: none; white-space: nowrap; }
+  .catpane .alhead .selall { margin-right: 4px; }
+  .catpane .alhead .spacer { display: none; }
+}
+
+/* Страница альбома на телефоне (макет 13 · Mobile): в крошках только
+   «‹ Альбомы», счётчика над сеткой нет — он в шапке; подсказка с «i»;
+   в режиме порядка «Готово» — синяя кнопка, «Выбрать все» недоступно. */
+.alhead__order[aria-pressed="true"] { border-color: var(--color-brand); background: var(--color-brand); color: #fff; }
+.selall:has(input:disabled) { opacity: .45; cursor: default; }
+@media (max-width: 640px) {
+  .alpage__crumbs > span { display: none; }
+  .alhead .alhead__count { display: none; }
+  .alhead__tip-touch { align-items: flex-start; gap: 6px; }
+  .alhead__tip-touch .lucide { flex: none; margin-top: 1px; }
+}
+/* Ручка порядка (макет 13 · Mobile · Изменить порядок): белый кружок
+   в правом верхнем углу; область нажатия остаётся 40px. */
+.photo__handle { top: 2px; right: 2px; left: auto; width: 40px; height: 40px; border-radius: 50%; background: none; color: var(--color-ink); }
+.photo__handle::before { content: ''; position: absolute; inset: 8px; z-index: -1; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 22%); }
+.photo__handle .lucide { width: 14px; height: 14px; }
+.uptile2 .photo__handle { top: 0; right: 0; left: auto; }
+
+/* Поиск альбомов с лупой (макет 10): рамка у обёртки, поле без своей. */
+.albar__search { display: flex; align-items: center; gap: 8px; border: 1px solid #E4E2DC; background: var(--color-surface); color: var(--color-ink-3); cursor: text; }
+.albar__search:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-soft); }
+.albar__search .inp { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; box-shadow: none; font-size: inherit; }
+.albar__search .inp:focus { box-shadow: none; }
+
+/* Сортировка и фильтр шторкой снизу на телефоне (макет 10 · Mobile). */
+.pop__shade, .pop__sheethead { display: none; }
+.popmenu__check { margin-left: auto; color: var(--color-brand) !important; }
+@media (max-width: 640px) {
+  .pop__shade { display: block; position: fixed; inset: 0; z-index: 60; background: rgb(26 26 24 / 40%); }
+  .albar .pop__panel--sheet, .pop__panel--sheet { position: fixed; z-index: 61; left: 0; right: 0; top: auto; bottom: 0; max-height: 85vh; overflow-y: auto; min-width: 0; padding: 8px 8px calc(12px + env(safe-area-inset-bottom)); border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / 18%); }
+  .pop__panel--sheet::before { content: ''; display: block; width: 40px; height: 4px; margin: 0 auto 8px; border-radius: 2px; background: #D9D7D1; }
+  .pop__sheethead { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px 12px; }
+  .pop__sheethead b { font-size: 18px; font-weight: 600; }
+  .pop__sheetx { display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--color-ink-2); cursor: pointer; }
+  .pop__panel--sheet .popmenu button { justify-content: flex-start !important; min-height: 44px; padding: 0 12px; }
+  .alhead:has(.alhead__act--narrow) > .spacer, .alhead:has(.alhead__act--narrow) > span:last-child { display: none; }
+  .alhead .alhead__act--narrow { margin-left: auto; }
+  .pop__panel--sheet .popmenu__group { padding: 10px 12px 2px; font-size: 12px; }
+  .pop__panel--sheet .fpanel { width: auto; padding: 4px 12px 0; }
+  .selbar .btn { gap: 8px; }
+}
+/* Лупа у поиска — только на телефоне (макет 10: на компьютере и планшете
+   её нет). Планшет: кнопки первой строкой, поиск с сортировкой и
+   фильтром — второй. */
+@media (min-width: 641px) { .albar__search > .lucide { display: none; } }
+.albar__break { display: none; }
+@media (min-width: 641px) and (max-width: 1199px) {
+  .albar__break { display: block; flex-basis: 100%; height: 0; }
+  .albar__search { flex: 1 1 0; min-width: 0; margin-left: 0; }
+}
+.pop__panel--sheet .popmenu > div:not(:first-child):has(> .popmenu__group) { margin-top: 6px; padding-top: 6px; border-top: 1px solid #E4E2DC; }
+
+/* Меню телефона и планшета (макет 09 · Mobile · «Меню открыто»): карточка
+   справа под бургером, пункты с иконками, «Выйти» за чертой. */
+.app__bar { position: sticky; }
+.app__bar > button[aria-expanded="true"] { background: var(--color-brand-soft); color: var(--color-brand); }
+.app__menu { position: absolute; z-index: 40; top: calc(100% - 6px); right: 12px; width: 232px; padding: 6px; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-surface); box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+.app__menu a, .app__menu > button { display: flex; align-items: center; justify-content: flex-start !important; gap: 10px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 14px; color: var(--color-ink); cursor: pointer; }
+.app__menu a:hover, .app__menu > button:hover { background: var(--color-page); }
+.app__menu a[aria-current="page"] { background: var(--color-brand-soft); color: var(--color-brand-ink); font-weight: 500; }
+.app__menu .nav__ico { flex: none; width: 18px; height: 18px; color: var(--color-ink-2); }
+.app__menu a[aria-current="page"] .nav__ico { color: var(--color-brand-ink); }
+.app__menu hr { margin: 6px 4px; border: 0; border-top: 1px solid var(--color-line); }
+.app__aside .nav__ico { display: none; }
+.photo__state { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; text-align: center; color: var(--color-ink-2); }
+.photo__state--bad { font-weight: 500; color: var(--color-danger); }
+/* Плитка «Загрузить фото» (макет 13): плюс и две строки по центру,
+   а не разнесённые по высоте сеткой. */
+.uptile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; }
+.uptile[hidden] { display: none; }
+.uptile span { font-size: 14px; color: var(--color-ink); }
+.uptile small { font-size: 12.5px; color: var(--color-ink-3); }
+.ovcard i { overflow: hidden; }
+.ovcard i img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* «Быстрый доступ» (макет 09): иконки тёмные; на планшете — 3×2 рядом с
+   объявлениями, на телефоне — 3×2 с иконкой в серой плашке. */
+.quick a svg { color: var(--color-ink); }
+.ovnews span { width: 82px; }
+@media (min-width: 641px) and (max-width: 1099px) {
+  .ov__row--news { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .quick { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
+}
+@media (max-width: 640px) {
+  .quick { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
+  .quick a svg { box-sizing: content-box; padding: 12px; border-radius: 12px; background: var(--color-surface-alt); }
+}
+/* Планшет (макет 09 · Tablet): «Сведения» и «Тариф» — в две колонки,
+   кнопки — под счётчиками и сроком. */
+@media (min-width: 641px) and (max-width: 1099px) {
+  .ov__row--top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ov__row--top .ov__head { margin-bottom: 8px; }
+  .ov__row--top section > .flex { flex-direction: column; align-items: flex-start; }
+}
+@media (hover: none) { .modal .btn.drop__pick, .modal .btn.drop__pick .lucide { border-color: var(--color-brand); background: var(--color-brand); color: #fff; } .modal .btn.drop__pick .lucide { background: none; } }
+
+/* Страница альбома на планшете (макет 13 · Tablet): название с бейджами
+   в строку, ниже счётчики и описание, кнопки — отдельной строкой слева;
+   фото по четыре. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .alpage__head { display: flex; flex-direction: column; align-items: stretch; }
+  .alpage__acts { order: 5; justify-content: flex-start; margin: 8px 0 16px; }
+  .algallery { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .alhead .alhead__count { display: none; }
+}
+.alhead__tip-touch { gap: 6px; align-items: flex-start; }
+.alhead__tip-touch .lucide { flex: none; margin-top: 1px; }
+/* «Удалить все» и «Изменить порядок» над фото в окнах — на телефоне
+   обведёнными «пилюлями» с иконкой (макет 11/12 · Mobile), на компьютере
+   — ссылкой (макет 11 · Desktop). */
+@media (hover: none) { button.touch-only.phbar__btn { display: inline-flex !important; } }
+@media (max-width: 640px) {
+  .modal .btn.phbar__btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; min-height: 0; padding: 0 12px; border: 1px solid #C9D1F5; border-radius: 999px; background: var(--color-surface); font-size: 13px; font-weight: 500; color: var(--color-brand); }
+  .modal .btn.phbar__btn .lucide { width: 14px; height: 14px; }
+  .modal .btn.phbar__btn[aria-pressed="true"] { border-color: var(--color-brand); background: var(--color-brand); color: #fff; }
+}
+@media (max-width: 640px) {
+  .app .modal button.btn.phbar__btn { min-height: 32px; min-width: 0; padding: 0 10px; gap: 5px; font-size: 12.5px; }
+}
+@media (max-width: 640px) {
+  .modal .field__row:has(.phbar__btn) { flex-wrap: nowrap; gap: 6px; }
+  .modal .field__row .phbar__btn.touch-only { order: 2; }
+}
+/* 641–859px с касанием: общее правило «кнопка ≥44px, inline-flex по
+   центру» показывало «‹ Категории» рядом с деревом и ставило статус
+   альбома по центру отдельной строкой. */
+@media (min-width: 641px) { .app .catpane button.catpane__back { display: none; } }
+.app .alcard__foot button.alcard__status { justify-content: flex-start; min-height: 0; min-width: 0; }
+.app .cattree button.cattree__add { justify-content: flex-start; }
+/* Нижние кнопки шторки: «Загрузить 2 фото» переносилась на две строки. */
+@media (max-width: 640px) { .modal--sheet .modal__foot > .btn { white-space: nowrap; padding-left: 12px; padding-right: 12px; } .modal--sheet .modal__foot > .btn--primary { flex-grow: 1.4; } }
+@media (hover: hover) { .touch-hint { display: none !important; } }
+/* «⋯» категории на телефоне — шторкой (макет 14 · Mobile · Меню «⋯»);
+   transform у обёртки сделал бы её контейнером для position: fixed. */
+@media (max-width: 640px) {
+  .cattree__more { top: 0; bottom: 0; display: flex; align-items: center; transform: none; }
+  .cattree__item:has(.pop__panel--sheet) { z-index: 70; }
+}
+/* Поиск в категории (макет 14 · «Поиск — ничего не найдено»): крестик
+   в поле, «Сбросить поиск» — ссылкой. */
+.catpane__search:focus-within { box-shadow: inset 0 0 0 1px var(--color-brand); }
+.app .catpane__search button.catpane__clear { display: grid; place-items: center; min-width: 0; min-height: 0; padding: 2px; border: 0; background: none; color: var(--color-ink-3); cursor: pointer; }
+.app .emptybox button.emptybox__link { min-height: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 500; color: var(--color-brand); cursor: pointer; }
+@media (max-width: 640px) { .cats:not(.cats--pane) .cattree__item:has(.pop__panel--sheet), .cats .cattree__item:has(.pop__panel--sheet) { z-index: 70; } }
+.catpane--empty { display: grid; place-items: center; min-height: 420px; }
+
+/* Категории на телефоне (макет 14 · Mobile): заголовок, описание, потом
+   «Новая категория»; пустое состояние — карточкой под деревом. */
+@media (max-width: 640px) {
+  div:has(> .cats) { display: flex; flex-direction: column; }
+  div:has(> .cats) > * { order: 4; }
+  div:has(> .cats:not(.cats--pane)) > .page__head { display: contents; }
+  div:has(> .cats) > .page__head > h1 { order: 0; margin-bottom: 4px; }
+  div:has(> .cats) > .page__head > .spacer { display: none; }
+  div:has(> .cats) > .page__lead { order: 1; margin-bottom: 14px; }
+  div:has(> .cats) > .page__head > .btn { order: 2; width: 100%; justify-content: center; margin-bottom: 16px; }
+  div:has(> .cats) > .cats { order: 3; }
+  .cats:not(.cats--pane) .catpane.catpane--empty { display: grid; min-height: 0; margin-top: 0; padding: 40px 20px; border: 1px solid #E4E2DC; border-radius: 16px; background: var(--color-surface); }
+}
+.apick__new { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.segbar button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* Кнопки-иконки: svg блочный, без grid он вставал к левому краю кнопки
+   (✓/✕ в поле категории — на 7px мимо центра, крестик чипса — на 4px). */
+.cattree__ok, .cattree__no { display: grid; place-items: center; padding: 0; }
+.app .placechip button.placechip__x { display: inline-grid; place-items: center; padding: 0; min-height: 24px; }
+
+/* «Удаленное»: «Вернуть» и «Удалить» — две одинаковые кнопки в ряд; на
+   втором шаге «Точно удалить?» — красная на весь ряд. */
+.tracts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; }
+.alcard__body .tracts { padding: 8px 0 0; }
+.app .tracts button.tracts__btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; min-height: 32px; height: 32px; padding: 0 8px; border: 1px solid var(--color-line-strong); border-radius: 999px; background: var(--color-surface); font: inherit; font-size: 12.5px; font-weight: 500; color: var(--color-ink); white-space: nowrap; cursor: pointer; }
+.app .tracts button.tracts__btn:hover:not(.tracts__btn--armed) { background: var(--color-page); }
+.app .tracts button.tracts__btn--armed:hover { background: #8F001A; border-color: #8F001A; }
+.app .tracts button.tracts__btn--danger { color: var(--color-danger); }
+.app .tracts button.tracts__btn--armed { grid-column: 1 / -1; border-color: var(--color-danger); background: var(--color-danger); color: #fff; }
+
+/* Переключатели (Фото/ГБ, Доступ, Пароль): белая подложка не прыгает,
+   а плавно едет к выбранной кнопке. Колонки равные, подложка — одна на
+   весь переключатель (::before), сдвигается на свою ширину + зазор. */
+.seg, .segbar { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; isolation: isolate; }
+.segbar { display: grid; }
+.seg::before, .segbar::before {
+  content: ''; position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 3px;
+  width: calc((100% - 6px - 2px) / 2);
+  border: 1px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  transition: transform .22s cubic-bezier(.2, .8, .2, 1), opacity .15s;
+  opacity: 0;
+}
+.seg:has(> :nth-child(3))::before, .segbar:has(> :nth-child(3))::before { width: calc((100% - 6px - 4px) / 3); }
+.seg:has(> [aria-pressed="true"])::before, .segbar:has(> [aria-pressed="true"])::before { opacity: 1; }
+.seg:has(> :nth-child(2)[aria-pressed="true"])::before, .segbar:has(> :nth-child(2)[aria-pressed="true"])::before { transform: translateX(calc(100% + 2px)); }
+.seg:has(> :nth-child(3)[aria-pressed="true"])::before, .segbar:has(> :nth-child(3)[aria-pressed="true"])::before { transform: translateX(calc(200% + 4px)); }
+.seg button, .segbar button { transition: color .2s; }
+.seg button[aria-pressed="true"], .segbar button[aria-pressed="true"] { background: transparent; border-color: transparent; }
+@media (prefers-reduced-motion: reduce) { .seg::before, .segbar::before { transition: none; } }
+/* Ползунок — тоже input[type=checkbox]: глобальный стиль чекбокса давал
+   ему рамку 1px, и кружок прижимался к нижнему и правому краю. */
+.switch input { border: 0; background-image: none; }
+/* Обзор: заголовки секций одной высоты — с переключателем «Фото/ГБ»
+   заголовок хранилища был выше «За последние 7 дней», и числа 179 и 225
+   с подписями под ними стояли на разных линиях. */
+.ov__head { min-height: 36px; }
+.ov__row > section > p:first-of-type { line-height: 1.1; }
+
+/* «Вкладки»: карточки вкладок и разделов, стрелки порядка — иконками по
+   центру круглых кнопок. */
+.tabblock { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); }
+.tabblock__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--color-line); }
+.secblock { padding: 12px; border-radius: 12px; background: var(--color-page); }
+.movebtns { display: inline-flex; gap: 2px; }
+.app .movebtns button { display: grid; place-items: center; width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--color-ink-2); cursor: pointer; }
+.app .movebtns button:hover:not(:disabled) { background: var(--color-surface-alt); color: var(--color-ink); }
+.app .movebtns button:disabled { opacity: .35; cursor: default; }
+
+/* Место перетаскиваемого фото (макет 11/13 · «Изменить порядок»):
+   пунктир 1.5px, светло-синяя заливка, само фото — в «поднятой» копии. */
+/* Содержимое не прячем, а накрываем непрозрачным слоем: Chrome обрывает
+   HTML5-перетаскивание, если под курсором в момент старта что-то пропало
+   (dragstart → сразу dragend, без drop). */
+.is-dragging, [data-lifted] { position: relative; opacity: 1 !important; outline: 0 !important; }
+[data-lifted] > * { visibility: hidden; }
+.is-dragging::after, [data-lifted]::after { content: ''; position: absolute; inset: 0; z-index: 5; border: 1.5px dashed var(--color-brand); border-radius: 10px; background: var(--color-brand-soft); visibility: visible; pointer-events: none; }
+.uptile2--drag.is-dragging { opacity: 1; }
+/* Поднятая копия при перетаскивании пальцем (usePointerReorder). */
+.drag-ghost { position: fixed; z-index: 1000; margin: 0; pointer-events: none; transform-origin: center; transition: none; will-change: translate; }
+
+/* Боковое меню — Golos Text 15/24 (макет 09–14 · Desktop). */
+.app__aside nav a, .app__menu a, .app__menu > button { font-family: var(--font-nav); }
+
+/* ==========================================================================
+   Каркас v2 — по макету (09–14 · Desktop 1440 / Tablet 1024), сверено
+   аудитом с Figma: боковая панель 232 (планшет 184) #F1F0EC, отступ 20 (16),
+   логотип Inter 18/600, через 24 — меню: пункты 48, r12, отступ 12, шаг 4,
+   Golos 15/24 #62615C, активный #E9ECFB / #1B2F86 / 500; «Использовано» —
+   прижато к низу, белое, обводка #E4E2DC, r16, отступ 16, шаг 12, полоса 6.
+   Контент белый; шапка 64 с нижней границей, отступ 0 32 (24), шаг 16;
+   тело страницы — отступ 32 48 (28), между блоками 20.
+   ========================================================================== */
+@media (min-width: 860px) {
+  .app { grid-template-columns: 184px minmax(0, 1fr); background: var(--color-surface); }
+  .app__aside.side { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 16px; overflow-y: auto; background: #F1F0EC; border-right: 1px solid #E4E2DC; }
+  .app__main { padding: 0; background: var(--color-surface); }
+  .app__top { display: flex; justify-content: flex-end; align-items: center; gap: 16px; height: 64px; margin: 0; padding: 0 24px; border-bottom: 1px solid #E4E2DC; background: var(--color-surface); }
+  .app__body { padding: 28px; }
+}
+@media (min-width: 1200px) {
+  .app { grid-template-columns: 232px minmax(0, 1fr); }
+  .app__aside.side { padding: 20px; }
+  .app__top { padding: 0 32px; }
+  .app__body { padding: 32px 48px; }
+}
+.side__logo { margin: 0 0 24px; padding: 0; font-family: var(--font-sans); font-size: 18px; font-weight: 600; line-height: normal; color: #1A1A18; }
+.side nav { display: flex; flex-direction: column; gap: 4px; }
+.side nav a { display: flex; align-items: center; gap: 11px; min-height: 48px; padding: 12px; border-radius: 12px; font-family: var(--font-nav); font-size: 15px; line-height: 24px; font-weight: 400; color: #62615C; }
+.side nav a:hover { color: var(--color-ink); }
+.side nav a[aria-current="page"] { background: #E9ECFB; color: #1B2F86; font-weight: 500; }
+.side__usage { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding: 15px; border: 1px solid #E4E2DC; border-radius: 16px; background: #fff; }
+.side__usage p, .side__usage p + p { margin: 0; font-size: 12.5px; line-height: 20px; color: #62615C; }
+.side__usage .prog { height: 6px; margin: 0; border-radius: 3px; background: #F1F0EC; }
+.side__usage .prog > span { border-radius: 3px; background: #2547CE; }
+/* Шапка: переключатель аккаунта и «Мой профиль» (макет 09 · v2). */
+.app__top .acct__btn { gap: 8px; height: 40px; min-height: 40px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 14px; line-height: 22px; font-weight: 500; color: #1A1A18; }
+.app__top .acct__btn i { width: 32px; height: 32px; font-size: 11px; line-height: 14px; font-weight: 600; background: #E9ECFB; color: #1B2F86; }
+.app__top .acct__btn .lucide { width: 16px; height: 16px; color: #62615C; }
+.app__top > a.btn { height: 40px; min-height: 40px; padding: 8px 16px; border: 1px solid #CFCCC4; border-radius: 999px; font-size: 13.5px; line-height: 21.6px; font-weight: 500; color: #62615C; }
+
+/* ==========================================================================
+   «Альбомы» v2 — по макету 10 · Desktop (аудит Figma).
+   ========================================================================== */
+/* Бейджи статусов: 26, пилюля, 4/10, Inter 11/17.6 500. */
+.badge { display: inline-flex; align-items: center; height: 26px; padding: 4px 10px; border-radius: 999px; font-size: 11px; line-height: 17.6px; font-weight: 500; white-space: nowrap; }
+.badge--live { background: #DFF3E4; color: #1B6B3A; }
+.badge--link { background: #FBEEDA; color: #8A5A00; }
+.badge--draft { background: #F1F0EC; color: #62615C; }
+/* «С паролем» (13): 24, #F1F0EC, 3/10/3/8, замок через 5, 12/18 500. */
+.badge--lock { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 3px 10px 3px 8px; border-radius: 999px; background: #F1F0EC; font-size: 12px; line-height: 18px; font-weight: 500; color: #62615C; }
+@media (min-width: 860px) {
+  /* Панель: слева «Создать альбом» и «Загрузить фото» (шаг 8), справа поиск,
+     сортировка, фильтр (шаг 12). */
+  .albar { align-items: center; gap: 8px; min-height: 48px; margin-bottom: 20px; }
+  .albar > .btn { gap: 8px; height: 42px; min-height: 42px; padding: 10px 18px 10px 16px; border-radius: 999px; font-size: 13.5px; line-height: 21.6px; font-weight: 500; }
+  .albar > .btn--primary { border: 0; }
+  .albar > .btn--ghost { height: 44px; min-height: 44px; padding: 9px 17px 9px 15px; border: 1px solid #CFCCC4; color: #62615C; }
+  .albar > .btn .lucide { width: 18px; height: 18px; }
+  .albar__search { flex: 0 0 320px; height: 48px; margin-left: auto; margin-right: 4px; padding: 11px 13px; border: 1px solid #E4E2DC; border-radius: 12px; background: #fff; }
+  .albar__search .inp { font-size: 15px; line-height: 24px; color: #1A1A18; }
+  .albar__search .inp::placeholder { color: #1A1A18; }
+  .albar .pop__btn { gap: 8px; height: 40px; min-height: 40px; padding: 9px 13px; border: 1px solid #CFCCC4; border-radius: 999px; background: #fff; font-size: 12.5px; line-height: 20px; font-weight: 500; color: #62615C; }
+  .albar .pop__btn .pop__icon .lucide { width: 16px; height: 16px; color: #62615C; }
+  .albar .pop__btn .pop__chev .lucide { width: 14px; height: 14px; color: var(--color-ink-3); }
+  .albar .pop + .pop { margin-left: 4px; }
+}
+/* Строка выбора: граница снизу, 14 под ней, «Выбрать все» 13.5/21.6. */
+.alhead { min-height: 0; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid #E4E2DC; font-size: 13.5px; line-height: 21.6px; }
+.selall { gap: 10px; font-size: 13.5px; line-height: 21.6px; font-weight: 400; color: #62615C; }
+/* Сетка и карточка: 172 (6 в ряд при 1440), шаг 16; карточка белая,
+   обводка #E4E2DC, r12; низ 10/12/12/12, шаг 2. */
+.algrid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+.alcard { border: 1px solid #E4E2DC; border-radius: 12px; background: #fff; }
+.alcard__body { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; }
+.alcard__body > b { font-size: 14px; line-height: 22px; font-weight: 500; color: #1A1A18; }
+.alcard__cat { margin: 0; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+.alcard__foot { display: flex; align-items: center; justify-content: space-between; height: 26px; }
+.alcard__foot > .spacer { display: none; }
+.alcard__ico { width: 16px; height: 16px; color: var(--color-ink-3); }
+.alcard__ico .lucide { width: 16px; height: 16px; }
+.alcard__count { right: 8px; bottom: 8px; padding: 2px 8px; border-radius: 999px; background: rgb(26 26 24 / 72%); font-size: 11.5px; line-height: 17px; font-weight: 500; color: #fff; }
+.alcard__pick { left: 10px; top: 10px; }
+/* Обложка в макете 172×172 при карточке 172 с внутренней обводкой: шире содержимого на 2px
+   (правый край срезается), высота карточки 266. Выбранная карточка обводку не меняет. */
+.alcard__cover { width: calc(100% + 2px); }
+.alcard:has(input:checked) { border-color: #E4E2DC; }
+.alcard__edit { right: 10px; top: 10px; width: 20px; height: 20px; border: 1px solid #CFCCC4; border-radius: 6px; background: #fff; color: #62615C; }
+.alcard__edit .lucide { width: 12px; height: 12px; }
+
+/* ==========================================================================
+   Кнопки v2 — по макету (статистика всех «button / …» в Figma): все —
+   «пилюли», Inter 13.5/21.6 500, иконка через 8; основная #2547CE / белый,
+   вторичная — без заливки, обводка 1px #CFCCC4, текст #62615C; высота 40
+   (8/16), в панелях 42–44, в окнах 46 — задаётся по месту.
+   ========================================================================== */
+.btn { gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 999px; font-size: 13.5px; line-height: 21.6px; font-weight: 500; }
+.btn--ghost { background: transparent; color: #62615C; border-color: #CFCCC4; }
+.btn--ghost:hover:not(:disabled) { border-color: #90908A; color: var(--color-ink); }
+.btn--sm { min-height: 40px; padding: 0 16px; font-size: 13.5px; }
+.btn--primary { padding: 0 16px; border: 0; }
+.btn--quiet { border-radius: 999px; }
+/* Заголовки секций («Сведения об альбомах», «Тариф», «Объявления»…):
+   Inter 17/22 600, трекинг −0.17. */
+.ov__head h2 { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.17px; }
+
+/* ==========================================================================
+   «Обзор» v2 — по макету 09 · Desktop (аудит Figma): тело 36/48, строки и
+   разделители через 28; строка — две колонки 540 и 532, шаг 40.
+   ========================================================================== */
+.counts span { font-size: 14px; line-height: normal; font-weight: 400; color: var(--color-ink-3); }
+.counts b { font-size: 22px; line-height: normal; font-weight: 600; letter-spacing: -0.3px; color: #2547CE; }
+.ovsec__validity { font-size: 14px; line-height: normal; color: var(--color-ink-3); }
+.ovsec__validity b { font-size: 18px; font-weight: 500; color: #2547CE; }
+.ovsec__link { padding-left: 8px; font-size: 13.5px; line-height: 21.6px; font-weight: 500; color: #2547CE; }
+.ovsec__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ovsec__info { display: flex; flex-direction: column; gap: 8px; }
+.ovsec__info .ov__head { min-height: 0; margin: 0; }
+@media (min-width: 1200px) {
+  .app__body:has(.ovsec) { padding: 36px 48px; }
+  .ov__row { gap: 40px; }
+  .ov__row--top { grid-template-columns: 540px 532px; }
+  .ovsec { display: flex; align-items: center; gap: 28px; }
+  .ov__sep { margin: 0; }
+}
+
+/* Строки 2–3 «Обзора»: секция — колонка, шаг 16 (у «Быстрого доступа» 20);
+   строка заголовка 34 без своего поля; большое число 52/600/−1.5. */
+.ov__row:not(.ov__row--top) > section { display: flex; flex-direction: column; gap: 16px; }
+.ov__row:not(.ov__row--top) > section > .ov__head { min-height: 34px; margin: 0; }
+.ov__row--news > section > .ov__head { min-height: 22px; }
+.ov__row--news > section:has(.quick) { gap: 20px; }
+.bignum { font-size: 52px; line-height: normal; font-weight: 600; letter-spacing: -1.5px; color: #2547CE; }
+/* «Фото / ГБ» (макет 09): 34, #F1F0EC, отступ 3, шаг 2; сегменты по
+   содержимому 4/12, 12.5/18 500; выбранный — белый с обводкой #E4E2DC,
+   невыбранный — #90908A. Подложка — по --seg-x/--seg-w (useSegThumb). */
+.seg.seg--fit { display: inline-flex; gap: 2px; height: 34px; padding: 3px; border-radius: 999px; background: #F1F0EC; }
+.seg.seg--fit button { padding: 4px 12px; border: 1px solid transparent; font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--color-ink-3); }
+.seg.seg--fit button[aria-pressed="true"] { color: #1A1A18; }
+.seg.seg--fit::before { left: 0; width: var(--seg-w, 0); top: 3px; bottom: 3px; transform: translateX(var(--seg-x, 3px)) !important; border-color: #E4E2DC; box-shadow: none; transition: transform .22s cubic-bezier(.2, .8, .2, 1), width .22s cubic-bezier(.2, .8, .2, 1); }
+.ov__row--top { align-items: start; }
+.ov__head a { font-size: 13.5px; line-height: 21.6px; font-weight: 500; }
+.ovnews li, .ovnews span, .ovnews a { font-size: 13.5px; line-height: 21.6px; }
+.ovnews li { gap: 12px; }
+.ovnews span { width: 74px; color: var(--color-ink-3); }
+.ovnews a { color: #62615C; }
+.ov__metrics, .ov__metrics * { font-size: 13.5px; line-height: 21.6px; }
+.bignum + span { font-size: 16px; line-height: normal; color: var(--color-ink-3); }
+.quick a { gap: 10px; padding: 0; font-size: 12.5px; line-height: 17px; color: #62615C; }
+
+/* ==========================================================================
+   Окна v2 — по макету (все «Модалка / …», «Диалог / …» Desktop): r20, тень
+   0 24 56 /18%, отступ 28, шаг 24; заголовок 20/26 600, подзаголовок
+   13.5/20 #90908A через 4; крестик 36 (иконка 20 #62615C); тело — колонки
+   через 28; низ — граница сверху и 20 над кнопками (44, 0/18, шаг 10).
+   Подтверждения: 460, отступ 28/28/24/28, шаг 20, круг 48 #FBEEDA с
+   иконкой 24 #8A5A00, заголовок 18/24 600, текст 14/21 #62615C через 6,
+   кнопки 46/44 справа, без границы.
+   ========================================================================== */
+@media (min-width: 641px) {
+  .modal { display: flex; flex-direction: column; gap: 24px; max-width: 880px; padding: 28px; border-radius: 20px; box-shadow: 0 24px 56px rgb(0 0 0 / 18%); }
+  .modal__head { padding: 0; }
+  .modal__head h2 { font-size: 20px; line-height: 26px; font-weight: 600; color: #1A1A18; }
+  .modal__head p { margin-top: 4px; font-size: 13.5px; line-height: 20px; color: var(--color-ink-3); }
+  .modal__x { margin: 0; color: #62615C; }
+  .modal__x .lucide { width: 20px; height: 20px; }
+  .modal__body { gap: 28px; padding: 0; }
+  .modal__foot { gap: 10px; padding: 20px 0 0; border-top: 1px solid #E4E2DC; }
+  .modal__foot .btn { height: 44px; min-height: 44px; padding: 0 18px; }
+  .modal__foot .btn--ghost { padding: 0 18px; }
+  .modal__foot > .hint, .modal__foot > p { font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+  .modal--form { max-width: 520px; }
+  .modal--share { max-width: 720px; }
+  .modal--pick { max-width: 560px; gap: 16px; padding: 24px; }
+  /* подтверждения */
+  .modal.modal--sm { max-width: 460px; gap: 20px; padding: 28px 28px 24px; }
+  .modal--sm .confirm__ico { display: grid; place-items: center; width: 48px; height: 48px; margin: 0; border-radius: 999px; background: #FBEEDA; color: #8A5A00; }
+  .modal--sm .confirm__ico .lucide { width: 24px; height: 24px; }
+  .modal--sm .modal__head h2 { font-size: 18px; line-height: 24px; }
+  .modal--sm .modal__head + .modal__text { margin-top: -14px; }
+  .modal--sm .modal__text { padding: 0; font-size: 14px; line-height: 21px; color: #62615C; }
+  .modal--sm .modal__foot { padding: 0; border-top: 0; }
+  .modal--sm .modal__foot .btn { height: 44px; min-height: 44px; padding: 0 18px; }
+  .modal--sm .modal__foot .btn--ghost { height: 46px; min-height: 46px; padding: 0 18px; }
+}
+
+/* Меню сортировки и панель фильтра — по кадрам «10 · Сортировка / Фильтр».
+   Обводки в макете внутренние: CSS-отступ = отступ макета − 1px рамки. */
+@media (min-width: 641px) {
+  .pop__panel:has(> .fpanel) { border-radius: 16px; }
+  .fpanel { display: flex; flex-direction: column; gap: 18px; width: 298px; padding: 18px; }
+  .fpanel .field { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+  .fpanel .field > span, .fpanel__set legend { margin: 0; padding: 0; font-size: 13px; line-height: 18px; font-weight: 600; color: #62615C; }
+  .fpanel__set legend { margin-bottom: 10px; }
+  .fpanel select.inp { height: 44px; padding: 0 13px; border: 1px solid #CFCCC4; font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .fpanel__set { margin: 0; }
+  .fpanel__set label { min-height: 22px; font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .fpanel__set label + label { margin-top: 10px; }
+  .fpanel__set input[type='checkbox'] { width: 18px; height: 18px; border-radius: 5px; background-size: 12px; }
+  .fpanel__foot { padding-top: 16px; }
+  .fpanel__foot .btn { font-size: 13.5px; line-height: 22px; }
+  .fpanel__foot .btn.btn--quiet { min-height: 0; padding: 0; border: 0; }
+  .fpanel__foot .btn--primary { height: 40px; min-height: 40px; padding: 0 16px; }
+}
+@media (min-width: 641px) {
+  .albar .pop__panel:has(> .popmenu) { min-width: 232px; }
+  .albar .popmenu { padding: 6px; }
+  .albar .popmenu__group { margin: 0; padding: 6px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--color-ink-3); }
+  .albar .popmenu button { justify-content: space-between; min-height: 36px; padding: 7px 10px 7px 12px; font-size: 14px; line-height: 22px; }
+  .albar .popmenu button:hover { background: #F1F0EC; }
+  .albar .popmenu > div:not(:first-child):has(> .popmenu__group)::before { content: ''; display: block; height: 1px; margin: 6px; background: #E4E2DC; }
+}
+
+/* Поля в окнах — по «field / …» макетов 10–12: между полями 18, внутри поля 8;
+   подпись 12.5/18 500 #62615C; поле 44, r12, #F6F5F3, рамка #CFCCC4, текст 14/22;
+   сегменты 42 (3 вокруг, 2 между), пункт 13/20 500. */
+@media (min-width: 641px) {
+  .modal .field { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+  .modal .field + .field { margin-top: 18px; }
+  .modal .field > span:not(.field__err), .modal .field__row, .modal .field > span.field__row { margin: 0; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal .field__row > span:first-child { font-size: 12.5px; color: #62615C; }
+  .modal .field .inp:not(textarea) { height: 44px; }
+  .modal .field .inp { padding-left: 14px; padding-right: 14px; border: 1px solid #CFCCC4; border-radius: 12px; background-color: #F6F5F3; font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .modal .field textarea.inp { padding-top: 10px; padding-bottom: 10px; }
+  .modal .field .hint { margin: 0; }
+  .modal .segbar { min-height: 42px; padding: 3px; gap: 2px; }
+  .modal .segbar button { min-height: 36px; padding: 7px 12px; font-size: 13px; line-height: 20px; font-weight: 500; }
+  .modal .segbar::before { box-shadow: none; }
+  .modal .pwdfield { margin-top: 0; padding: 0 14px; }
+  .modal .pwdfield .lucide { width: 16px; height: 16px; }
+  .modal--access .modal__text { display: flex; flex-direction: column; padding: 0; font-size: 14px; line-height: 22px; }
+}
+
+/* Окна в макете центрированы по области контента, не по всему экрану:
+   центр по x = сайдбар + половина контента (кадры 10–14, все размеры окон). */
+@media (min-width: 860px) { .app .modal__back { padding-left: 204px; } }
+@media (min-width: 1200px) { .app .modal__back { padding-left: 252px; } }
+@media (min-width: 641px) { .modal--access .modal__foot .btn--ghost { height: 46px; min-height: 46px; } }
+
+/* «Новый альбом» / «Редактировать альбом» — по «Модалка / Новый альбом» (11, 12):
+   колонки 380 и 416 через 28; слева подпись, зона фото (растягивается на
+   высоту формы) и подсказка про форматы через 8; справа поля через 18. */
+@media (min-width: 860px) {
+  .modal--sheet .modal__body:not([style]) { grid-template-columns: minmax(0, 380fr) minmax(0, 416fr); }
+  .modal--sheet .modal__body > div:first-of-type:not([hidden]) { display: flex; flex-direction: column; gap: 8px; }
+  .modal--sheet .modal__body > div:first-of-type > .field__row { margin: 0; }
+  .modal--sheet .modal__body > div:first-of-type > .hint { margin: 0; }
+  .modal--sheet .drop { flex: 1; gap: 12px; padding: 24px; }
+  .modal--sheet .drop p { font-size: 15px; line-height: 22px; font-weight: 600; margin-bottom: -8px; }
+  .modal--sheet .drop small { font-size: 13.5px; line-height: 20px; }
+  .modal--sheet .drop small:last-child { font-size: 12.5px; line-height: 18px; }
+  .modal--sheet .drop .btn { height: 42px; min-height: 42px; padding: 0 16px 0 14px; line-height: 22px; }
+  .modal--sheet .drop .btn .lucide { width: 16px; height: 16px; }
+  .modal .field__cnt { font-size: 12.5px; line-height: 18px; font-weight: 400; color: var(--color-ink-3); }
+  .modal .req { color: #D92D20; }
+  .modal .field textarea.inp { height: 92px; }
+  .modal .wm { gap: 14px; }
+  .modal .wm__label { margin-bottom: 8px; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal .wm__info { color: #62615C; }
+  .modal .wm .switch { min-height: 44px; gap: 10px; font-size: 14px; line-height: 20px; color: #1A1A18; }
+  .modal .wm .switch input { width: 40px; height: 24px; border-radius: 12px; }
+  .modal .wm .switch input::after { left: 3px; top: 3px; width: 18px; height: 18px; box-shadow: 0 1px 3px rgb(0 0 0 / 18%); }
+  .modal .wmgrid { grid-template-columns: repeat(3, 30px); gap: 4px; padding: 4px; border: 1px solid #CFCCC4; border-radius: 9px; background: #F1F0EC; }
+  .modal .wmgrid button { position: relative; width: 30px; height: 23px; border: 1px solid #E4E2DC; border-radius: 5px; background: #fff; }
+  .modal .wmgrid button[aria-checked="true"] { border-color: #2547CE; background: #2547CE; }
+  .modal .wmgrid button[aria-checked="true"]::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #fff; }
+}
+@media (min-width: 641px) { .modal .field + .wm { margin-top: 18px; } }
+
+/* Колонка фото в окнах альбома (11, 12 · «photos box»): рамка-пунктир r16,
+   внутри сетка 3 × 112 через 8 (прокручивается) и подсказка про порядок через 12.
+   На узких экранах обёртка прозрачна — раскладка прежняя. */
+.upbox { display: contents; }
+.upbox__hint { display: none !important; }
+.field__num { font-weight: 400; color: var(--color-ink-3); }
+.uptile2__up { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: rgb(26 26 23 / 50%); color: #fff; pointer-events: none; }
+.uptile2__up b { font-size: 12.5px; line-height: 18px; font-weight: 500; }
+.uptile2__up i { width: 75%; height: 4px; border-radius: 2px; background: linear-gradient(#fff, #fff) 0 0 / var(--p, 0%) 100% no-repeat, rgb(255 255 255 / 35%); }
+@media (min-width: 860px) {
+  .modal--sheet .upbox { display: flex; flex-direction: column; gap: 12px; flex: 1 1 0; min-height: 0; contain: size; padding: 12px; border: 1px dashed #CFCCC4; border-radius: 16px; background: #F6F5F3; transition: border-color .15s ease, background-color .15s ease; }
+  .modal--sheet .upbox:has(> .upgrid--over) { border-color: var(--color-brand); background: var(--color-brand-soft); }
+  /* max-content: иначе при прокрутке ряды плиток с overflow:hidden сжимались
+     до 17px и плитки налезали друг на друга. */
+  .modal--sheet .upbox > .upgrid { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; grid-auto-rows: max-content; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; overflow: auto; scrollbar-width: thin; scrollbar-color: #CFCCC4 transparent; }
+  .modal--sheet .upbox__hint { display: flex !important; justify-content: center; margin: 0; }
+  .modal .field__row { align-items: center; gap: 16px; }
+  .modal .field__row > .whitespace-nowrap { font-weight: 500; }
+  .modal .phbar__btn { gap: 5px; min-height: 0; height: auto; padding: 0; border: 0; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #2547CE; }
+  .modal .phbar__btn .lucide { width: 14px; height: 14px; }
+  .modal .upgrid .uptile { gap: 6px; border: 1px dashed #CFCCC4; border-radius: 10px; background: #fff; color: var(--color-ink-3); }
+  .modal .upgrid .uptile span { font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--color-ink-3); }
+  .modal .upgrid .uptile i { display: grid; font-size: 20px; }
+  .modal .uptile2 { border-radius: 10px; }
+  .modal .uptile2__pct { left: 6px; bottom: 6px; padding: 2px 8px; background: rgb(26 26 23 / 72%); font-size: 11.5px; line-height: 17px; font-weight: 500; }
+  .modal .uptile2__x { right: 6px; top: 6px; width: 24px; height: 24px; box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
+  .modal .uptile2__cover { left: 0; right: 0; bottom: 0; height: 28px; padding: 0 2px; border-radius: 0; background: rgb(26 26 23 / 72%); font-size: 11.5px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+}
+
+/* «Загрузить фото» — по «Модалка / Загрузить фото» (10 · Desktop), приведённой к 1:1
+   (в макете вставлена с масштабом ×1.38): 760, отступы 24/28, шаг 20; вкладки 46
+   (4 вокруг и между, r12), вкладка 38 r9, активная — белая с тенью 0 1 3 /8%,
+   14/20 600; поле альбомов 46 r10; зона 230; низ без границы, кнопки через 8. */
+@media (min-width: 641px) {
+  .modal.modal--upload { max-width: 760px; gap: 20px; padding: 24px 28px; }
+  .modal--upload .modal__head h2 { line-height: 28px; }
+  .modal--upload .modal__head { align-items: center; }
+  .modal--upload .modal__x { width: 28px; height: 28px; min-height: 0; }
+  .modal--upload .updlg__tabs { padding: 0; }
+  .modal--upload .updlg__tabs .segbar { min-height: 46px; padding: 4px; gap: 4px; border-radius: 12px; background: #F1F0EC; }
+  .modal--upload .updlg__tabs .segbar::before { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px - 4px) / 2); border: 0; border-radius: 9px; box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
+  .modal--upload .updlg__tabs .segbar:has(> :nth-child(2)[aria-pressed="true"])::before { transform: translateX(calc(100% + 4px)); }
+  .modal--upload .updlg__tabs .segbar button { min-height: 38px; padding: 9px 0; border: 0; border-radius: 9px; font-size: 14px; line-height: 20px; font-weight: 500; color: #62615C; }
+  .modal--upload .updlg__tabs .segbar button[aria-pressed="true"] { font-weight: 600; color: #1A1A18; }
+  .modal--upload .updlg__body { display: flex; flex-direction: column; gap: 20px; padding: 0; }
+  .modal--upload .updlg__top { gap: 20px; margin: 0; }
+  .modal--upload .apick > .wm__label, .modal--upload .wm__label { margin-bottom: 8px; font-size: 13px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal--upload .wm > div:has(.wmgrid button:disabled) > .wm__label { color: var(--color-ink-3); }
+  .modal--upload .apick__field { min-height: 46px; padding: 0 11px 0 14px; border: 1px solid #CFCCC4; border-radius: 10px; background: #fff; font-size: 14px; line-height: 20px; }
+  .modal--upload .apick__ph { color: var(--color-ink-3); }
+  .modal--upload .apick__field > .lucide:last-child { width: 18px; height: 18px; }
+  .modal--upload .switch input:not(:checked) { background: #CFCCC4; }
+  .modal--upload .switch:has(input:not(:checked)) > span { color: #62615C; }
+  .modal--upload .drop { min-height: 230px; height: 230px; padding: 15px 24px; }
+  .modal--upload .updlg__body > .hint { margin: 0; font-size: 12.5px; line-height: 18px; }
+  .modal--upload .modal__foot { gap: 8px; padding: 4px 0 0; border-top: 0; }
+  .modal--upload .modal__foot > .hint, .modal--upload .modal__foot > p { font-size: 13.5px; line-height: 20px; color: #62615C; }
+  .modal--upload .modal__foot .btn--primary { padding: 0 18px 0 16px; }
+}
+@media (min-width: 641px) {
+  .albar .pop__panel--sheet .popmenu > div:not(:first-child):has(> .popmenu__group) { margin-top: 0; padding-top: 0; border-top: 0; }
+  .albar .pop__panel:has(> .fpanel) { top: calc(100% + 8px); }
+  .albar .pop__btn[aria-expanded="true"] { border-color: #2547CE; color: #1A1A18; }
+}
+@media (min-width: 641px) { .albar .pop__btn.pop__btn--on { border-color: #2547CE; background: #E9ECFB; color: #2547CE; } }
+
+/* Страница альбома — по «13 · Desktop · Stone Island · осень»: крошки 13.5/20
+   (ссылка 500 #90908A, «/» #CFCCC4, текущий #62615C) через 20; шапка — слева
+   название 28/34 (бейджи через 12), строка 13.5/20 #90908A и описание 14/22
+   через 10, справа кнопки 44 через 8; счётчики — три карточки r16 через 12;
+   строка выбора без счётчика; плитки: бейдж и крестик в 10 от края. */
+@media (min-width: 641px) {
+  .alpage__crumbs { gap: 6px; margin-bottom: 20px; font-size: 13.5px; line-height: 20px; color: #62615C; }
+  .alpage__crumbs a { gap: 6px; font-weight: 500; color: var(--color-ink-3); }
+  .alpage__crumbs > span:first-of-type { color: #CFCCC4; }
+  .alpage__top { gap: 12px; margin: 0 0 10px; }
+  .alpage__top h1 { font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: 0; }
+  .alpage__meta { margin: 0 0 10px; font-size: 13.5px; line-height: 20px; color: var(--color-ink-3); }
+  .alpage__desc { margin: 0; font-size: 14px; line-height: 22px; color: #62615C; }
+  .alpage__head { margin-bottom: 20px; }
+  .alpage__acts { gap: 8px; }
+  .alpage__acts .btn { height: 44px; min-height: 44px; line-height: 22px; }
+  .alpage__acts .pop__btn--icon { width: 44px; height: 44px; min-height: 44px; padding: 0; }
+  .alstats { gap: 12px; margin-bottom: 20px; }
+  .alstat { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; padding: 16px 20px; border: 1px solid #E4E2DC; border-radius: 16px; background: #fff; }
+  .alstat > span { flex: 1 0 100%; margin-bottom: 6px; font-size: 13px; line-height: 18px; color: var(--color-ink-3); }
+  .alstat b, .alstat b.alstat__wm { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: 0; }
+  .alstat em, .alstat__link { margin: 0; font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--color-ink-3); }
+  .alstat em:has(.up), .alstat .up { color: #1B6B3A; font-weight: 500; }
+  .alstat__link { color: #2547CE; }
+  .algallery .uptile { gap: 8px; padding: 12px; border: 1px dashed #CFCCC4; border-radius: 12px; background: #F6F5F3; color: #62615C; }
+  .algallery .uptile i, .algallery .uptile i .lucide { width: 22px; height: 22px; font-size: 22px; }
+  .algallery .uptile span { font-size: 13.5px; line-height: 20px; font-weight: 500; color: #62615C; }
+  .algallery .uptile small { font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+  .algallery .photo__badge { left: 10px; bottom: 10px; padding: 2px 8px; border-radius: 999px; background: rgb(26 26 23 / 72%); font-size: 11.5px; line-height: 17px; font-weight: 500; }
+  .algallery .photo__del { right: 10px; top: 10px; width: 24px; height: 24px; min-height: 0; box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
+  .algallery .photo__del .lucide { width: 14px; height: 14px; }
+  .algallery .photo__setcover { display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 4px; background: rgb(26 26 23 / 72%); font-size: 12.5px; line-height: 18px; font-weight: 500; }
+  .algallery .alcard__pick { left: 10px; top: 10px; }
+}
+@media (min-width: 1200px) {
+  .alpage__head { grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
+  .alpage__acts { grid-column: 2; grid-row: 1 / span 3; align-self: start; margin: 0; }
+  .alpage__head > p { grid-column: 1; }
+  .alpage .alhead__count { display: none; }
+  .alpage .alhead__tip { color: var(--color-ink-3); line-height: 22px; }
+}
+
+/* «Поделиться альбомом» (13 · Desktop): 480, отступы окна 28 — без своих
+   отступов у шапки и тела; поле 44 (иконка 16 в 15 от края), кнопка во всю
+   ширину 44 с иконкой 18, подсказка с замком 14. */
+@media (min-width: 641px) {
+  .modal.share-dialog .modal__head, .modal.share-dialog .share { padding: 0; }
+  .modal.modal--sharealb { max-width: 480px; }
+  .share__main .field { gap: 8px; }
+  .share__inp { padding: 0 14px; }
+  .share__inp .lucide { width: 16px; height: 16px; color: var(--color-ink-3); }
+  .share__inp input { font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .share__main .btn { height: 44px; min-height: 44px; font-size: 13.5px; line-height: 22px; }
+  .share__main .btn .lucide { width: 18px; height: 18px; }
+  .share__note .lucide { width: 14px; height: 14px; margin-top: 2px; }
+}
+/* Меню «Ещё» на странице альбома (13 · «Меню / Ещё»): 240, пункты 40 (9/12),
+   иконка 18 через 10, текст 14/22 #1A1A18. */
+@media (min-width: 641px) {
+  .alpage__acts .pop__panel:has(> .popmenu) { min-width: 240px; }
+  .alpage__acts .popmenu { padding: 6px; }
+  .alpage__acts .popmenu button, .alpage__acts .popmenu .popmenu__link { gap: 10px; min-height: 40px; padding: 9px 12px; font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .alpage__acts .popmenu button:hover, .alpage__acts .popmenu .popmenu__link:hover { background: #F1F0EC; }
+  .alpage__acts .popmenu .lucide { width: 18px; height: 18px; }
+  .alpage__acts .popmenu__sep { margin: 6px; }
+}
+/* «Редактировать альбом» со страницы альбома (без колонки фото) — 540 (13 · Desktop). */
+@media (min-width: 641px) { .modal.modal--form.modal--sheet { max-width: 540px; } }
+
+/* «Категории» — по «14 · Desktop · Основной»: заголовок 24/32 и подпись 14/20
+   через 4, кнопка по центру блока; дерево 360 и панель через 24; строки дерева
+   через 2 (категория 44, подкатегория 40, ручка и стрелка 16 через 6, «⋯» 18 в
+   10 от края); панель: имя 20/28, строка 13.5/20 через 4, фильтры-чипы 36,
+   строка выбора 36 с поиском 250×36 #F1F0EC, сетка 4 × 157 через 16. */
+@media (min-width: 860px) {
+  .app__body:has(> div > .cats) .page__head { align-items: flex-start; margin-bottom: 4px; }
+  .app__body:has(> div > .cats) .page__head h1 { font-size: 24px; line-height: 32px; letter-spacing: 0; }
+  .app__body:has(> div > .cats) .page__head .btn--primary { height: 42px; min-height: 42px; margin: 7px 0 -17px; padding: 0 18px 0 16px; }
+  .app__body:has(> div > .cats) .page__lead { margin-bottom: 24px; font-size: 14px; line-height: 20px; color: #62615C; }
+  .cats { grid-template-columns: 360px minmax(0, 1fr); gap: 24px; }
+  .cattree { display: flex; flex-direction: column; gap: 2px; }
+  .cattree > div:not([class]) { display: flex; flex-direction: column; gap: 2px; }
+  .cattree__sum { padding: 6px 12px; line-height: 18px; }
+  .cattree__row { font-size: 14px; line-height: 20px; font-weight: 400; color: #1A1A18; }
+  .cattree__row[aria-current="true"] { font-weight: 500; color: #1B2F86; }
+  .cattree__row--sub { font-size: 13.5px; line-height: 20px; color: #62615C; }
+  .cattree__row .cnt { line-height: 18px; }
+  .cattree__handle { width: 16px; height: 24px; }
+  .cattree__item--on .cattree__row { padding-right: 34px; }
+  .cattree__more { right: 7px; }
+  .cattree__more .pop__btn--icon { width: 24px; height: 28px; min-height: 0; }
+  .cattree__more .pop__btn--icon .lucide { width: 18px; height: 18px; }
+  .cattree__none { margin: 0; padding-top: 2px; }
+  .cattree__add { line-height: 20px; }
+  .catpane__head { margin-bottom: 20px; }
+  .catpane__head h2 { font-size: 20px; line-height: 28px; letter-spacing: 0; }
+  .catpane__meta { margin-top: 4px; font-size: 13.5px; line-height: 20px; color: #62615C; }
+  .catpane__acts { gap: 8px; }
+  .catpane__head .btn { min-height: 42px; padding: 0 18px 0 16px; }
+  .chips { gap: 8px; margin-bottom: 20px; }
+  .catpane .chips button { min-height: 36px; padding: 7px 14px; border-color: #E4E2DC; font-size: 13.5px; line-height: 20px; font-weight: 500; color: #1A1A18; }
+  .catpane .chips button .cnt { font-size: 13.5px; font-weight: 400; color: var(--color-ink-3); }
+  .catpane .chips button[aria-pressed="true"] { min-height: 34px; border: 0; background: #1A1A18; color: #F6F5F3; }
+  .catpane .chips button[aria-pressed="true"] .cnt { color: #CFCCC4; }
+  .catpane .alhead { min-height: 36px; margin-bottom: 20px; }
+  .catpane .alhead .selall { font-size: 14px; line-height: 20px; color: #62615C; }
+  .catpane__search { width: 250px; height: 36px; padding: 0 10px 0 12px; background: #F1F0EC; }
+  .catpane__search input { font-size: 13.5px; line-height: 20px; }
+  .catpane .algrid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .catpane .alcard__cover { border-radius: 12px; }
+  .catpane .alcard__body { gap: 6px; padding: 6px 0 0; }
+  .catpane .alcard__body b { font-size: 13.5px; line-height: 20px; }
+  .catpane .alcard__x { top: 14cqw; width: 72cqw; height: 72cqw; margin-left: -36cqw; background: rgb(18 18 18 / 55%); }
+  .catpane .alcard__x .lucide { width: 24cqw; height: 24cqw; stroke-width: 2.2; }
+}
+@media (min-width: 860px) {
+  .cattree__only { line-height: 16px; }
+  .catpane .chips { align-items: flex-start; }
+}
+
+/* «Добавить альбомы» (14 · «Модалка / Добавить альбомы»): 560, отступ 24, шаг 16;
+   заголовок 20/28, подзаголовок 13.5/20 #62615C, крестик — голая иконка 20;
+   поле «Куда» 44 (7/12/7/8), чипы 28 #E9ECFB/#1B2F86 13/18 500; поиск 44
+   #F1F0EC; строки 60 (0/10, шаг 12) через 2, список на пять строк (308);
+   низ без границы, отступ 8, «Выбрано» 14/20 #62615C, кнопки через 8. */
+@media (min-width: 641px) {
+  .modal--pick .modal__head h2 { line-height: 28px; }
+  .modal--pick .modal__head p { color: #62615C; }
+  .modal--pick .modal__x { width: 20px; height: 20px; min-height: 0; }
+  .modal--pick .modal__text.pick { display: flex; flex-direction: column; padding: 0; font-size: 14px; line-height: 20px; }
+  .modal--pick .pick__label { margin-bottom: 8px; font-size: 13px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal--pick .pick__field { min-height: 44px; padding: 7px 12px 7px 8px; border-color: #CFCCC4; }
+  .modal--pick .pick__field > svg, .modal--pick .pick__toggle .lucide { width: 18px; height: 18px; }
+  .modal--pick .placechip { line-height: 18px; }
+  .modal--pick .placetree__search { height: 44px; margin-top: 16px; padding: 0 12px 0 14px; background: #F1F0EC; }
+  .modal--pick .placetree__search input { font-size: 14px; line-height: 20px; }
+  .modal--pick .pick__list { max-height: 308px; margin-top: 16px; }
+  .modal--pick .pickrow { min-height: 60px; padding: 0 10px; }
+  .modal--pick .pickrow__main { gap: 2px; }
+  .modal--pick .pickrow__main b { line-height: 20px; }
+  .modal--pick .pickrow__main span { line-height: 18px; color: var(--color-ink-3); }
+  .modal--pick .modal__foot { gap: 8px; padding: 8px 0 0; border-top: 0; }
+  .modal--pick .modal__foot > .hint, .modal--pick .modal__foot > p { font-size: 14px; line-height: 20px; color: #62615C; }
+  .modal--pick .modal__foot .btn--primary { padding: 0 18px 0 16px; }
+}
+
+/* Меню «⋯» категории (14 · «menu»): r12, тень 0 24 56 /18%, пункты 38 (0/10)
+   через 2, иконка 16 через 10, текст 14/20; разделитель без отступов;
+   переключатель 32×19 с кругом 14. Открывается от края иконки «⋯», на 8 ниже. */
+@media (min-width: 860px) {
+  .cattree__more .pop__panel { right: 3px; top: calc(100% + 3px); border-radius: 12px; box-shadow: 0 24px 56px rgb(0 0 0 / 18%); }
+  .cattree__more .popmenu { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
+  .cattree__more .popmenu button { min-height: 38px; padding: 0 10px; gap: 10px; font-size: 14px; line-height: 20px; }
+  .cattree__more .popmenu .lucide, .cattree__more .popmenu svg { width: 16px; height: 16px; }
+  .cattree__more .popmenu__sep { margin: 0; }
+  .cattree__more .mswitch::after { left: 2.5px; top: 2.5px; width: 14px; height: 14px; box-shadow: 0 .8px 2.4px rgb(0 0 0 / 18%); }
+}
+
+/* Поле новой категории в дереве (14 · «edit row»): одна рамка 40 (1.5px #2547CE,
+   r10, 0/6/0/12, шаг 8), внутри текст 14/20, счётчик 12/16 #90908A,
+   «готово» — синяя 28 r8 с белой галкой, «отмена» — прозрачная 28. */
+.cattree__len { display: none; }
+@media (min-width: 860px) {
+  .cattree__edit { padding: 0; }
+  .cattree__edit--sub { padding-left: 24px; }
+  .cattree__editrow { gap: 8px; height: 40px; padding: 0 6px 0 12px; border: 1.5px solid #2547CE; border-radius: 10px; background: #fff; }
+  .cattree__editrow:has(.inp[aria-invalid="true"]) { border-color: var(--color-danger); }
+  .cattree__editrow .inp { height: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font-size: 14px; line-height: 20px; }
+  .cattree__editrow .inp:focus { box-shadow: none; }
+  .cattree__len { display: inline; flex: none; font-size: 12px; line-height: 16px; color: var(--color-ink-3); }
+  .cattree__ok, .cattree__no { display: grid; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; }
+  .cattree__ok { background: #2547CE; color: #fff; }
+  .cattree__ok:hover { background: #2547CE; filter: brightness(1.08); }
+  .cattree__no { color: #62615C; }
+  .cattree__ok .lucide, .cattree__no .lucide { width: 16px; height: 16px; }
+}
+
+/* Меню аккаунта (09 · «Меню аккаунта»): 240, r14, тень 0 12 32 /12%, отступ 6,
+   пункты 40 (9/12, иконка 18 через 10, 14/22, r10) через 2; перед «Выйти» —
+   линия в 6 от краёв (блок 9). Открытая кнопка — фон #F1F0EC; меню на 8 ниже. */
+.acct__menu { top: calc(100% + 8px); display: flex; flex-direction: column; gap: 2px; padding: 6px; box-shadow: 0 12px 32px rgb(0 0 0 / 12%); }
+.acct__menu a, .acct__menu button { min-height: 40px; padding: 9px 12px; border-radius: 10px; font-size: 14px; line-height: 22px; color: #1A1A18; }
+.acct__menu button { position: relative; margin-top: 11px; padding-top: 9px; border-top: 0; border-radius: 10px; }
+.acct__menu button::before { content: ''; position: absolute; left: 6px; right: 6px; top: -7px; height: 1px; background: #E4E2DC; }
+.acct__menu button:hover { background: var(--color-surface-alt); }
+.app__top .acct__btn[aria-expanded="true"] { background: #F1F0EC; }
+/* «Поделиться витриной» (09): в макете — по центру экрана (в отличие от окон
+   10–14, которые по центру контента); заголовок с трекингом −0.3, иконка 16. */
+@media (min-width: 860px) { .app .modal__back:has(.modal--share) { padding-left: 20px; } }
+@media (min-width: 641px) {
+  .modal--share .modal__head h2 { letter-spacing: -0.3px; }
+  .modal--share .share__main .btn .lucide { width: 16px; height: 16px; }
+}
+
+/* Альбомы на планшете (10 · Tablet): кнопки — первой строкой, ниже поиск на всю
+   оставшуюся ширину, сортировка и фильтр; строки через 12. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  /* Разрыв строки — пустой элемент со своей «строкой»: межстрочный шаг дал бы
+     два шага по 12, поэтому шаг — отступом у второй строки. */
+  .albar { row-gap: 0; }
+  .albar__break ~ * { margin-top: 12px; }
+  .albar__search { flex: 1 1 0; min-width: 0; margin-left: 0; }
+}
+
+/* «Обзор» на планшете (09 · Tablet): блоки через 24, колонки через 24, в первой
+   строке под сведениями — кнопки через 14; быстрые ссылки 12/16. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .ov { gap: 24px; }
+  .ov__row { gap: 24px; }
+  .ov__row--top .ovsec { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+  .ov__row--top .ov__head { margin-bottom: 0; }
+  .quick a { font-size: 12px; line-height: 16px; }
+}
+
+/* «Категории» на планшете (14 · Tablet · Основной): дерево 264 и панель через 16;
+   панель с отступом 20, шапка в столбик (имя, ниже кнопки через 12); ручек нет
+   (порядок — кнопкой «Изменить порядок» 30, 12.5/18); поиск 156×36. */
+@media (min-width: 860px) and (max-width: 1199px) {
+  .cats { grid-template-columns: 264px minmax(0, 1fr); gap: 16px; }
+  .catpane { padding: 20px; }
+  .catpane__head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .catpane__head > .spacer { display: none; }
+  .catpane .alhead__order { height: 30px; min-height: 30px; padding: 0 12px 0 10px; border-color: #CFCCC4; font-size: 12.5px; line-height: 18px; color: #62615C; background: #fff; }
+  .catpane__search { width: 156px; }
+  .catpane .algrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ==========================================================================
+   Телефон (390) — по «Mobile header» и «content» макетов 10–14: шапка 60
+   (0/16, шаг 8; «Мой профиль» 37, 0/14, 13.5/21; бургер — иконка 20 в 16 от
+   края), контент 16/18, заголовок 22/28; «Альбомы»: кнопки 44 в ряд, ниже
+   поиск 44 (иконка 16, 14/22) и кнопки 44, строки через 16; сетка 2 × 171
+   через 12, строка выбора с отступом 12 снизу.
+   ========================================================================== */
+@media (max-width: 640px) {
+  .app__bar { gap: 8px; height: 60px; padding: 0 16px; }
+  .app__bar .app__shop { font-size: 18px; line-height: 22px; }
+  .app__bar > a.btn { height: 37px; min-height: 37px; padding: 0 14px; font-size: 13.5px; line-height: 21px; }
+  .app__bar > button.btn--quiet { width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin-right: -12px; padding: 0; }
+  .app__main { padding: 16px 18px 90px; }
+  .mtitle { margin: 0 0 16px; font-size: 22px; line-height: 28px; }
+  .albar { gap: 16px 8px; margin-bottom: 16px; }
+  .albar > .btn { height: 44px; min-height: 44px; padding: 0 12px; line-height: 22px; }
+  .albar > .btn .lucide { width: 16px; height: 16px; }
+  .albar__search { height: 44px; padding: 0 14px; border-radius: 12px; }
+  .albar__search > .lucide { width: 16px; height: 16px; flex: none; }
+  .albar__search .inp { font-size: 14px; line-height: 22px; }
+  .albar__search .inp::placeholder { color: var(--color-ink-3); }
+  .albar .pop__btn .lucide { width: 18px; height: 18px; }
+  .alhead { padding-bottom: 12px; margin-bottom: 16px; }
+  .algrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+}
+@media (max-width: 640px) {
+  .albar > .btn--ghost { height: 46px; min-height: 46px; }
+  .albar > .btn .lucide { stroke-width: 2; }
+  .alcard__foot .badge { padding-left: 10px; padding-right: 10px; font-size: 11px; }
+}
+
+/* Страница альбома на телефоне (13 · Mobile · Stone Island · осень): всё через 16;
+   крошка — только «‹ Альбомы» (13.5/20 500 #90908A); имя 22/28; бейджи строкой
+   через 8; строка 13.5/20 и описание 14/22; «Загрузить фото» 44 во всю ширину;
+   ниже «Поделиться» и «Редактировать» 46 (0/12, иконки 16) и «⋯» 44; счётчики —
+   карточки 250 через 10 с прокруткой, r16, 16; строка выбора 43 с кнопкой
+   порядка 30; подсказка 12.5/18; сетка 3 × 112 через 8. */
+@media (max-width: 640px) {
+  .alpage__crumbs { gap: 4px; margin-bottom: 16px; font-size: 13.5px; line-height: 20px; }
+  .alpage__crumbs a { gap: 4px; font-weight: 500; color: var(--color-ink-3); }
+  .alpage__top { gap: 16px 8px; margin: 0 0 16px; }
+  .alpage__top h1 { font-size: 22px; line-height: 28px; letter-spacing: 0; }
+  .alpage__meta { margin: 0 0 16px; font-size: 13.5px; line-height: 20px; color: var(--color-ink-3); }
+  .alpage__desc { margin: 0 0 16px; font-size: 14px; line-height: 22px; color: #62615C; }
+  .alpage__acts { gap: 16px 8px; margin: 0 0 16px; }
+  .alpage__acts .alpage__upload { min-height: 44px; height: 44px; }
+  .alpage__acts .btn { line-height: 22px; }
+  .alpage__acts .btn--ghost { height: 46px; min-height: 46px; padding: 0 12px; }
+  .alpage__acts .btn--ghost .lucide { width: 16px; height: 16px; stroke-width: 2; }
+  .alpage__acts .pop__btn--icon { width: 44px; height: 44px; min-height: 44px; }
+  .alstats { gap: 10px; margin-bottom: 16px; }
+  .alstats > * { flex: 0 0 250px; }
+  .alstat { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; padding: 16px; border: 1px solid #E4E2DC; border-radius: 16px; }
+  .alstat > span { flex: 1 0 100%; margin-bottom: 6px; font-size: 13px; line-height: 18px; color: var(--color-ink-3); }
+  .alstat b, .alstat b.alstat__wm { font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: 0; }
+  .alstat em, .alstat__link { margin: 0; font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--color-ink-3); }
+  .alstat em:has(.up), .alstat .up { color: #1B6B3A; }
+  .alstat__link { color: #2547CE; }
+  .alpage .alhead { padding-bottom: 12px; margin-bottom: 16px; }
+  .alpage > .alhead__tip-touch { margin-bottom: 16px; }
+  .algallery { gap: 8px; }
+}
+/* Цели меньше 44 по макету (кнопка порядка 30, ссылка «Настроить») — видимый
+   размер как в макете, а область нажатия добирается невидимой рамкой ::after. */
+@media (hover: none) {
+  .app button.alhead__order:not([class*="uppy"]):not(.hidden),
+  .app button.alstat__link:not([class*="uppy"]):not(.hidden) { position: relative; min-width: 0; min-height: 0; }
+  .app button.alhead__order:not(.hidden) { height: 30px; }
+  .app button.alhead__order::after { content: ''; position: absolute; inset: -7px 0; }
+  .app button.alstat__link::after { content: ''; position: absolute; inset: -13px -6px; }
+}
+@media (max-width: 640px) { .alstats { align-items: flex-start; } .alstat { align-content: flex-start; } }
+/* Стрелки дерева категорий — 2px на 24 (1.33 при 16), как во всех кадрах 14. */
+.cattree__chev .lucide { stroke-width: 2; }
+/* «Категории» на телефоне (14 · Mobile · Основной): заголовок 22/28 и подпись
+   14/20 через 4, кнопка 44 во всю ширину, дерево через 16; строки 14/20,
+   подкатегории 40; «⋯» 18 у каждой строки. */
+@media (max-width: 640px) {
+  .app__body:has(> div > .cats) .page__head { margin-bottom: 4px; }
+  .app__body:has(> div > .cats) .page__head h1 { font-size: 22px; line-height: 28px; letter-spacing: 0; }
+  .app__body:has(> div > .cats) .page__lead { margin-bottom: 16px; font-size: 14px; line-height: 20px; color: #62615C; }
+  .app__body:has(> div > .cats) .page__head .btn--primary { height: 44px; min-height: 44px; padding: 0 18px 0 16px; }
+  .cats { gap: 16px; }
+  .cattree { display: flex; flex-direction: column; gap: 2px; }
+  .cattree > div:not([class]) { display: flex; flex-direction: column; gap: 2px; }
+  .cattree__sum { padding: 6px 12px; line-height: 18px; }
+  .cattree__row { line-height: 20px; }
+  .app .cattree button.cattree__row--sub:not([class*="uppy"]):not(.hidden) { min-height: 40px; }
+  .cattree__more .pop__btn--icon .lucide { width: 18px; height: 18px; }
+}
+
+/* Окна альбома на планшете (11, 12 · Tablet): 680, одна колонка — фото сверху
+   (зона 240, отступы 20/24), под ними поля, между блоками 24; сетка фото 5 в
+   ряд по 112 через 8 и растёт по содержимому. На сенсорном экране кнопки над
+   фото — обведённые пилюли 30 (5/12/5/10, 12.5/18 #2547CE, иконка 14). */
+@media (min-width: 860px) and (max-width: 1199px) {
+  .modal.modal--sheet:not(.modal--form):not(.modal--upload) { max-width: 680px; }
+  .modal--sheet .modal__body:not([style]) { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .modal--sheet .drop { flex: none; height: 240px; min-height: 240px; padding: 20px 24px; }
+  .modal--sheet .upbox { flex: none; contain: none; }
+  .modal--sheet .upbox > .upgrid { grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; }
+}
+@media (hover: none) and (min-width: 641px) {
+  .modal .field__row:has(.phbar__btn) { min-height: 30px; }
+  .app .modal button.phbar__btn:not([class*="uppy"]):not(.hidden) { position: relative; min-width: 0; min-height: 0; height: 30px; padding: 0 12px 0 10px; gap: 6px; border: 1px solid #CFCCC4; border-radius: 999px; background: #fff; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #2547CE; }
+  .app .modal button.phbar__btn::after { content: ''; position: absolute; inset: -7px 0; }
+  .modal .phbar__btn .lucide { width: 14px; height: 14px; }
+}
+
+/* Подзаголовок окна для телефона — копия строки из шапки (см. разметку). */
+.modal__sub { display: none; }
+/* ==========================================================================
+   Окна альбома на телефоне (11, 12 · Mobile): во весь экран; шапка 56
+   (0/6/0/18, имя 18/24, крестик 44 с иконкой 20, линия снизу); содержимое
+   16/18/24 через 20: подзаголовок 13.5/20 #90908A, блок фото (подпись 12.5/18,
+   зона 200 с отступами 16/24 и шагом 10, кнопка «Выбрать фото» 40), поля
+   через 18 как на компьютере; низ — линия сверху, 12/18/16, две кнопки 44
+   поровну через 10, без подсказки.
+   ========================================================================== */
+@media (max-width: 640px) {
+  .modal--sheet > .modal__head { align-items: center; height: 56px; padding: 0 6px 0 18px; border-bottom: 1px solid #E4E2DC; }
+  .modal--sheet > .modal__head h2 { font-size: 18px; line-height: 24px; font-weight: 600; }
+  .modal--sheet > .modal__head p { display: none; }
+  .modal--sheet > .modal__head .modal__x { width: 44px; height: 44px; }
+  .modal--sheet .modal__sub { display: block; margin: 0; font-size: 13.5px; line-height: 20px; color: var(--color-ink-3); }
+  .modal--sheet .modal__body { gap: 20px; padding: 16px 18px 24px; }
+  .modal--sheet .modal__body > div:first-of-type:not([hidden]) { display: flex; flex-direction: column; gap: 8px; }
+  .modal--sheet .modal__body > div:first-of-type > .field__row, .modal--sheet .modal__body > div:first-of-type > .hint { margin: 0; }
+  .modal .field__row { gap: 4px 16px; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal .field__row > .whitespace-nowrap { font-weight: 500; }
+  .modal--sheet .drop { gap: 10px; min-height: 200px; padding: 16px 24px; }
+  .modal--sheet .drop p { font-size: 15px; line-height: 22px; font-weight: 600; margin-bottom: -6px; }
+  .modal--sheet .drop small { font-size: 13.5px; line-height: 20px; }
+  .modal--sheet .drop small:last-child { font-size: 12.5px; line-height: 18px; }
+  .modal--sheet .drop .btn { height: 40px; min-height: 40px; padding: 0 16px 0 14px; border: 0; line-height: 22px; }
+  .modal--sheet .drop .btn .lucide { width: 16px; height: 16px; }
+  .modal .field { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+  .modal .field + .field, .modal .field + .wm { margin-top: 18px; }
+  .modal .field > span:not(.field__err) { margin: 0; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; }
+  .modal .field__cnt { font-size: 12.5px; line-height: 18px; font-weight: 400; color: var(--color-ink-3); }
+  .modal .req { color: #D92D20; }
+  .modal .field .inp { padding-left: 14px; padding-right: 14px; border: 1px solid #CFCCC4; border-radius: 12px; background-color: #F6F5F3; font-size: 14px; line-height: 22px; color: #1A1A18; }
+  .modal .field .inp:not(textarea) { height: 44px; }
+  .modal .field textarea.inp { height: 92px; padding-top: 10px; padding-bottom: 10px; }
+  .modal .field .hint { margin: 0; }
+  .modal .segbar { min-height: 42px; padding: 3px; gap: 2px; }
+  .modal .segbar button { min-height: 36px; padding: 7px 12px; font-size: 13px; line-height: 20px; font-weight: 500; }
+  .modal .segbar::before { box-shadow: none; }
+  .modal .pwdfield { margin-top: 0; padding: 0 14px; }
+  .modal--sheet > .modal__foot { gap: 10px; padding: 12px 18px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid #E4E2DC; }
+  .modal--sheet > .modal__foot > .hint--idle { display: none; }
+  .modal--sheet > .modal__foot > .hint { flex-basis: 100%; margin: 0; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+  .modal--sheet > .modal__foot > .btn { flex: 1 1 0; height: 44px; min-height: 44px; padding: 0 18px; }
+  .modal--sheet > .modal__foot > .btn--primary { flex-grow: 1; }
+}
+@media (max-width: 640px) {
+  .modal.modal--sheet > .modal__head { border-bottom: 1px solid #E4E2DC; }
+  .modal .field__row > span:first-child { font-size: 12.5px; line-height: 18px; color: #62615C; }
+  .modal--sheet .drop { height: 200px; min-height: 200px; padding: 5px 24px; }
+  .app .modal--sheet .drop button.btn:not([class*="uppy"]):not(.hidden) { position: relative; min-height: 40px; height: 40px; }
+  .app .modal--sheet .drop button.btn::after { content: ''; position: absolute; inset: -2px 0; }
+  .app .modal .segbar button:not([class*="uppy"]):not(.hidden) { min-height: 36px; }
+}
+@media (hover: none) { .upbox__hint { display: none !important; } }
+/* Рамка фото на телефоне (11/12 · Mobile · «photos box»): 12 внутри и шаг 12;
+   сетка 3 × 104 через 8; «Показать все» 40 (13/22) и подсказка — внутри рамки;
+   плитки: «Добавить» 12.5/18 #90908A с иконкой 20, бейдж «Обложка» 11.5/17. */
+@media (max-width: 640px) {
+  .modal--sheet .upbox { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px dashed #CFCCC4; border-radius: 16px; background: #F6F5F3; }
+  .modal--sheet .upbox:has(> .upgrid--over) { border-color: var(--color-brand); background: var(--color-brand-soft); }
+  .modal--sheet .upbox > .upgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-height: none; padding: 0; border: 0; border-radius: 0; background: none; overflow: visible; }
+  .modal--sheet .upbox > .touch-hint { margin: 0; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+  .app .modal--sheet .upbox > button.upbox__more:not([class*="uppy"]):not(.hidden) { position: relative; height: 40px; min-height: 40px; margin: 0; font-size: 13px; line-height: 22px; }
+  .modal .upgrid .uptile { gap: 6px; border: 1px dashed #CFCCC4; border-radius: 10px; background: #fff; color: var(--color-ink-3); }
+  .modal .upgrid .uptile span { font-size: 12.5px; line-height: 18px; font-weight: 500; color: var(--color-ink-3); }
+  .modal .upgrid .uptile i { display: grid; font-size: 20px; }
+  .modal .uptile2 { border-radius: 10px; }
+  .modal .uptile2__pct { left: 6px; bottom: 6px; padding: 2px 8px; background: rgb(26 26 23 / 72%); font-size: 11.5px; line-height: 17px; font-weight: 500; }
+  .modal .field__row:has(.phbar__btn) { min-height: 30px; }
+  .app .modal button.phbar__btn:not([class*="uppy"]):not(.hidden) { position: relative; min-width: 0; min-height: 0; height: 30px; padding: 0 12px 0 10px; gap: 6px; border: 1px solid #CFCCC4; border-radius: 999px; background: #fff; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #2547CE; }
+  .app .modal button.phbar__btn::after { content: ''; position: absolute; inset: -7px 0; }
+  .modal .phbar__btn .lucide { width: 14px; height: 14px; stroke-width: 2; }
+}
+@media (max-width: 640px) { .modal .field__row { align-items: center; } }
+/* Шеврон подкатегорий — 16×16 на виду, нажимать можно по 36×44. */
+.cattree__chev { position: relative; }
+.cattree__chev::after { content: ''; position: absolute; inset: -14px -4px; }
+/* «i» у водяного знака — кнопка: 14 на виду, нажимать по 32×32; текст
+   подсказки раскрывается строкой под подписью. */
+.wm__info { position: relative; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
+.wm__info::after { content: ''; position: absolute; inset: -9px; }
+.app button.wm__info:not([class*="uppy"]):not(.hidden) { display: inline-grid; min-width: 0; min-height: 0; }
+.wm__tip { max-width: 260px; margin: -2px 0 8px; font-size: 12.5px; line-height: 18px; color: var(--color-ink-2); }

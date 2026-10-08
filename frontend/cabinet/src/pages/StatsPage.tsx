@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { api, type ShopStats } from '../api'
 import { useShop } from './AppLayout'
+import { fillDays } from '../lib/stats'
 
 // Дашборд продавца. Палитра — категорийные слоты 1–2 (blue/orange),
 // валидированы на светлой поверхности (CVD ΔE и контраст — pass).
@@ -42,13 +43,15 @@ export function StatsPage() {
   return (
     <div>
       <div className="page__head">
-        <h1>Статистика</h1>
+        {/* Как пункт меню (макет 09 · v2: «Аналитика»). */}
+        <h1>Аналитика</h1>
         <span className="spacer" />
         <div className="flex gap-1">
           {PERIODS.map((p) => (
             <button
               key={p.days}
               onClick={() => setDays(p.days)}
+              aria-pressed={days === p.days}
               className={`btn btn--sm ${days === p.days ? 'btn--primary' : 'btn--ghost'}`}
             >
               {p.label}
@@ -57,14 +60,21 @@ export function StatsPage() {
         </div>
       </div>
 
+      {/* Просмотры считаются ночью — продавец открывал свою витрину, видел
+          неизменное число и решал, что счётчик сломан. */}
+      <p className="hint !mt-0 mb-4">
+        Просмотры обновляются раз в сутки, ночью: сегодняшние появятся завтра. Нажатия
+        «Написать» учитываются сразу.
+      </p>
       {stats.isPending && <p className="text-ink-2">Загрузка…</p>}
-      {stats.isError && <p className="text-danger">Не удалось загрузить статистику.</p>}
-      {stats.data && <StatsBody stats={stats.data} />}
+      {stats.isError && <p className="text-danger" role="alert">Не удалось загрузить статистику.</p>}
+      {stats.data && <StatsBody stats={stats.data} days={days} />}
     </div>
   )
 }
 
-function StatsBody({ stats }: { stats: ShopStats }) {
+function StatsBody({ stats, days }: { stats: ShopStats; days: number }) {
+  const daily = fillDays(stats.daily, days)
   return (
     <div className="space-y-6">
       <div className="stats">
@@ -80,7 +90,7 @@ function StatsBody({ stats }: { stats: ShopStats }) {
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats.daily} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+              <LineChart data={daily} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
                 <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -100,22 +110,24 @@ function StatsBody({ stats }: { stats: ShopStats }) {
                 />
                 <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="views"
                   name="Просмотры"
                   stroke={COLOR_VIEWS}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
+                  isAnimationActive={false}
                 />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="unique_visitors"
                   name="Уникальные"
                   stroke={COLOR_UV}
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>

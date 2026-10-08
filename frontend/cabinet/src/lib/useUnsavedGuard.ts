@@ -19,8 +19,13 @@ export function useUnsavedGuard(dirty: boolean): void {
     disabled: !dirty,
   })
 
+  useBeforeUnload(dirty)
+}
+
+// Только закрытие/перезагрузка вкладки.
+function useBeforeUnload(active: boolean): void {
   useEffect(() => {
-    if (!dirty) return
+    if (!active) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       // Значение игнорируется современными браузерами, но требуется,
@@ -29,5 +34,5 @@ export function useUnsavedGuard(dirty: boolean): void {
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [dirty])
+  }, [active])
 }

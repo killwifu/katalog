@@ -1,6 +1,8 @@
+import { Trash2, Image as ImageIcon } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, errorText, type Photo } from '../api'
+import { api, errorText, type Photo, type TrashAlbum } from '../api'
+import { Icon } from '../lib/icons'
 import { useShop } from './AppLayout'
 
 // «Удаленное» из макета 09 · v2. Удаление фотографии перестало быть
@@ -36,6 +38,14 @@ export function TrashPage() {
     mutationFn: (photoId: string) => api.purgePhoto(shop.id, photoId),
     onSuccess: refresh,
   })
+  const restoreAlbum = useMutation({
+    mutationFn: (albumId: string) => api.restoreAlbum(shop.id, albumId),
+    onSuccess: refresh,
+  })
+  const purgeAlbum = useMutation({
+    mutationFn: (albumId: string) => api.purgeAlbum(shop.id, albumId),
+    onSuccess: refresh,
+  })
   const empty = useMutation({
     mutationFn: () => api.emptyTrash(shop.id),
     onSuccess: () => {
@@ -46,18 +56,20 @@ export function TrashPage() {
   })
 
   if (trash.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (trash.isError) return <p className="text-danger">Не удалось загрузить «Удаленное».</p>
+  if (trash.isError) return <p className="text-danger" role="alert">Не удалось загрузить «Удаленное».</p>
 
   const data = trash.data
   const totalPages = Math.max(1, Math.ceil(data.total / data.per_page))
+  const albums = data.albums ?? []
+  const nothing = data.total === 0 && albums.length === 0
 
   return (
     <div>
       <div className="page__head">
         <h1>Удаленное</h1>
-        <span className="count">{data.total}</span>
+        <span className="count">{data.total + albums.length}</span>
         <span className="spacer" />
-        {data.total > 0 &&
+        {!nothing &&
           (confirmEmpty ? (
             <>
               <span className="text-sm text-danger">Удалить всё безвозвратно?</span>
@@ -79,21 +91,42 @@ export function TrashPage() {
           ))}
       </div>
       <p className="page__lead">
-        Фотографии хранятся здесь {data.keep_days}{' '}
+        Альбомы и фотографии хранятся здесь {data.keep_days}{' '}
         {plural(data.keep_days, 'день', 'дня', 'дней')}, потом удаляются
         окончательно. Всё это время они занимают место в хранилище — освободит
         его только окончательное удаление.
       </p>
 
-      {restore.isError && <p className="mb-3 text-sm text-danger">{errorText(restore.error)}</p>}
-      {purge.isError && <p className="mb-3 text-sm text-danger">{errorText(purge.error)}</p>}
-      {empty.isError && <p className="mb-3 text-sm text-danger">{errorText(empty.error)}</p>}
+      {restore.isError && <p className="mb-3 text-sm text-danger" role="alert">{errorText(restore.error)}</p>}
+      {purge.isError && <p className="mb-3 text-sm text-danger" role="alert">{errorText(purge.error)}</p>}
+      {empty.isError && <p className="mb-3 text-sm text-danger" role="alert">{errorText(empty.error)}</p>}
+      {restoreAlbum.isError && <p className="mb-3 text-sm text-danger" role="alert">{errorText(restoreAlbum.error)}</p>}
+      {purgeAlbum.isError && <p className="mb-3 text-sm text-danger" role="alert">{errorText(purgeAlbum.error)}</p>}
 
-      {data.total === 0 ? (
+      {albums.length > 0 && (
+        <>
+          <h2 className="trash__h">Альбомы</h2>
+          <div className="algrid mb-6">
+            {albums.map((a) => (
+              <TrashAlbumCard
+                key={a.id}
+                album={a}
+                onRestore={() => restoreAlbum.mutate(a.id)}
+                onPurge={() => purgeAlbum.mutate(a.id)}
+              />
+            ))}
+          </div>
+          {data.total > 0 && <h2 className="trash__h">Фотографии</h2>}
+        </>
+      )}
+
+      {nothing ? (
         <div className="emptybox">
-          <div className="emptybox__ico" aria-hidden="true">🗑</div>
-          <h3>Здесь пусто</h3>
-          <p>Удалённые фотографии попадают сюда и ждут {data.keep_days} дней — их можно вернуть.</p>
+          <div className="emptybox__ico" aria-hidden="true">
+            <Icon as={Trash2} size={28} />
+          </div>
+          <h2>Здесь пусто</h2>
+          <p>Удалённые альбомы и фотографии попадают сюда и ждут {data.keep_days} {plural(data.keep_days, 'день', 'дня', 'дней')} — их можно вернуть.</p>
         </div>
       ) : (
         <div className="algallery">
@@ -170,18 +203,58 @@ function TrashTile({
       {photo.caption && (
         <figcaption className="truncate px-2 py-1 text-xs text-ink-2">{photo.caption}</figcaption>
       )}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 pb-2">
-        <button className="btn btn--ghost btn--sm" onClick={onRestore}>
+      <TrashActions armed={armed} onRestore={onRestore} onPurge={() => (armed ? onPurge() : setArmed(true))} />
+    </figure>
+  )
+}
+
+// Удалённый альбом: одной карточкой вместе со всеми фотографиями.
+function TrashAlbumCard({
+  album,
+  onRestore,
+  onPurge,
+}: {
+  album: TrashAlbum
+  onRestore: () => void
+  onPurge: () => void
+}) {
+  const [armed, setArmed] = useState(false)
+  return (
+    <div className="alcard">
+      <div className="alcard__cover">
+        {album.cover_urls ? (
+          <img src={album.cover_urls.small} alt="" loading="lazy" className="opacity-70" />
+        ) : (
+          <span className="alcard__cover--empty" aria-hidden="true">
+            <Icon as={ImageIcon} size={28} />
+          </span>
+        )}
+        <span className="alcard__count">{album.photo_count} фото</span>
+      </div>
+      <div className="alcard__body">
+        <b title={album.title}>{album.title}</b>
+        <span className="alcard__cat">удалён {new Date(album.deleted_at).toLocaleDateString('ru-RU')}</span>
+        <TrashActions armed={armed} onRestore={onRestore} onPurge={() => (armed ? onPurge() : setArmed(true))} />
+      </div>
+    </div>
+  )
+}
+
+// Действия на плитке «Удаленного»: две одинаковые кнопки в ряд — раньше
+// «Вернуть» была кнопкой, а «Удалить» голым текстом другого размера.
+// Второй шаг обязателен: отсюда фото и альбомы уходят навсегда.
+function TrashActions({ armed, onRestore, onPurge }: { armed: boolean; onRestore: () => void; onPurge: () => void }) {
+  return (
+    <div className="tracts">
+      {!armed && (
+        <button className="tracts__btn" onClick={onRestore}>
           Вернуть
         </button>
-        {/* Второй шаг обязателен: отсюда фотография уходит уже навсегда. */}
-        <button
-          className={`text-xs ${armed ? 'font-medium text-danger' : 'text-ink-2 hover:text-danger'}`}
-          onClick={() => (armed ? onPurge() : setArmed(true))}
-        >
-          {armed ? 'Точно удалить?' : 'Удалить'}
-        </button>
-      </div>
-    </figure>
+      )}
+      <button className={armed ? 'tracts__btn tracts__btn--armed' : 'tracts__btn tracts__btn--danger'} onClick={onPurge}>
+        {armed && <Icon as={Trash2} size={14} />}
+        {armed ? 'Точно удалить?' : 'Удалить'}
+      </button>
+    </div>
   )
 }

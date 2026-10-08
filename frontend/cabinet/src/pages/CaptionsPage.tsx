@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
-import { api, type Photo } from '../api'
+import { api, ApiError, errorText, type Photo } from '../api'
 import { useShop } from './AppLayout'
 
 // Экран пакетного проставления подписей: последовательный проход по фото,
@@ -35,7 +35,19 @@ export function CaptionsPage() {
   }
 
   if (photosQuery.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (photosQuery.isError) return <p className="text-danger">Не удалось загрузить фото.</p>
+  if (photosQuery.isError) {
+    // 404 — альбома нет (удалён или ссылка битая); иначе сбой сети.
+    const missing = photosQuery.error instanceof ApiError && photosQuery.error.status === 404
+    return (
+      <div className="emptybox">
+        <h2>{missing ? 'Альбом не найден' : 'Не удалось загрузить фото'}</h2>
+        <p>{missing ? 'Возможно, его удалили.' : 'Проверьте интернет и обновите страницу.'}</p>
+        <Link to="/albums" className="btn btn--ghost mt-4">
+          К альбомам
+        </Link>
+      </div>
+    )
+  }
   if (photos.length === 0) {
     return (
       <div className="text-center text-ink-2">
@@ -126,8 +138,10 @@ function CaptionWalker({
       await api.updateCaption(photo.id, caption)
       saved.set(photo.id, caption)
       advance(index + 1)
-    } catch {
-      setError('Не удалось сохранить, попробуйте ещё раз')
+    } catch (e) {
+      // Причину называем: на слишком длинной подписи «попробуйте ещё раз»
+      // гоняло продавца по кругу.
+      setError(e instanceof ApiError ? errorText(e) : 'Не удалось сохранить, попробуйте ещё раз')
     } finally {
       setSaving(false)
     }
@@ -162,9 +176,10 @@ function CaptionWalker({
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           placeholder="Название / цена / артикул — Enter для следующего"
+          maxLength={2000}
           className="inp mb-2"
         />
-        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+        {error && <p className="mb-2 text-sm text-danger" role="alert">{error}</p>}
         <div className="flex gap-2">
           {/* Возврат к предыдущему снимку: проход шёл только вперёд, и
               опечатка в цене становилась неисправимой внутри потока. */}

@@ -1,3 +1,5 @@
+import { CircleAlert, Search } from 'lucide-react'
+import { Icon } from '../lib/icons'
 import { Link } from '@tanstack/react-router'
 
 // Экран сбоя маршрута. Без него любая ошибка рендера — обрыв сети,
@@ -6,8 +8,10 @@ import { Link } from '@tanstack/react-router'
 export function ErrorPage({ error }: { error?: Error }) {
   return (
     <div className="emptybox">
-      <div className="emptybox__ico" aria-hidden="true">⚠️</div>
-      <h3>Страница не открылась</h3>
+      <div className="emptybox__ico" aria-hidden="true">
+        <Icon as={CircleAlert} size={28} />
+      </div>
+      <h2>Страница не открылась</h2>
       <p>
         Что-то пошло не так. Обновите страницу — обычно этого достаточно.
         Если ошибка повторяется, напишите в поддержку.
@@ -28,8 +32,10 @@ export function ErrorPage({ error }: { error?: Error }) {
 export function NotFoundPage() {
   return (
     <div className="emptybox">
-      <div className="emptybox__ico" aria-hidden="true">🧭</div>
-      <h3>Такой страницы нет</h3>
+      <div className="emptybox__ico" aria-hidden="true">
+        <Icon as={Search} size={28} />
+      </div>
+      <h2>Такой страницы нет</h2>
       <p>Проверьте адрес — возможно, ссылка устарела.</p>
       <div className="mt-4 flex justify-center">
         <Link to="/" className="btn btn--primary">

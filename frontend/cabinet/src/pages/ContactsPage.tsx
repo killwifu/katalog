@@ -1,12 +1,14 @@
+import { CircleCheck } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { api, type ShopContacts, type ShopSettings } from '../api'
+import { api, errorText, type ShopContacts, type ShopSettings } from '../api'
+import { Icon } from '../lib/icons'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { useShop } from './AppLayout'
 
 // Каналы в том же порядке, в каком витрина рисует кнопки покупателю.
 const CHANNELS = [
-  { key: 'telegram', label: 'Telegram', placeholder: 'ник без @', hint: 'Ссылка вида t.me/ник' },
+  { key: 'telegram', label: 'Telegram', placeholder: 'ник или ссылка t.me/ник', hint: 'Можно ник, @ник или ссылку t.me/ник' },
   { key: 'whatsapp', label: 'WhatsApp', placeholder: '79991234567', hint: 'Только цифры, без плюса и пробелов' },
   { key: 'vk', label: 'VK', placeholder: 'ник или ссылка', hint: 'Предзаполнить текст сообщения VK не позволяет' },
   { key: 'max', label: 'MAX', placeholder: 'ник или ссылка', hint: '' },
@@ -41,7 +43,7 @@ export function ContactsPage() {
   useUnsavedGuard(dirty)
 
   if (current.isPending) return <p className="text-ink-2">Загрузка…</p>
-  if (current.isError) return <p className="text-danger">Не удалось загрузить контакты.</p>
+  if (current.isError) return <p className="text-danger" role="alert">Не удалось загрузить контакты.</p>
 
   const filled = CHANNELS.filter((c) => (contacts[c.key] ?? '').trim())
   const submit = (e: FormEvent) => {
@@ -130,7 +132,17 @@ export function ContactsPage() {
           >
             {save.isPending ? 'Сохраняю…' : 'Сохранить'}
           </button>
-          {save.isError && <p className="hint text-danger">Не удалось сохранить.</p>}
+          {/* Причину называем: «Не удалось сохранить» на номере через 8
+              оставляло продавца гадать, что не так с «правильным» номером. */}
+          {save.isError && <p className="hint text-danger" role="alert">{errorText(save.error)}</p>}
+          {/* Без этого после «Сохранить» кнопка просто гасла — непонятно,
+              записалось ли. */}
+          {save.isSuccess && !dirty && (
+            <p className="hint text-[#1B6B3A]" role="status">
+              <Icon as={CircleCheck} />
+              Сохранено — контакты уже на витрине
+            </p>
+          )}
         </div>
       </div>
     </form>
