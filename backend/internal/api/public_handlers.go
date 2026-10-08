@@ -56,6 +56,21 @@ type publicAlbumResponse struct {
 	// Unlisted — альбом «по ссылке»: витрина ставит ему noindex, чтобы
 	// он не попадал в поиск, раз продавец убрал его из списков.
 	Unlisted bool `json:"unlisted,omitempty"`
+	// CategorySlugs — категории альбома (только в сетке магазина и только
+	// нескрытые): по ним главная витрины собирает блоки категорий.
+	CategorySlugs []string `json:"category_slugs,omitempty"`
+	// CategoryPos — место альбома в каждой из категорий (слаг → номер):
+	// в этом порядке альбомы стоят в разделе категории на главной.
+	CategoryPos map[string]int32 `json:"category_pos,omitempty"`
+	// CreatedAt — только в сетке магазина: раздел «Альбомы» витрины
+	// показывает их от новых к старым.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	// HasPassword — альбом закрыт паролем: в сетке у него замок вместо
+	// обложки (обложка выдала бы содержимое).
+	HasPassword bool `json:"has_password,omitempty"`
+	// Locked — содержимое не отдано: пароль не введён или пропуск истёк.
+	// Витрина показывает форму ввода пароля.
+	Locked bool `json:"locked,omitempty"`
 }
 
 type publicPhotoResponse struct {
@@ -171,12 +186,36 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 		fallbackCover[fp.AlbumID] = fp.ID
 	}
 
+	// Категории для блоков на главной. Запрос отдаёт слаги только видимых
+	// категорий: слаг скрытой наружу не уходит.
+	slugRows, err := a.Q.ListPublicAlbumCategorySlugs(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "list album category slugs", err)
+		return
+	}
+	slugsOf := make(map[uuid.UUID][]string, len(slugRows))
+	slugPos := make(map[uuid.UUID]map[string]int32, len(slugRows))
+	for _, row := range slugRows {
+		slugsOf[row.AlbumID] = append(slugsOf[row.AlbumID], row.Slug)
+		if slugPos[row.AlbumID] == nil {
+			slugPos[row.AlbumID] = map[string]int32{}
+		}
+		slugPos[row.AlbumID][row.Slug] = row.SortOrder
+	}
+
 	out := make([]publicAlbumResponse, 0, len(albums))
 	for _, al := range albums {
 		resp := publicAlbumResponse{
-			ID:         al.ID.String(),
-			Title:      al.Title,
-			PhotoCount: al.PhotoCount,
+			ID:          al.ID.String(),
+			Title:       al.Title,
+			PhotoCount:  al.PhotoCount,
+			HasPassword: al.HasPassword,
+		}
+		resp.CategorySlugs = slugsOf[al.ID]
+		resp.CategoryPos = slugPos[al.ID]
+		if al.CreatedAt.Valid {
+			created := al.CreatedAt.Time
+			resp.CreatedAt = &created
 		}
 		if al.ParentID.Valid {
 			s := al.ParentID.UUID.String()
@@ -186,7 +225,7 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 		if !al.CoverID.Valid {
 			cover = fallbackCover[al.ID]
 		}
-		if cover != uuid.Nil {
+		if cover != uuid.Nil && !al.HasPassword {
 			resp.CoverUrls = a.mediaURLs(shop.ID, cover)
 		}
 		out = append(out, resp)
@@ -199,9 +238,23 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "list tabs", err)
 		return
 	}
+	filled, err := a.Q.ListTabsWithVisibleAlbums(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "list filled tabs", err)
+		return
+	}
+	hasAlbums := make(map[uuid.UUID]bool, len(filled))
+	for _, id := range filled {
+		hasAlbums[id] = true
+	}
 	navTabs := make([]publicTabResponse, 0, len(tabs))
 	for _, t := range tabs {
-		navTabs = append(navTabs, publicTabResponse{Title: t.Title, Slug: t.Slug})
+		// Системные («Главная», «Альбомы», «Контакты») пустыми не считаются.
+		navTabs = append(navTabs, publicTabResponse{
+			Title: t.Title,
+			Slug:  t.Slug,
+			Empty: !t.IsSystem && !hasAlbums[t.ID],
+		})
 	}
 	sections, err := a.publicSections(r, shop.ID, "home")
 	if err != nil {
@@ -241,6 +294,30 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Альбом под паролем: без действующего пропуска отдаём только название
+	// и признак «закрыто». Ни фото, ни описания, ни подальбомов — страница
+	// витрины кешируется, и содержимое закрытого альбома в кеш попасть
+	// не должно.
+	if album.PasswordHash != nil && !a.albumUnlocked(r, album) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"shop": toPublicShopResponse(shop),
+			"album": publicAlbumResponse{
+				ID:          album.ID.String(),
+				Title:       album.Title,
+				PhotoCount:  album.PhotoCount,
+				Unlisted:    album.Status == db.AlbumStatusUnlisted,
+				HasPassword: true,
+				Locked:      true,
+			},
+			"children": []publicAlbumResponse{},
+			"photos":   []publicPhotoResponse{},
+			"page":     1,
+			"per_page": publicPhotosPerPage,
+			"total":    0,
+		})
+		return
+	}
+
 	page := queryInt(r, "page", 1, 1, 1_000_000)
 	perPage := queryInt(r, "per_page", publicPhotosPerPage, 1, publicPhotosPerPageMax)
 
@@ -269,6 +346,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		Description: album.Description,
 		PhotoCount:  album.PhotoCount,
 		Unlisted:    album.Status == db.AlbumStatusUnlisted,
+		HasPassword: album.PasswordHash != nil,
 	}
 	if album.ParentID.Valid {
 		s := album.ParentID.UUID.String()
@@ -285,15 +363,16 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	outChildren := make([]publicAlbumResponse, 0, len(children))
 	for _, ch := range children {
 		child := publicAlbumResponse{
-			ID:         ch.ID.String(),
-			Title:      ch.Title,
-			PhotoCount: ch.PhotoCount,
+			ID:          ch.ID.String(),
+			Title:       ch.Title,
+			PhotoCount:  ch.PhotoCount,
+			HasPassword: ch.HasPassword,
 		}
 		cover := ch.CoverID.UUID
-		if !ch.CoverID.Valid {
+		if !ch.CoverID.Valid && !ch.HasPassword {
 			cover = a.firstReadyPhoto(r, ch.ID)
 		}
-		if cover != uuid.Nil {
+		if cover != uuid.Nil && !ch.HasPassword {
 			child.CoverUrls = a.mediaURLs(shop.ID, cover)
 		}
 		outChildren = append(outChildren, child)

@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addAlbumCategory = `-- name: AddAlbumCategory :execrows
+INSERT INTO album_categories (album_id, category_id, sort_order)
+SELECT a.id, c.id,
+       (SELECT coalesce(max(t.sort_order), 0) + 1 FROM album_categories t WHERE t.category_id = c.id)
+FROM albums a, categories c
+WHERE a.id = $1 AND a.shop_id = $2 AND a.deleted_at IS NULL
+  AND c.id = $3 AND c.shop_id = $2
+ON CONFLICT DO NOTHING
+`
+
+type AddAlbumCategoryParams struct {
+	AlbumID    uuid.UUID `json:"album_id"`
+	ShopID     uuid.UUID `json:"shop_id"`
+	CategoryID uuid.UUID `json:"category_id"`
+}
+
+// Альбом в нескольких категориях. Обе стороны проверяются по магазину:
+// ни чужой альбом, ни чужая категория в связь не попадут.
+// Новый альбом встаёт в конец категории.
+func (q *Queries) AddAlbumCategory(ctx context.Context, arg AddAlbumCategoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addAlbumCategory, arg.AlbumID, arg.ShopID, arg.CategoryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const clearAlbumCategories = `-- name: ClearAlbumCategories :exec
+DELETE FROM album_categories ac
+USING albums a
+WHERE ac.album_id = a.id AND a.shop_id = $1 AND ac.album_id = $2
+`
+
+type ClearAlbumCategoriesParams struct {
+	ShopID  uuid.UUID `json:"shop_id"`
+	AlbumID uuid.UUID `json:"album_id"`
+}
+
+func (q *Queries) ClearAlbumCategories(ctx context.Context, arg ClearAlbumCategoriesParams) error {
+	_, err := q.db.Exec(ctx, clearAlbumCategories, arg.ShopID, arg.AlbumID)
+	return err
+}
+
 const countCategoryChildren = `-- name: CountCategoryChildren :one
 SELECT count(*) FROM categories WHERE parent_id = $1
 `
@@ -27,8 +70,15 @@ func (q *Queries) CountCategoryChildren(ctx context.Context, parentID uuid.NullU
 
 const createCategory = `-- name: CreateCategory :one
 INSERT INTO categories (shop_id, parent_id, title, slug, sort_order)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at
+VALUES (
+    $1, $2, $3, $4,
+    CASE WHEN $5::int > 0 THEN $5::int
+         ELSE (SELECT coalesce(max(c.sort_order), -1) + 1 FROM categories c
+               WHERE c.shop_id = $1
+                 AND c.parent_id IS NOT DISTINCT FROM $2)
+    END
+)
+RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at, is_hidden, on_home
 `
 
 type CreateCategoryParams struct {
@@ -39,6 +89,9 @@ type CreateCategoryParams struct {
 	SortOrder int32         `json:"sort_order"`
 }
 
+// Место не задано (0) — категория встаёт в конец своего уровня (макет 14:
+// новая строка появляется в конце списка). Раньше все новые получали 0 и
+// вставали перед теми, что продавец уже расставил перетаскиванием.
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
 	row := q.db.QueryRow(ctx, createCategory,
 		arg.ShopID,
@@ -57,6 +110,8 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsHidden,
+		&i.OnHome,
 	)
 	return i, err
 }
@@ -80,7 +135,7 @@ func (q *Queries) DeleteCategory(ctx context.Context, arg DeleteCategoryParams) 
 }
 
 const getCategoryForShop = `-- name: GetCategoryForShop :one
-SELECT id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at FROM categories
+SELECT id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at, is_hidden, on_home FROM categories
 WHERE id = $1 AND shop_id = $2
 `
 
@@ -102,12 +157,49 @@ func (q *Queries) GetCategoryForShop(ctx context.Context, arg GetCategoryForShop
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsHidden,
+		&i.OnHome,
 	)
 	return i, err
 }
 
+const listAlbumCategoryPairs = `-- name: ListAlbumCategoryPairs :many
+SELECT ac.album_id, ac.category_id, ac.sort_order
+FROM album_categories ac
+JOIN albums a ON a.id = ac.album_id
+WHERE a.shop_id = $1
+ORDER BY ac.created_at, ac.category_id
+`
+
+type ListAlbumCategoryPairsRow struct {
+	AlbumID    uuid.UUID `json:"album_id"`
+	CategoryID uuid.UUID `json:"category_id"`
+	SortOrder  int32     `json:"sort_order"`
+}
+
+// Пары «альбом — категория» магазина: кабинет собирает из них category_ids.
+func (q *Queries) ListAlbumCategoryPairs(ctx context.Context, shopID uuid.UUID) ([]ListAlbumCategoryPairsRow, error) {
+	rows, err := q.db.Query(ctx, listAlbumCategoryPairs, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlbumCategoryPairsRow
+	for rows.Next() {
+		var i ListAlbumCategoryPairsRow
+		if err := rows.Scan(&i.AlbumID, &i.CategoryID, &i.SortOrder); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCategoriesByShop = `-- name: ListCategoriesByShop :many
-SELECT id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at FROM categories
+SELECT id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at, is_hidden, on_home FROM categories
 WHERE shop_id = $1
 ORDER BY sort_order, created_at
 `
@@ -130,6 +222,8 @@ func (q *Queries) ListCategoriesByShop(ctx context.Context, shopID uuid.UUID) ([
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsHidden,
+			&i.OnHome,
 		); err != nil {
 			return nil, err
 		}
@@ -141,18 +235,61 @@ func (q *Queries) ListCategoriesByShop(ctx context.Context, shopID uuid.UUID) ([
 	return items, nil
 }
 
+const listPublicAlbumCategorySlugs = `-- name: ListPublicAlbumCategorySlugs :many
+SELECT ac.album_id, c.slug, ac.sort_order
+FROM album_categories ac
+JOIN albums a ON a.id = ac.album_id
+JOIN categories c ON c.id = ac.category_id
+WHERE a.shop_id = $1 AND NOT c.is_hidden
+  AND NOT EXISTS (SELECT 1 FROM categories p WHERE p.id = c.parent_id AND p.is_hidden)
+ORDER BY ac.created_at, c.slug
+`
+
+type ListPublicAlbumCategorySlugsRow struct {
+	AlbumID   uuid.UUID `json:"album_id"`
+	Slug      string    `json:"slug"`
+	SortOrder int32     `json:"sort_order"`
+}
+
+// То же для витрины: слаги только видимых категорий.
+func (q *Queries) ListPublicAlbumCategorySlugs(ctx context.Context, shopID uuid.UUID) ([]ListPublicAlbumCategorySlugsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicAlbumCategorySlugs, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublicAlbumCategorySlugsRow
+	for rows.Next() {
+		var i ListPublicAlbumCategorySlugsRow
+		if err := rows.Scan(&i.AlbumID, &i.Slug, &i.SortOrder); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicAlbumsByCategory = `-- name: ListPublicAlbumsByCategory :many
-SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator FROM albums a
-JOIN categories c ON c.id = a.category_id
-WHERE a.shop_id = $1
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark FROM albums a
+JOIN album_categories ac ON ac.album_id = a.id
+JOIN categories c ON c.id = ac.category_id
+WHERE a.shop_id = $1 AND a.deleted_at IS NULL
   AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
-        WHERE ch.parent_id = a.id AND ch.status = 'published'
+        WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
           AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
           AND ch.photo_count > 0))
   AND (c.slug = $2 OR c.parent_id = (SELECT id FROM categories WHERE shop_id = $1 AND slug = $2))
-ORDER BY a.sort_order, a.created_at DESC
+  -- Скрытая категория по своему адресу тоже ничего не отдаёт.
+  AND NOT c.is_hidden
+  AND NOT EXISTS (SELECT 1 FROM categories p WHERE p.id = c.parent_id AND p.is_hidden)
+  AND NOT EXISTS (SELECT 1 FROM categories self WHERE self.shop_id = $1 AND self.slug = $2 AND self.is_hidden)
+GROUP BY a.id
+ORDER BY min(CASE WHEN c.slug = $2 THEN 0 ELSE 1 END), min(ac.sort_order), a.created_at DESC
 `
 
 type ListPublicAlbumsByCategoryParams struct {
@@ -160,6 +297,8 @@ type ListPublicAlbumsByCategoryParams struct {
 	Slug   string    `json:"slug"`
 }
 
+// Порядок — как продавец расставил альбомы в самой категории; альбомы
+// подкатегорий идут следом, каждый на своём месте в подкатегории.
 func (q *Queries) ListPublicAlbumsByCategory(ctx context.Context, arg ListPublicAlbumsByCategoryParams) ([]Album, error) {
 	rows, err := q.db.Query(ctx, listPublicAlbumsByCategory, arg.ShopID, arg.Slug)
 	if err != nil {
@@ -185,6 +324,8 @@ func (q *Queries) ListPublicAlbumsByCategory(ctx context.Context, arg ListPublic
 			&i.HiddenByPlan,
 			&i.Description,
 			&i.BlockedByModerator,
+			&i.DeletedAt,
+			&i.Watermark,
 		); err != nil {
 			return nil, err
 		}
@@ -197,10 +338,14 @@ func (q *Queries) ListPublicAlbumsByCategory(ctx context.Context, arg ListPublic
 }
 
 const listPublicCategories = `-- name: ListPublicCategories :many
-SELECT c.id, c.shop_id, c.parent_id, c.title, c.slug, c.sort_order, c.created_at, c.updated_at, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator) AS album_count
+SELECT c.id, c.shop_id, c.parent_id, c.title, c.slug, c.sort_order, c.created_at, c.updated_at, c.is_hidden, c.on_home, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL) AS album_count
 FROM categories c
-LEFT JOIN albums a ON a.category_id = c.id
+LEFT JOIN album_categories ac ON ac.category_id = c.id
+LEFT JOIN albums a ON a.id = ac.album_id
 WHERE c.shop_id = $1
+  -- Скрытая категория не видна покупателю вместе со всеми подкатегориями.
+  AND NOT c.is_hidden
+  AND NOT EXISTS (SELECT 1 FROM categories p WHERE p.id = c.parent_id AND p.is_hidden)
 GROUP BY c.id
 ORDER BY c.sort_order, c.created_at
 `
@@ -214,6 +359,8 @@ type ListPublicCategoriesRow struct {
 	SortOrder  int32              `json:"sort_order"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	IsHidden   bool               `json:"is_hidden"`
+	OnHome     bool               `json:"on_home"`
 	AlbumCount int64              `json:"album_count"`
 }
 
@@ -237,6 +384,8 @@ func (q *Queries) ListPublicCategories(ctx context.Context, shopID uuid.UUID) ([
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsHidden,
+			&i.OnHome,
 			&i.AlbumCount,
 		); err != nil {
 			return nil, err
@@ -249,31 +398,74 @@ func (q *Queries) ListPublicCategories(ctx context.Context, shopID uuid.UUID) ([
 	return items, nil
 }
 
+const lockCategoryForShop = `-- name: LockCategoryForShop :exec
+SELECT id FROM categories WHERE id = $1 AND shop_id = $2 FOR UPDATE
+`
+
+type LockCategoryForShopParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Строка категории под замком до конца транзакции: добавления альбомов
+// в неё идут по очереди, и max(sort_order)+1 не выдаёт двум одно место.
+func (q *Queries) LockCategoryForShop(ctx context.Context, arg LockCategoryForShopParams) error {
+	_, err := q.db.Exec(ctx, lockCategoryForShop, arg.ID, arg.ShopID)
+	return err
+}
+
 const moveAlbumsToCategory = `-- name: MoveAlbumsToCategory :exec
-UPDATE albums
-SET category_id = $3, updated_at = now()
-WHERE shop_id = $1 AND category_id = $2
+INSERT INTO album_categories (album_id, category_id, sort_order)
+SELECT ac.album_id, $1::uuid,
+       -- Переехавшие встают в конец новой категории, сохраняя свой порядок.
+       (SELECT coalesce(max(t.sort_order), 0) FROM album_categories t WHERE t.category_id = $1::uuid)
+         + row_number() OVER (ORDER BY ac.sort_order, ac.created_at)
+FROM album_categories ac
+JOIN albums a ON a.id = ac.album_id
+WHERE a.shop_id = $2 AND ac.category_id = $3::uuid
+ON CONFLICT DO NOTHING
 `
 
 type MoveAlbumsToCategoryParams struct {
-	ShopID       uuid.UUID     `json:"shop_id"`
-	CategoryID   uuid.NullUUID `json:"category_id"`
-	CategoryID_2 uuid.NullUUID `json:"category_id_2"`
+	Target uuid.UUID `json:"target"`
+	ShopID uuid.UUID `json:"shop_id"`
+	Source uuid.UUID `json:"source"`
 }
 
 // Перенос альбомов при удалении категории: продавец выбирает целевую
 // (NULL = оставить без категории). Ограничение по shop_id — на случай
 // подставленного чужого id.
 func (q *Queries) MoveAlbumsToCategory(ctx context.Context, arg MoveAlbumsToCategoryParams) error {
-	_, err := q.db.Exec(ctx, moveAlbumsToCategory, arg.ShopID, arg.CategoryID, arg.CategoryID_2)
+	_, err := q.db.Exec(ctx, moveAlbumsToCategory, arg.Target, arg.ShopID, arg.Source)
 	return err
+}
+
+const removeAlbumCategory = `-- name: RemoveAlbumCategory :execrows
+DELETE FROM album_categories ac
+USING albums a
+WHERE ac.album_id = a.id AND a.shop_id = $1
+  AND ac.album_id = $2 AND ac.category_id = $3
+`
+
+type RemoveAlbumCategoryParams struct {
+	ShopID     uuid.UUID `json:"shop_id"`
+	AlbumID    uuid.UUID `json:"album_id"`
+	CategoryID uuid.UUID `json:"category_id"`
+}
+
+func (q *Queries) RemoveAlbumCategory(ctx context.Context, arg RemoveAlbumCategoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeAlbumCategory, arg.ShopID, arg.AlbumID, arg.CategoryID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setAlbumCategory = `-- name: SetAlbumCategory :one
 UPDATE albums
 SET category_id = $3, updated_at = now()
-WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
 `
 
 type SetAlbumCategoryParams struct {
@@ -301,38 +493,59 @@ func (q *Queries) SetAlbumCategory(ctx context.Context, arg SetAlbumCategoryPara
 		&i.HiddenByPlan,
 		&i.Description,
 		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
 	)
 	return i, err
 }
 
-const updateCategory = `-- name: UpdateCategory :one
-UPDATE categories
-SET title      = $3,
-    slug       = $4,
-    sort_order = $5,
-    parent_id  = $6,
-    updated_at = now()
-WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at
+const setCategoryAlbumOrder = `-- name: SetCategoryAlbumOrder :execrows
+UPDATE album_categories ac
+SET sort_order = wanted.ord
+FROM unnest($3::uuid[]) WITH ORDINALITY AS wanted(id, ord), categories c
+WHERE ac.album_id = wanted.id
+  AND ac.category_id = $1
+  AND c.id = ac.category_id AND c.shop_id = $2
 `
 
-type UpdateCategoryParams struct {
-	ID        uuid.UUID     `json:"id"`
-	ShopID    uuid.UUID     `json:"shop_id"`
-	Title     string        `json:"title"`
-	Slug      string        `json:"slug"`
-	SortOrder int32         `json:"sort_order"`
-	ParentID  uuid.NullUUID `json:"parent_id"`
+type SetCategoryAlbumOrderParams struct {
+	CategoryID uuid.UUID   `json:"category_id"`
+	ShopID     uuid.UUID   `json:"shop_id"`
+	AlbumIds   []uuid.UUID `json:"album_ids"`
 }
 
-func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
-	row := q.db.QueryRow(ctx, updateCategory,
+// Порядок альбомов в категории одним запросом: альбомы получают номера
+// по месту в списке. Категория проверяется по магазину — чужая не совпадёт
+// ни с одной строкой; альбомы не из этой категории просто пропускаются.
+func (q *Queries) SetCategoryAlbumOrder(ctx context.Context, arg SetCategoryAlbumOrderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setCategoryAlbumOrder, arg.CategoryID, arg.ShopID, arg.AlbumIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setCategoryVisibility = `-- name: SetCategoryVisibility :one
+UPDATE categories
+SET is_hidden = $3, on_home = $4, updated_at = now()
+WHERE id = $1 AND shop_id = $2
+RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at, is_hidden, on_home
+`
+
+type SetCategoryVisibilityParams struct {
+	ID       uuid.UUID `json:"id"`
+	ShopID   uuid.UUID `json:"shop_id"`
+	IsHidden bool      `json:"is_hidden"`
+	OnHome   bool      `json:"on_home"`
+}
+
+// Видимость категории: скрыта с витрины и показывается ли на главной.
+func (q *Queries) SetCategoryVisibility(ctx context.Context, arg SetCategoryVisibilityParams) (Category, error) {
+	row := q.db.QueryRow(ctx, setCategoryVisibility,
 		arg.ID,
 		arg.ShopID,
-		arg.Title,
-		arg.Slug,
-		arg.SortOrder,
-		arg.ParentID,
+		arg.IsHidden,
+		arg.OnHome,
 	)
 	var i Category
 	err := row.Scan(
@@ -344,6 +557,77 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsHidden,
+		&i.OnHome,
+	)
+	return i, err
+}
+
+const syncShopPrimaryCategories = `-- name: SyncShopPrimaryCategories :exec
+UPDATE albums a
+SET category_id = (
+    SELECT ac.category_id FROM album_categories ac
+    WHERE ac.album_id = a.id
+    ORDER BY ac.created_at, ac.category_id
+    LIMIT 1)
+WHERE a.shop_id = $1
+  AND a.category_id IS DISTINCT FROM (
+    SELECT ac.category_id FROM album_categories ac
+    WHERE ac.album_id = a.id
+    ORDER BY ac.created_at, ac.category_id
+    LIMIT 1)
+`
+
+// albums.category_id — «первая категория» альбома; после любой правки
+// связей её выравнивают по таблице связей.
+func (q *Queries) SyncShopPrimaryCategories(ctx context.Context, shopID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, syncShopPrimaryCategories, shopID)
+	return err
+}
+
+const updateCategory = `-- name: UpdateCategory :one
+UPDATE categories
+SET title      = $1,
+    slug       = $2,
+    sort_order = coalesce($3::int, sort_order),
+    parent_id  = $4,
+    updated_at = now()
+WHERE id = $5 AND shop_id = $6
+RETURNING id, shop_id, parent_id, title, slug, sort_order, created_at, updated_at, is_hidden, on_home
+`
+
+type UpdateCategoryParams struct {
+	Title     string        `json:"title"`
+	Slug      string        `json:"slug"`
+	SortOrder pgtype.Int4   `json:"sort_order"`
+	ParentID  uuid.NullUUID `json:"parent_id"`
+	ID        uuid.UUID     `json:"id"`
+	ShopID    uuid.UUID     `json:"shop_id"`
+}
+
+// sort_order не передан (NULL) — место категории не меняется. Раньше
+// переименование в кабинете слало 0, и категория прыгала в начало списка.
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
+	row := q.db.QueryRow(ctx, updateCategory,
+		arg.Title,
+		arg.Slug,
+		arg.SortOrder,
+		arg.ParentID,
+		arg.ID,
+		arg.ShopID,
+	)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ParentID,
+		&i.Title,
+		&i.Slug,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsHidden,
+		&i.OnHome,
 	)
 	return i, err
 }

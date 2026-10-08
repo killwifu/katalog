@@ -9,7 +9,10 @@ info:
     клиентские типы генерируются из этого файла (orval).
     Аутентификация: сессионная httpOnly cookie `katalog_session`.
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
-  version: 0.6.0
+    Тело запроса принимается только с `Content-Type: application/json`
+    (иначе 415, error=unsupported_media_type) и ровно одним JSON-объектом;
+    символ NUL (\u0000) в строках и в адресе запроса — 400.
+  version: 0.7.0
 servers:
   - url: /
 
@@ -124,7 +127,7 @@ paths:
               required: [token, password]
               properties:
                 token: { type: string }
-                password: { type: string, minLength: 8 }
+                password: { type: string, minLength: 8, maxLength: 128 }
       responses:
         "204": { description: Пароль обновлён }
         "400":
@@ -132,6 +135,35 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/password/change:
+    post:
+      operationId: changePassword
+      summary: Сменить пароль из кабинета
+      description: >
+        Требует текущий пароль. Остальные сессии пользователя закрываются,
+        текущая выдаётся заново (Set-Cookie). Rate-limit как у входа.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Пароль изменён }
+        "400":
+          description: >
+            Неверный текущий пароль (error=wrong_password), слабый новый
+            (error=weak_password) или длиннее 128 символов (error=password_too_long)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/auth/verify-email:
@@ -186,7 +218,10 @@ paths:
                     Каналы связи: telegram, whatsapp, vk, max. Значение —
                     ник или, для vk и max, полная ссылка на сам мессенджер
                     (vk.me, vk.com, m.vk.com / max.ru, m.max.ru). Ссылка на
-                    любой другой хост отклоняется (invalid_contacts).
+                    любой другой хост отклоняется (invalid_contacts), как и
+                    ник с недопустимыми символами. telegram — ник, @ник,
+                    ссылка t.me/ник или t.me/+номер, иначе invalid_telegram;
+                    whatsapp — номер в международном формате (invalid_whatsapp).
       responses:
         "201":
           description: Магазин создан
@@ -401,6 +436,102 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /api/v1/shops/{shopID}/categories/{categoryID}/albums/order:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - name: categoryID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      operationId: setCategoryAlbumOrder
+      summary: Порядок альбомов внутри категории
+      description: >
+        Альбомы получают места по порядку в album_ids. У каждой категории
+        порядок свой; в нём альбомы стоят на странице категории и в её
+        разделе на главной витрины. Альбомы не из этой категории (в том
+        числе чужие) пропускаются.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [album_ids]
+              properties:
+                album_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { type: string, format: uuid }
+      responses:
+        "204": { description: Порядок сохранён }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/categories/{categoryID}/albums/{albumID}:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+      - name: categoryID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/AlbumID"
+    put:
+      operationId: addAlbumToCategory
+      summary: Положить альбом в категорию, не вынимая из остальных
+      description: >
+        Альбом может лежать в нескольких категориях. Повторное добавление —
+        не ошибка. PATCH …/albums/{albumID}/category по-прежнему оставляет
+        альбому ровно одну категорию (или ни одной).
+      responses:
+        "204": { description: Добавлен }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: removeAlbumFromCategory
+      summary: Убрать альбом из категории
+      description: Сам альбом и его место в других категориях не трогаются.
+      responses:
+        "204": { description: Убран }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/categories/{categoryID}/visibility:
+    patch:
+      operationId: setCategoryVisibility
+      summary: Скрыть категорию с витрины или убрать с главной
+      description: >
+        is_hidden — покупатель не видит категорию ни в меню, ни по её адресу
+        (вместе с подкатегориями); альбомы остаются доступны по ссылке.
+        on_home — категория показывается блоком на главной витрины.
+        Переданное поле меняется, непереданное остаётся как было.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - name: categoryID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_hidden: { type: boolean }
+                on_home: { type: boolean }
+      responses:
+        "200":
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/shops/{shopID}/trash:
     parameters:
       - $ref: "#/components/parameters/ShopID"
@@ -421,8 +552,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [photos, total, page, per_page, keep_days]
+                required: [albums, photos, total, page, per_page, keep_days]
                 properties:
+                  albums:
+                    type: array
+                    description: >
+                      Удалённые альбомы — только на первой странице. Фото,
+                      уехавшие вместе с альбомом, в photos не дублируются.
+                    items:
+                      type: object
+                      required: [id, title, photo_count, deleted_at]
+                      properties:
+                        id: { type: string, format: uuid }
+                        title: { type: string }
+                        photo_count: { type: integer }
+                        deleted_at: { type: string, format: date-time }
+                        cover_urls: { $ref: "#/components/schemas/PhotoUrls" }
                   photos:
                     type: array
                     items: { $ref: "#/components/schemas/Photo" }
@@ -440,6 +585,40 @@ paths:
       responses:
         "204":
           description: Очищено
+
+  /api/v1/shops/{shopID}/trash/albums/{albumID}/restore:
+    post:
+      operationId: restoreAlbum
+      summary: Вернуть альбом из корзины
+      description: >
+        Возвращает альбом с подальбомами и фотографиями, которые уехали в
+        корзину вместе с ним. Фото, удалённые раньше по отдельности, остаются
+        в корзине.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+      responses:
+        "200":
+          description: Альбом возвращён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Album"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/trash/albums/{albumID}:
+    delete:
+      operationId: purgeAlbum
+      summary: Удалить альбом из корзины окончательно
+      description: Удаляет строки и объекты в S3, возвращает место в квоте.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+      responses:
+        "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/v1/shops/{shopID}/trash/{photoID}:
     parameters:
@@ -494,6 +673,7 @@ paths:
                 title: { type: string, maxLength: 200 }
                 parent_id: { type: string, format: uuid }
                 sort_order: { type: integer }
+                watermark: { $ref: "#/components/schemas/AlbumWatermark" }
       responses:
         "201":
           description: Альбом создан
@@ -560,6 +740,15 @@ paths:
                   type: [string, "null"]
                   format: uuid
                   description: Пустая строка сбрасывает обложку; фото должно принадлежать альбому
+                password:
+                  type: string
+                  maxLength: 64
+                  description: >
+                    Пароль альбома: строка 4–64 символа задаёт его, пустая
+                    снимает. На бесплатном тарифе пароль нельзя ни задать, ни
+                    сменить, ни снять — 403 password_plan_required; поставленный
+                    на платном тарифе при понижении продолжает действовать.
+                watermark: { $ref: "#/components/schemas/AlbumWatermark" }
       responses:
         "200":
           description: Обновлено
@@ -572,7 +761,11 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       operationId: deleteAlbum
-      summary: Удалить альбом
+      summary: Удалить альбом — в «Удаленное»
+      description: >
+        Альбом с подальбомами и фотографиями уезжает в корзину и пропадает из
+        кабинета и с витрины. Место в квоте не освобождается до окончательного
+        удаления (purgeAlbum, emptyTrash или ночная уборка по сроку хранения).
       responses:
         "204": { description: Удалено }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -631,7 +824,7 @@ paths:
               properties:
                 shop_id: { type: string, format: uuid }
                 album_id: { type: string, format: uuid }
-                size: { type: integer, minimum: 1, maximum: 52428800 }
+                size: { type: integer, minimum: 1, maximum: 10485760 }
       responses:
         "200":
           description: URL выдан
@@ -663,6 +856,10 @@ paths:
       description: >
         Для каждого фото: проверка объекта в S3, uploading -> processing,
         задача воркеру (asynq). Ответ по каждому фото отдельно.
+        Подтверждённые фото встают в альбоме сразу после первой фотографии
+        (обложки) в порядке перечисления в photo_ids; то, что стояло после
+        обложки, сдвигается за пачку. В пустом альбоме первое фото пачки
+        становится первым. Не больше 200 фото за запрос.
       requestBody:
         required: true
         content:
@@ -698,9 +895,12 @@ paths:
                         code:
                           type: string
                           description: >
-                            Машинный код отказа. Сейчас единственный —
-                            quota_exceeded: файл не помещается в тариф.
-                          enum: [quota_exceeded]
+                            Машинный код отказа. quota_exceeded — файл не
+                            помещается в тариф; file_too_large — фактически
+                            загруженный файл больше лимита на одно фото
+                            (presigned PUT размер не ограничивает), фото
+                            помечается failed, объект удаляется.
+                          enum: [quota_exceeded, file_too_large]
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -734,7 +934,12 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       operationId: deletePhoto
-      summary: Удалить фото (объекты S3, квота, счётчик альбома)
+      summary: Удалить фото — в «Удаленное»; незавершённую загрузку — совсем
+      description: >
+        Обработанное фото уезжает в корзину: объекты в S3 остаются, место в
+        квоте не возвращается до окончательного удаления. Фото в статусе
+        uploading (ссылка выдана, confirm не пришёл) — это отменённая
+        загрузка: строка и объект удаляются сразу, в корзину она не попадает.
       responses:
         "204": { description: Удалено }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -844,6 +1049,102 @@ paths:
               schema: { $ref: "#/components/schemas/Tab" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { description: slug уже занят в этом магазине }
+
+  /api/v1/shops/{shopID}/albums/{albumID}/stats:
+    get:
+      operationId: getAlbumStats
+      summary: Показатели альбома за 7 дней
+      description: >
+        Просмотры — из ночной агрегации daily_stats (за неделю и за
+        предыдущую, для сравнения); переходы в мессенджер — из lead_clicks
+        в реальном времени.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [views_week, views_prev_week, lead_clicks]
+                properties:
+                  views_week: { type: integer }
+                  views_prev_week: { type: integer }
+                  lead_clicks: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/albums/{albumID}/download:
+    get:
+      operationId: downloadAlbum
+      summary: Скачать все фото альбома одним архивом
+      description: >
+        Отдаёт zip с оригиналами обработанных фото в порядке альбома
+        (001.jpg, 002.jpg, …). С ?check=1 вместо архива возвращает число
+        фото и суммарный размер — кабинет проверяет этим, что архив есть
+        из чего собрать, прежде чем начинать скачивание. Если в ids
+        ровно одно фото, отдаётся сам оригинал файлом, без архива.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+        - name: check
+          in: query
+          schema: { type: string }
+        - name: ids
+          in: query
+          schema: { type: string }
+          description: Через запятую — скачать только эти фото альбома
+      responses:
+        "200":
+          description: Архив (application/zip) либо, с check, сводка
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: object
+                properties:
+                  photos: { type: integer }
+                  bytes: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: В альбоме нет готовых фото (album_empty)
+
+  /api/v1/shops/{shopID}/albums/{albumID}/photos/order:
+    put:
+      operationId: setPhotoOrder
+      summary: Задать порядок фотографий на странице альбома
+      description: >
+        Порядок = порядок id в массиве. Список может быть страницей, а не
+        альбомом целиком: перечисленные фото получают свои же места в новом
+        порядке, фото с других страниц не сдвигаются. Чужие id ни на что
+        не влияют — запрос ограничен магазином и альбомом. Первое фото
+        альбома становится обложкой, если она не выбрана явно.
+      parameters:
+        - $ref: "#/components/parameters/ShopID"
+        - $ref: "#/components/parameters/AlbumID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_ids]
+              properties:
+                photo_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Порядок сохранён
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/v1/shops/{shopID}/tabs/order:
     put:
@@ -1036,6 +1337,9 @@ paths:
     post:
       operationId: createCategory
       summary: Создать категорию (вложенность максимум 2 уровня)
+      description: >
+        Если sort_order не задан (или 0), категория встаёт в конец своего
+        уровня — после тех, что продавец уже расставил.
       parameters:
         - $ref: "#/components/parameters/ShopID"
       requestBody:
@@ -1088,7 +1392,9 @@ paths:
       summary: Удалить категорию; альбомы не удаляются
       description: >
         Альбомы удаляемой категории переносятся в move_to.
-        Без параметра остаются без категории.
+        Без параметра остаются без категории. Подкатегория удаляемой
+        категории целью быть не может (удаляется вместе с ней) — 400
+        error=invalid_move_to.
       parameters:
         - $ref: "#/components/parameters/ShopID"
         - name: categoryID
@@ -1193,6 +1499,45 @@ paths:
         "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/public/shops/{slug}/albums/{albumID}/unlock:
+    post:
+      operationId: unlockPublicAlbum
+      summary: Проверить пароль альбома и получить пропуск
+      description: >
+        Пропуск — случайный токен на 12 часов. Его передают заголовком
+        X-Album-Token в getPublicAlbum. Смена пароля продавцом гасит выданные
+        пропуска. Лимит попыток — как у входа. Пароль закрывает страницу
+        альбома, обложку в списках и поиск по подписям; адреса файлов на CDN
+        остаются публичными.
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - $ref: "#/components/parameters/AlbumID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Пароль верный
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expires_in]
+                properties:
+                  token: { type: string }
+                  expires_in: { type: integer, description: Секунды }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Неверный пароль (wrong_password)
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/public/shops/{slug}/albums/{albumID}:
     get:
       operationId: getPublicAlbum
@@ -1200,6 +1545,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/ShopSlug"
         - $ref: "#/components/parameters/AlbumID"
+        - name: X-Album-Token
+          in: header
+          required: false
+          schema: { type: string }
+          description: Пропуск закрытого паролем альбома (см. unlockPublicAlbum)
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -1325,8 +1675,8 @@ paths:
               type: object
               required: [url, reporter_name, reporter_email, reason]
               properties:
-                url: { type: string, maxLength: 1000 }
-                reporter_name: { type: string, maxLength: 200 }
+                url: { type: string, maxLength: 1000, description: "Ссылка http(s) (схема необязательна)" }
+                reporter_name: { type: string, minLength: 1, maxLength: 200 }
                 reporter_email: { type: string, format: email }
                 reason: { type: string, minLength: 10, maxLength: 5000 }
       responses:
@@ -1631,7 +1981,9 @@ components:
             required: [email, password]
             properties:
               email: { type: string, format: email }
-              password: { type: string, minLength: 8 }
+              # Длиннее 128 символов: регистрация — 400 password_too_long,
+              # вход — 401 invalid_credentials (без хеширования).
+              password: { type: string, minLength: 8, maxLength: 128 }
 
   responses:
     ShopUnavailable:
@@ -1726,6 +2078,11 @@ components:
             properties:
               channel: { type: string, enum: [telegram, whatsapp, max, vk] }
               clicks: { type: integer }
+        albums_viewed_week:
+          type: integer
+          description: >
+            Сколько разных альбомов открывали за последние 7 дней. Окно
+            фиксированное, от параметра days не зависит.
         top_albums:
           type: array
           maxItems: 5
@@ -1868,8 +2225,30 @@ components:
           type: string
           maxLength: 2000
           description: Условия покупки; на витрине показывается над фотографиями
-        category_id: { type: string, format: uuid, nullable: true }
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Первая из категорий альбома (см. category_ids)
+        category_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: >
+            Все категории альбома — он может лежать в нескольких. Полный
+            список отдаёт listAlbums; в ответах по одному альбому здесь
+            только первая.
+        category_pos:
+          type: object
+          additionalProperties: { type: integer }
+          description: >
+            Место альбома в каждой из его категорий (id категории → номер).
+            Только в listAlbums. Меняется через setCategoryAlbumOrder.
         photo_count: { type: integer }
+        has_password:
+          type: boolean
+          description: >
+            Альбом закрыт паролем. Сам пароль и его хеш наружу не отдаются.
+        watermark: { $ref: "#/components/schemas/AlbumWatermark" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         cover_urls:
@@ -1906,6 +2285,13 @@ components:
             enabled: { type: boolean }
             text: { type: string, maxLength: 40 }
             opacity: { type: number, minimum: 0, maximum: 1 }
+            position:
+              type: string
+              enum: [tl, tc, tr, ml, mc, mr, bl, bc, br]
+              description: >
+                Точка кадра на сетке 3×3: первая буква — строка (t верх,
+                m середина, b низ), вторая — столбец (l, c, r). Не задано —
+                правый нижний угол.
 
     AlbumStatus:
       type: string
@@ -1951,12 +2337,28 @@ components:
           type: array
           items: { type: string, format: uuid }
 
+    AlbumWatermark:
+      type: [object, "null"]
+      description: >
+        Свой водяной знак альбома (включён ли и где); null — как у магазина
+        (settings.watermark). Текст знака общий для магазина. Без position —
+        br. Неверное значение — 400 invalid_watermark, и тогда альбом не
+        создаётся и не меняется (остальные поля запроса тоже не пишутся).
+      properties:
+        enabled: { type: boolean }
+        position: { type: string, enum: [tl, tc, tr, ml, mc, mr, bl, bc, br] }
+
     PublicTab:
       type: object
       required: [title, slug]
       properties:
         title: { type: string }
         slug: { type: string }
+        empty:
+          type: boolean
+          description: >
+            Своя вкладка без видимых альбомов (системные пустыми не бывают).
+            Витрина не показывает её в навигации; по прямой ссылке открывается.
 
     PublicSection:
       type: object
@@ -1976,6 +2378,12 @@ components:
         title: { type: string, maxLength: 200 }
         slug: { type: string }
         sort_order: { type: integer }
+        is_hidden:
+          type: boolean
+          description: Скрыта с витрины (вместе с подкатегориями)
+        on_home:
+          type: boolean
+          description: Показывается блоком на главной витрины
 
     CategoryInput:
       type: object
@@ -1986,7 +2394,11 @@ components:
           type: string
           description: "3-64 символа: a-z, 0-9, одиночные дефисы"
         parent_id: { type: string, format: uuid, nullable: true }
-        sort_order: { type: integer, default: 0 }
+        sort_order:
+          type: integer
+          description: >
+            Место среди категорий своего уровня. Не передано: при создании
+            категория встаёт в конец, при правке остаётся на своём месте.
 
     PublicCategory:
       type: object
@@ -1997,6 +2409,9 @@ components:
         title: { type: string }
         slug: { type: string }
         album_count: { type: integer }
+        on_home:
+          type: boolean
+          description: Категория показывается блоком на главной витрины
 
     PublicShop:
       type: object
@@ -2028,6 +2443,35 @@ components:
             Альбом «по ссылке»: витрина ставит такой странице noindex, чтобы
             она не попадала в поиск — раз продавец убрал альбом из списков.
         cover_urls: { $ref: "#/components/schemas/PhotoUrls" }
+        category_slugs:
+          type: array
+          items: { type: string }
+          description: >
+            Слаги категорий альбома — только в сетке магазина и только
+            нескрытые. По ним главная собирает блоки категорий.
+        category_pos:
+          type: object
+          additionalProperties: { type: integer }
+          description: >
+            Только в сетке магазина: место альбома в каждой из его категорий
+            (слаг → номер). В этом порядке альбомы стоят в разделе категории.
+        created_at:
+          type: string
+          format: date-time
+          description: >
+            Только в сетке магазина. Раздел «Альбомы» витрины показывает
+            альбомы от новых к старым.
+        has_password:
+          type: boolean
+          description: >
+            Альбом закрыт паролем. В списках у такого альбома нет cover_urls:
+            обложка выдала бы содержимое.
+        locked:
+          type: boolean
+          description: >
+            Только на странице альбома: содержимое не отдано (нет заголовка
+            X-Album-Token или пропуск недействителен). photos, children и
+            description в таком ответе пусты.
 
     PublicPhoto:
       type: object

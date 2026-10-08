@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"katalog/backend/internal/db"
 )
@@ -35,6 +38,9 @@ type categoryResponse struct {
 	Title     string  `json:"title"`
 	Slug      string  `json:"slug"`
 	SortOrder int32   `json:"sort_order"`
+	// IsHidden — скрыта с витрины; OnHome — показывается блоком на главной.
+	IsHidden bool `json:"is_hidden"`
+	OnHome   bool `json:"on_home"`
 }
 
 func toCategoryResponse(c db.Category) categoryResponse {
@@ -43,6 +49,8 @@ func toCategoryResponse(c db.Category) categoryResponse {
 		Title:     c.Title,
 		Slug:      c.Slug,
 		SortOrder: c.SortOrder,
+		IsHidden:  c.IsHidden,
+		OnHome:    c.OnHome,
 	}
 	if c.ParentID.Valid {
 		id := c.ParentID.UUID.String()
@@ -51,11 +59,56 @@ func toCategoryResponse(c db.Category) categoryResponse {
 	return out
 }
 
+// handleSetCategoryVisibility — «Скрыть с витрины» и «На главной» из меню
+// категории. Отдельно от переименования: это переключатели в один тап, и
+// тащить ради них название со слагом клиенту незачем.
+func (a *API) handleSetCategoryVisibility(w http.ResponseWriter, r *http.Request) {
+	shop := shopFromCtx(r)
+	id, ok := parseUUIDParam(w, r, "categoryID")
+	if !ok {
+		return
+	}
+	current, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{ID: id, ShopID: shop.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		apiError(w, http.StatusNotFound, "not_found", "category not found")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "load category", err)
+		return
+	}
+	var req struct {
+		IsHidden *bool `json:"is_hidden"`
+		OnHome   *bool `json:"on_home"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	hidden, onHome := current.IsHidden, current.OnHome
+	if req.IsHidden != nil {
+		hidden = *req.IsHidden
+	}
+	if req.OnHome != nil {
+		onHome = *req.OnHome
+	}
+	updated, err := a.Q.SetCategoryVisibility(r.Context(), db.SetCategoryVisibilityParams{
+		ID: id, ShopID: shop.ID, IsHidden: hidden, OnHome: onHome,
+	})
+	if err != nil {
+		a.internalError(w, "set category visibility", err)
+		return
+	}
+	a.Revalidate.Shop(shop.Slug)
+	writeJSON(w, http.StatusOK, toCategoryResponse(updated))
+}
+
 type categoryRequest struct {
-	Title     string  `json:"title"`
-	Slug      string  `json:"slug"`
-	ParentID  *string `json:"parent_id"`
-	SortOrder int32   `json:"sort_order"`
+	Title    string  `json:"title"`
+	Slug     string  `json:"slug"`
+	ParentID *string `json:"parent_id"`
+	// SortOrder не передан — при создании категория встаёт в конец уровня,
+	// при правке остаётся на своём месте.
+	SortOrder *int32 `json:"sort_order"`
 }
 
 // validateCategory разбирает и проверяет общее для создания и обновления.
@@ -91,12 +144,17 @@ func (a *API) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cat, err := a.Q.CreateCategory(r.Context(), db.CreateCategoryParams{
-		ShopID:    shop.ID,
-		ParentID:  parentID,
-		Title:     req.Title,
-		Slug:      req.Slug,
-		SortOrder: req.SortOrder,
+	var cat db.Category
+	err := a.inOrderLock(r.Context(), shop.ID, func(q *db.Queries) error {
+		var err error
+		cat, err = q.CreateCategory(r.Context(), db.CreateCategoryParams{
+			ShopID:    shop.ID,
+			ParentID:  parentID,
+			Title:     req.Title,
+			Slug:      req.Slug,
+			SortOrder: derefInt32(req.SortOrder),
+		})
+		return err
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -197,7 +255,7 @@ func (a *API) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 		ShopID:    shop.ID,
 		Title:     req.Title,
 		Slug:      req.Slug,
-		SortOrder: req.SortOrder,
+		SortOrder: optInt4(req.SortOrder),
 		ParentID:  parentID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -237,10 +295,11 @@ func (a *API) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, "invalid_move_to", "cannot move albums into the category being deleted")
 			return
 		}
-		if _, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{
+		targetCat, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{
 			ID:     target,
 			ShopID: shop.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				apiError(w, http.StatusNotFound, "not_found", "target category not found")
 				return
@@ -248,17 +307,26 @@ func (a *API) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 			a.internalError(w, "load target category", err)
 			return
 		}
+		// Подкатегории удаляются вместе с родителем (каскад): перенос в свою же
+		// подкатегорию молча оставлял альбомы без категории при ответе 204.
+		if targetCat.ParentID.Valid && targetCat.ParentID.UUID == id {
+			apiError(w, http.StatusBadRequest, "invalid_move_to", "cannot move albums into a subcategory of the category being deleted")
+			return
+		}
 		moveTo = uuid.NullUUID{UUID: target, Valid: true}
 	}
 
-	// Перенос до удаления: ON DELETE SET NULL иначе обнулит категорию сам.
-	if err := a.Q.MoveAlbumsToCategory(r.Context(), db.MoveAlbumsToCategoryParams{
-		ShopID:       shop.ID,
-		CategoryID:   uuid.NullUUID{UUID: id, Valid: true},
-		CategoryID_2: moveTo,
-	}); err != nil {
-		a.internalError(w, "move albums", err)
-		return
+	// Перенос до удаления: каскад по внешнему ключу снесёт связи альбомов
+	// с удаляемой категорией, и переносить станет нечего.
+	if moveTo.Valid {
+		if err := a.Q.MoveAlbumsToCategory(r.Context(), db.MoveAlbumsToCategoryParams{
+			ShopID: shop.ID,
+			Source: id,
+			Target: moveTo.UUID,
+		}); err != nil {
+			a.internalError(w, "move albums", err)
+			return
+		}
 	}
 
 	rows, err := a.Q.DeleteCategory(r.Context(), db.DeleteCategoryParams{ID: id, ShopID: shop.ID})
@@ -270,6 +338,101 @@ func (a *API) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "category not found")
 		return
 	}
+	a.syncPrimaryCategories(r, shop.ID)
+	a.Revalidate.Shop(shop.Slug)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// syncPrimaryCategories выравнивает albums.category_id («первая категория»)
+// по таблице связей после любой правки состава категорий.
+func (a *API) syncPrimaryCategories(r *http.Request, shopID uuid.UUID) {
+	if err := a.Q.SyncShopPrimaryCategories(r.Context(), shopID); err != nil {
+		a.Log.Error("sync primary categories failed", "shop_id", shopID, "error", err)
+	}
+}
+
+// handleAddAlbumToCategory кладёт альбом ещё в одну категорию — в остальных
+// он остаётся (макет 14: «Добавить альбомы»).
+func (a *API) handleAddAlbumToCategory(w http.ResponseWriter, r *http.Request) {
+	a.changeAlbumCategory(w, r, true)
+}
+
+// handleRemoveAlbumFromCategory убирает альбом из одной категории; сам
+// альбом и его место в других категориях не трогаются.
+func (a *API) handleRemoveAlbumFromCategory(w http.ResponseWriter, r *http.Request) {
+	a.changeAlbumCategory(w, r, false)
+}
+
+// addAlbumCategory кладёт альбом в конец категории. Место — max+1 по
+// категории; кабинет добавляет пачку альбомов параллельными запросами, и без
+// замка на строку категории они получали одно и то же место — порядок
+// внутри категории становился случайным.
+func (a *API) addAlbumCategory(ctx context.Context, p db.AddAlbumCategoryParams) (int64, error) {
+	tx, err := a.Pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("add album category: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := a.Q.WithTx(tx)
+	if err := q.LockCategoryForShop(ctx, db.LockCategoryForShopParams{ID: p.CategoryID, ShopID: p.ShopID}); err != nil {
+		return 0, fmt.Errorf("add album category: lock: %w", err)
+	}
+	n, err := q.AddAlbumCategory(ctx, p)
+	if err != nil {
+		return 0, fmt.Errorf("add album category: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("add album category: commit: %w", err)
+	}
+	return n, nil
+}
+
+func (a *API) changeAlbumCategory(w http.ResponseWriter, r *http.Request, add bool) {
+	shop := shopFromCtx(r)
+	categoryID, ok := parseUUIDParam(w, r, "categoryID")
+	if !ok {
+		return
+	}
+	albumID, ok := parseUUIDParam(w, r, "albumID")
+	if !ok {
+		return
+	}
+	var (
+		n   int64
+		err error
+	)
+	if add {
+		// Запрос сам проверяет, что и альбом, и категория — этого магазина:
+		// чужая пара не вставит ни строки.
+		n, err = a.addAlbumCategory(r.Context(), db.AddAlbumCategoryParams{
+			AlbumID: albumID, ShopID: shop.ID, CategoryID: categoryID,
+		})
+		if err == nil && n == 0 {
+			// Ноль строк — либо пара уже есть, либо что-то из двух чужое.
+			// Различаем, чтобы повторное добавление не выглядело ошибкой.
+			if _, cerr := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{ID: categoryID, ShopID: shop.ID}); cerr != nil {
+				apiError(w, http.StatusNotFound, "not_found", "category not found")
+				return
+			}
+			if _, aerr := a.Q.GetAlbumForShop(r.Context(), db.GetAlbumForShopParams{ID: albumID, ShopID: shop.ID}); aerr != nil {
+				apiError(w, http.StatusNotFound, "not_found", "album not found")
+				return
+			}
+		}
+	} else {
+		n, err = a.Q.RemoveAlbumCategory(r.Context(), db.RemoveAlbumCategoryParams{
+			AlbumID: albumID, ShopID: shop.ID, CategoryID: categoryID,
+		})
+		if err == nil && n == 0 {
+			apiError(w, http.StatusNotFound, "not_found", "album is not in this category")
+			return
+		}
+	}
+	if err != nil {
+		a.internalError(w, "change album category", err)
+		return
+	}
+	a.syncPrimaryCategories(r, shop.ID)
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -323,6 +486,95 @@ func (a *API) handleSetAlbumCategory(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "set album category", err)
 		return
 	}
+	// «Задать категорию» — ровно одна (или ни одной): прежние связи
+	// снимаются. Добавить альбом ещё в одну категорию — отдельный эндпоинт.
+	if err := a.Q.ClearAlbumCategories(r.Context(), db.ClearAlbumCategoriesParams{AlbumID: albumID, ShopID: shop.ID}); err != nil {
+		a.internalError(w, "clear album categories", err)
+		return
+	}
+	resp := a.toAlbumResponse(album)
+	if catID.Valid {
+		if _, err := a.addAlbumCategory(r.Context(), db.AddAlbumCategoryParams{
+			AlbumID: albumID, ShopID: shop.ID, CategoryID: catID.UUID,
+		}); err != nil {
+			a.internalError(w, "add album category", err)
+			return
+		}
+		resp.CategoryIDs = []string{catID.UUID.String()}
+	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, a.toAlbumResponse(album))
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// maxCategoryAlbumOrder — сколько альбомов можно переставить одним запросом.
+const maxCategoryAlbumOrder = 1000
+
+// handleSetCategoryAlbumOrder — порядок альбомов внутри категории (макет 14:
+// перетаскивание карточки). В этом же порядке альбомы стоят на витрине.
+func (a *API) handleSetCategoryAlbumOrder(w http.ResponseWriter, r *http.Request) {
+	shop := shopFromCtx(r)
+	categoryID, ok := parseUUIDParam(w, r, "categoryID")
+	if !ok {
+		return
+	}
+	var req struct {
+		AlbumIDs []string `json:"album_ids"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.AlbumIDs) == 0 || len(req.AlbumIDs) > maxCategoryAlbumOrder {
+		apiError(w, http.StatusBadRequest, "invalid_order",
+			fmt.Sprintf("album_ids must hold 1..%d ids", maxCategoryAlbumOrder))
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(req.AlbumIDs))
+	seen := make(map[uuid.UUID]struct{}, len(req.AlbumIDs))
+	for _, raw := range req.AlbumIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, "invalid_album", "invalid album id")
+			return
+		}
+		// Повтор в списке дал бы одному альбому два места сразу.
+		if _, dup := seen[id]; dup {
+			apiError(w, http.StatusBadRequest, "invalid_order", "album_ids must be unique")
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	// Чужая категория — 404, а не молчаливые «0 строк обновлено».
+	if _, err := a.Q.GetCategoryForShop(r.Context(), db.GetCategoryForShopParams{ID: categoryID, ShopID: shop.ID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			apiError(w, http.StatusNotFound, "not_found", "category not found")
+			return
+		}
+		a.internalError(w, "load category", err)
+		return
+	}
+	if _, err := a.Q.SetCategoryAlbumOrder(r.Context(), db.SetCategoryAlbumOrderParams{
+		AlbumIds:   ids,
+		CategoryID: categoryID,
+		ShopID:     shop.ID,
+	}); err != nil {
+		a.internalError(w, "set category album order", err)
+		return
+	}
+	a.Revalidate.Shop(shop.Slug)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func derefInt32(v *int32) int32 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func optInt4(v *int32) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: *v, Valid: true}
 }

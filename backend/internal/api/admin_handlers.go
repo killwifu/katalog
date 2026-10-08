@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -223,8 +224,17 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 		PhotoID:     uuid.NullUUID{UUID: photo.ID, Valid: true},
 		Note:        req.Note,
 	}, r)
+	// «Одно из ваших фото» среди сотен продавец не находил — называем
+	// подпись, если она есть, и где искать отметку.
+	which := "одно из ваших фото"
+	if c := []rune(strings.TrimSpace(photo.Caption)); len(c) > 0 {
+		if len(c) > 80 {
+			c = append(c[:80], '…')
+		}
+		which = "фото «" + string(c) + "»"
+	}
 	a.notifyShopOwner(r.Context(), photo.ShopID, "Katalog: фото скрыто модератором",
-		"по жалобе правообладателя одно из ваших фото скрыто с витрины.")
+		"по жалобе правообладателя "+which+" скрыто с витрины. В кабинете оно отмечено как заблокированное.")
 	writeJSON(w, http.StatusOK, map[string]string{"id": photo.ID.String(), "status": "blocked"})
 }
 
@@ -370,7 +380,7 @@ func (a *API) handleAdminSuspendShop(w http.ResponseWriter, r *http.Request) {
 		Note:        req.Note,
 	}, r)
 	a.notifyShopOwner(r.Context(), shop.ID, "Katalog: магазин заблокирован модератором",
-		"по жалобе правообладателя ваш магазин снят с публикации. "+
+		"по жалобе правообладателя витрина снята с публикации. "+
 			"Свяжитесь с поддержкой для выяснения обстоятельств.")
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"katalog/backend/internal/db"
@@ -30,7 +31,10 @@ type statsResponse struct {
 	Daily     []statsDailyPoint `json:"daily"`
 	Channels  []statsChannel    `json:"channels"`
 	TopAlbums []statsTopAlbum   `json:"top_albums"`
-	TopPhotos []statsTopPhoto   `json:"top_photos"`
+	// AlbumsViewedWeek — сколько разных альбомов открывали за 7 дней;
+	// окно фиксированное, от параметра days не зависит.
+	AlbumsViewedWeek int64           `json:"albums_viewed_week"`
+	TopPhotos        []statsTopPhoto `json:"top_photos"`
 }
 
 type statsChannel struct {
@@ -112,6 +116,13 @@ func (a *API) handleShopStats(w http.ResponseWriter, r *http.Request) {
 		resp.Totals.LeadClicks += c.Clicks
 	}
 
+	viewed, err := a.Q.CountAlbumsViewedWeek(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "stats albums viewed", err)
+		return
+	}
+	resp.AlbumsViewedWeek = viewed
+
 	albums, err := a.Q.GetShopTopAlbums(r.Context(), db.GetShopTopAlbumsParams{
 		ShopID: shop.ID,
 		Date:   fromDate,
@@ -153,4 +164,36 @@ func (a *API) handleShopStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleAlbumStats — показатели альбома для его страницы в кабинете:
+// просмотры за 7 дней (и за предыдущие 7 — для сравнения) и переходы
+// в мессенджер с его фотографий.
+func (a *API) handleAlbumStats(w http.ResponseWriter, r *http.Request) {
+	album, ok := a.albumFromURL(w, r)
+	if !ok {
+		return
+	}
+	shop := shopFromCtx(r)
+	views, err := a.Q.GetAlbumWeekViews(r.Context(), db.GetAlbumWeekViewsParams{
+		ShopID:  shop.ID,
+		AlbumID: uuid.NullUUID{UUID: album.ID, Valid: true},
+	})
+	if err != nil {
+		a.internalError(w, "album views", err)
+		return
+	}
+	clicks, err := a.Q.CountAlbumLeadClicks(r.Context(), db.CountAlbumLeadClicksParams{
+		ShopID:  shop.ID,
+		AlbumID: album.ID,
+	})
+	if err != nil {
+		a.internalError(w, "album lead clicks", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"views_week":      views.Week,
+		"views_prev_week": views.PrevWeek,
+		"lead_clicks":     clicks,
+	})
 }

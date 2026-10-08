@@ -63,7 +63,7 @@ func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (in
 }
 
 const countAlbumChildren = `-- name: CountAlbumChildren :one
-SELECT count(*) FROM albums WHERE parent_id = $1
+SELECT count(*) FROM albums WHERE parent_id = $1 AND deleted_at IS NULL
 `
 
 // Есть ли у альбома подальбомы: родителем можно назначить только тот,
@@ -76,7 +76,7 @@ func (q *Queries) CountAlbumChildren(ctx context.Context, parentID uuid.NullUUID
 }
 
 const countAlbumsByShop = `-- name: CountAlbumsByShop :one
-SELECT count(*) FROM albums WHERE shop_id = $1
+SELECT count(*) FROM albums WHERE shop_id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) CountAlbumsByShop(ctx context.Context, shopID uuid.UUID) (int64, error) {
@@ -89,7 +89,7 @@ func (q *Queries) CountAlbumsByShop(ctx context.Context, shopID uuid.UUID) (int6
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
 `
 
 type CreateAlbumParams struct {
@@ -123,6 +123,8 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.HiddenByPlan,
 		&i.Description,
 		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
 	)
 	return i, err
 }
@@ -145,9 +147,25 @@ func (q *Queries) DeleteAlbum(ctx context.Context, arg DeleteAlbumParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const firstAlbumPhotoAny = `-- name: FirstAlbumPhotoAny :one
+SELECT id FROM photos
+WHERE album_id = $1 AND status = 'ready'
+ORDER BY sort_order, created_at, id
+LIMIT 1
+`
+
+// Обложка удалённого альбома для «Удаленного»: его фото тоже помечены
+// deleted_at, поэтому обычный фолбэк «первое готовое фото» их не видит.
+func (q *Queries) FirstAlbumPhotoAny(ctx context.Context, albumID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, firstAlbumPhotoAny, albumID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
-WHERE id = $1 AND shop_id = $2
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
 `
 
 type GetAlbumForShopParams struct {
@@ -175,13 +193,62 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.HiddenByPlan,
 		&i.Description,
 		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
+	)
+	return i, err
+}
+
+const getAlbumWatermark = `-- name: GetAlbumWatermark :one
+SELECT watermark FROM albums WHERE id = $1
+`
+
+// Для воркера: знак альбома обрабатываемого фото.
+func (q *Queries) GetAlbumWatermark(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getAlbumWatermark, id)
+	var watermark []byte
+	err := row.Scan(&watermark)
+	return watermark, err
+}
+
+const getDeletedAlbumForShop = `-- name: GetDeletedAlbumForShop :one
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+`
+
+type GetDeletedAlbumForShopParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+func (q *Queries) GetDeletedAlbumForShop(ctx context.Context, arg GetDeletedAlbumForShopParams) (Album, error) {
+	row := q.db.QueryRow(ctx, getDeletedAlbumForShop, arg.ID, arg.ShopID)
+	var i Album
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ParentID,
+		&i.Title,
+		&i.CoverPhotoID,
+		&i.SortOrder,
+		&i.PasswordHash,
+		&i.PhotoCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CategoryID,
+		&i.Status,
+		&i.HiddenByPlan,
+		&i.Description,
+		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
-WHERE shop_id = $1
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+WHERE shop_id = $1 AND deleted_at IS NULL
 ORDER BY sort_order, created_at
 `
 
@@ -210,6 +277,8 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.HiddenByPlan,
 			&i.Description,
 			&i.BlockedByModerator,
+			&i.DeletedAt,
+			&i.Watermark,
 		); err != nil {
 			return nil, err
 		}
@@ -227,7 +296,7 @@ SELECT a.id, a.title, a.photo_count, a.hidden_by_plan, a.created_at,
 FROM albums a
 LEFT JOIN daily_stats d
        ON d.album_id = a.id AND d.date >= (current_date - 30)
-WHERE a.shop_id = $1
+WHERE a.shop_id = $1 AND a.deleted_at IS NULL
 GROUP BY a.id
 ORDER BY views DESC, a.created_at DESC
 `
@@ -271,6 +340,251 @@ func (q *Queries) ListAlbumsForDowngrade(ctx context.Context, shopID uuid.UUID) 
 	return items, nil
 }
 
+const listDeletedAlbums = `-- name: ListDeletedAlbums :many
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark FROM albums a
+WHERE a.shop_id = $1 AND a.deleted_at IS NOT NULL
+  AND NOT EXISTS (
+        SELECT 1 FROM albums p
+        WHERE p.id = a.parent_id AND p.deleted_at = a.deleted_at)
+ORDER BY a.deleted_at DESC, a.id
+`
+
+// Удалённые альбомы для «Удаленного». Подальбом, уехавший вместе с
+// родителем, отдельной строкой не показываем — он вернётся вместе с ним.
+func (q *Queries) ListDeletedAlbums(ctx context.Context, shopID uuid.UUID) ([]Album, error) {
+	rows, err := q.db.Query(ctx, listDeletedAlbums, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Album
+	for rows.Next() {
+		var i Album
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShopID,
+			&i.ParentID,
+			&i.Title,
+			&i.CoverPhotoID,
+			&i.SortOrder,
+			&i.PasswordHash,
+			&i.PhotoCount,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CategoryID,
+			&i.Status,
+			&i.HiddenByPlan,
+			&i.Description,
+			&i.BlockedByModerator,
+			&i.DeletedAt,
+			&i.Watermark,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const purgeDeletedAlbums = `-- name: PurgeDeletedAlbums :execrows
+DELETE FROM albums
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+`
+
+// Окончательная уборка альбомов из корзины. Фотографии к этому моменту
+// уже убраны своими запросами (нужны их id и байты для S3 и квоты), а
+// что осталось — снесёт каскад.
+func (q *Queries) PurgeDeletedAlbums(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeDeletedAlbums, shopID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const purgeExpiredAlbums = `-- name: PurgeExpiredAlbums :execrows
+DELETE FROM albums
+WHERE deleted_at IS NOT NULL
+  AND deleted_at < now() - make_interval(days => $1::int)
+`
+
+func (q *Queries) PurgeExpiredAlbums(ctx context.Context, dollar_1 int32) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredAlbums, dollar_1)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const restoreAlbumTree = `-- name: RestoreAlbumTree :execrows
+UPDATE albums
+SET deleted_at = NULL, updated_at = now()
+WHERE shop_id = $2 AND deleted_at = $3 AND (id = $1 OR parent_id = $1)
+`
+
+type RestoreAlbumTreeParams struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) RestoreAlbumTree(ctx context.Context, arg RestoreAlbumTreeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreAlbumTree, arg.ID, arg.ShopID, arg.DeletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const restoreAlbumTreePhotos = `-- name: RestoreAlbumTreePhotos :execrows
+UPDATE photos
+SET deleted_at = NULL, updated_at = now()
+WHERE photos.shop_id = $2 AND photos.deleted_at = $3
+  AND photos.album_id IN (SELECT a.id FROM albums a WHERE a.shop_id = $2 AND a.deleted_at = $3 AND (a.id = $1 OR a.parent_id = $1))
+`
+
+type RestoreAlbumTreePhotosParams struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// Восстановление: сначала фото (пока у альбома ещё стоит метка, по которой
+// их искать), затем сам альбом с подальбомами.
+func (q *Queries) RestoreAlbumTreePhotos(ctx context.Context, arg RestoreAlbumTreePhotosParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreAlbumTreePhotos, arg.ID, arg.ShopID, arg.DeletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setAlbumPassword = `-- name: SetAlbumPassword :one
+UPDATE albums
+SET password_hash = $3, updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+`
+
+type SetAlbumPasswordParams struct {
+	ID           uuid.UUID `json:"id"`
+	ShopID       uuid.UUID `json:"shop_id"`
+	PasswordHash *string   `json:"password_hash"`
+}
+
+// Пароль альбома: NULL снимает защиту. Хеш наружу не отдаётся никогда —
+// кабинет видит только признак has_password.
+func (q *Queries) SetAlbumPassword(ctx context.Context, arg SetAlbumPasswordParams) (Album, error) {
+	row := q.db.QueryRow(ctx, setAlbumPassword, arg.ID, arg.ShopID, arg.PasswordHash)
+	var i Album
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ParentID,
+		&i.Title,
+		&i.CoverPhotoID,
+		&i.SortOrder,
+		&i.PasswordHash,
+		&i.PhotoCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CategoryID,
+		&i.Status,
+		&i.HiddenByPlan,
+		&i.Description,
+		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
+	)
+	return i, err
+}
+
+const setAlbumWatermark = `-- name: SetAlbumWatermark :one
+UPDATE albums
+SET watermark = $3, updated_at = now()
+WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+`
+
+type SetAlbumWatermarkParams struct {
+	ID        uuid.UUID `json:"id"`
+	ShopID    uuid.UUID `json:"shop_id"`
+	Watermark []byte    `json:"watermark"`
+}
+
+// Знак альбома: NULL — как у магазина.
+func (q *Queries) SetAlbumWatermark(ctx context.Context, arg SetAlbumWatermarkParams) (Album, error) {
+	row := q.db.QueryRow(ctx, setAlbumWatermark, arg.ID, arg.ShopID, arg.Watermark)
+	var i Album
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.ParentID,
+		&i.Title,
+		&i.CoverPhotoID,
+		&i.SortOrder,
+		&i.PasswordHash,
+		&i.PhotoCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CategoryID,
+		&i.Status,
+		&i.HiddenByPlan,
+		&i.Description,
+		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
+	)
+	return i, err
+}
+
+const softDeleteAlbumTree = `-- name: SoftDeleteAlbumTree :execrows
+UPDATE albums
+SET deleted_at = $3, updated_at = now()
+WHERE shop_id = $2 AND deleted_at IS NULL AND (id = $1 OR parent_id = $1)
+`
+
+type SoftDeleteAlbumTreeParams struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// Корзина. Альбом уезжает вместе с подальбомами; метка времени приходит
+// из приложения и одна на всё дерево — по ней восстановление находит
+// фото, удалённые вместе с альбомом.
+func (q *Queries) SoftDeleteAlbumTree(ctx context.Context, arg SoftDeleteAlbumTreeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteAlbumTree, arg.ID, arg.ShopID, arg.DeletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteAlbumTreePhotos = `-- name: SoftDeleteAlbumTreePhotos :execrows
+UPDATE photos
+SET deleted_at = $3, updated_at = now()
+WHERE photos.shop_id = $2 AND photos.deleted_at IS NULL
+  AND photos.album_id IN (SELECT a.id FROM albums a WHERE a.shop_id = $2 AND a.deleted_at = $3 AND (a.id = $1 OR a.parent_id = $1))
+`
+
+type SoftDeleteAlbumTreePhotosParams struct {
+	ID        uuid.UUID          `json:"id"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) SoftDeleteAlbumTreePhotos(ctx context.Context, arg SoftDeleteAlbumTreePhotosParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteAlbumTreePhotos, arg.ID, arg.ShopID, arg.DeletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateAlbum = `-- name: UpdateAlbum :one
 UPDATE albums
 SET title          = $3,
@@ -281,7 +595,7 @@ SET title          = $3,
     parent_id      = $8,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
 `
 
 type UpdateAlbumParams struct {
@@ -323,6 +637,8 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.HiddenByPlan,
 		&i.Description,
 		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
 	)
 	return i, err
 }

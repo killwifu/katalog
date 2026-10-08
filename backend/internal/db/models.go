@@ -549,6 +549,15 @@ type Album struct {
 	HiddenByPlan       bool               `json:"hidden_by_plan"`
 	Description        string             `json:"description"`
 	BlockedByModerator bool               `json:"blocked_by_moderator"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	Watermark          []byte             `json:"watermark"`
+}
+
+type AlbumCategory struct {
+	AlbumID    uuid.UUID          `json:"album_id"`
+	CategoryID uuid.UUID          `json:"category_id"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	SortOrder  int32              `json:"sort_order"`
 }
 
 type AlbumSection struct {
@@ -566,6 +575,8 @@ type Category struct {
 	SortOrder int32              `json:"sort_order"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	IsHidden  bool               `json:"is_hidden"`
+	OnHome    bool               `json:"on_home"`
 }
 
 type Complaint struct {

@@ -32,9 +32,18 @@ func TestValidateContacts(t *testing.T) {
 		{"whatsapp международный", `{"whatsapp":"79991234567"}`, false},
 		{"whatsapp с разделителями", `{"whatsapp":"+7 999 123-45-67"}`, false},
 
-		// Телеграм и whatsapp ссылками не задаются — там всегда ник или номер,
-		// и «https://...» просто станет частью ника, никуда не уводя.
-		{"ссылка в telegram остаётся ником", `{"telegram":"https://evil.example"}`, false},
+		// Telegram: ник, @ник, ссылка t.me (её подсказывает кабинет) или
+		// номер; чужие ссылки и мусор — отказ, иначе кнопка на витрине битая.
+		{"telegram @ником", `{"telegram":"@demo_shop"}`, false},
+		{"telegram ссылкой t.me", `{"telegram":"https://t.me/demo_shop"}`, false},
+		{"telegram ссылкой без схемы", `{"telegram":"t.me/demo_shop/"}`, false},
+		{"telegram по номеру", `{"telegram":"t.me/+79991234567"}`, false},
+		{"telegram чужой ссылкой", `{"telegram":"https://evil.example"}`, true},
+		{"telegram с пробелом", `{"telegram":"demo shop"}`, true},
+		{"telegram слишком короткий", `{"telegram":"ab"}`, true},
+
+		{"max со схемой javascript", `{"max":"javascript:alert(1)"}`, true},
+		{"vk ником с точкой", `{"vk":"id12345.shop"}`, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,6 +77,9 @@ func TestValidateSettings(t *testing.T) {
 		{"перенос строки в знаке", `{"watermark":{"text":"верх\nниз"}}`, true},
 		{"прозрачность больше единицы", `{"watermark":{"text":"x","opacity":5}}`, true},
 		{"отрицательная прозрачность", `{"watermark":{"text":"x","opacity":-1}}`, true},
+		{"положение из сетки", `{"watermark":{"text":"x","position":"tl"}}`, false},
+		{"положение не задано", `{"watermark":{"text":"x","position":""}}`, false},
+		{"положение вне сетки", `{"watermark":{"text":"x","position":"left"}}`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

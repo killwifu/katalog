@@ -75,9 +75,9 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
 WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
-  AND NOT blocked_by_moderator
+  AND NOT blocked_by_moderator AND deleted_at IS NULL
 `
 
 type GetPublicAlbumParams struct {
@@ -104,6 +104,8 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 		&i.HiddenByPlan,
 		&i.Description,
 		&i.BlockedByModerator,
+		&i.DeletedAt,
+		&i.Watermark,
 	)
 	return i, err
 }
@@ -177,15 +179,17 @@ func (q *Queries) ListFirstReadyPhotos(ctx context.Context, shopID uuid.UUID) ([
 
 const listPublicAlbums = `-- name: ListPublicAlbums :many
 
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count, a.category_id,
+       a.created_at,
+       (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
-  AND NOT a.blocked_by_moderator
+  AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
-        WHERE ch.parent_id = a.id AND ch.status = 'published'
+        WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
           AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
           AND ch.photo_count > 0))
 ORDER BY a.sort_order, a.created_at
@@ -193,12 +197,15 @@ LIMIT 1000
 `
 
 type ListPublicAlbumsRow struct {
-	ID         uuid.UUID     `json:"id"`
-	ParentID   uuid.NullUUID `json:"parent_id"`
-	Title      string        `json:"title"`
-	SortOrder  int32         `json:"sort_order"`
-	PhotoCount int32         `json:"photo_count"`
-	CoverID    uuid.NullUUID `json:"cover_id"`
+	ID          uuid.UUID          `json:"id"`
+	ParentID    uuid.NullUUID      `json:"parent_id"`
+	Title       string             `json:"title"`
+	SortOrder   int32              `json:"sort_order"`
+	PhotoCount  int32              `json:"photo_count"`
+	CategoryID  uuid.NullUUID      `json:"category_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	HasPassword bool               `json:"has_password"`
+	CoverID     uuid.NullUUID      `json:"cover_id"`
 }
 
 // Публичное чтение витрины. Только активные магазины, не скрытые альбомы,
@@ -225,6 +232,9 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 			&i.Title,
 			&i.SortOrder,
 			&i.PhotoCount,
+			&i.CategoryID,
+			&i.CreatedAt,
+			&i.HasPassword,
 			&i.CoverID,
 		); err != nil {
 			return nil, err
@@ -239,10 +249,11 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 
 const listPublicChildAlbums = `-- name: ListPublicChildAlbums :many
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+       (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
-WHERE a.parent_id = $1 AND a.status = 'published'
+WHERE a.parent_id = $1 AND a.status = 'published' AND a.deleted_at IS NULL
   AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
   -- Глубже двух уровней альбомов не бывает, поэтому здесь достаточно
   -- собственного счётчика.
@@ -252,12 +263,13 @@ LIMIT 200
 `
 
 type ListPublicChildAlbumsRow struct {
-	ID         uuid.UUID     `json:"id"`
-	ParentID   uuid.NullUUID `json:"parent_id"`
-	Title      string        `json:"title"`
-	SortOrder  int32         `json:"sort_order"`
-	PhotoCount int32         `json:"photo_count"`
-	CoverID    uuid.NullUUID `json:"cover_id"`
+	ID          uuid.UUID     `json:"id"`
+	ParentID    uuid.NullUUID `json:"parent_id"`
+	Title       string        `json:"title"`
+	SortOrder   int32         `json:"sort_order"`
+	PhotoCount  int32         `json:"photo_count"`
+	HasPassword bool          `json:"has_password"`
+	CoverID     uuid.NullUUID `json:"cover_id"`
 }
 
 // Подальбомы открытого альбома: покупатель приходит по прямой ссылке на
@@ -278,6 +290,7 @@ func (q *Queries) ListPublicChildAlbums(ctx context.Context, parentID uuid.NullU
 			&i.Title,
 			&i.SortOrder,
 			&i.PhotoCount,
+			&i.HasPassword,
 			&i.CoverID,
 		); err != nil {
 			return nil, err
@@ -353,6 +366,9 @@ WHERE p.shop_id = $1
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
+  AND a.deleted_at IS NULL
+  -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
+  AND a.password_hash IS NULL
   AND p.caption_tsv @@ websearch_to_tsquery('russian', $2)
 ORDER BY rank DESC, p.created_at DESC, p.id
 LIMIT $3
@@ -438,6 +454,12 @@ WHERE p.shop_id = $1
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
+  AND a.deleted_at IS NULL
+  -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
+  AND a.password_hash IS NULL
+  -- %> — индексируемая форма (photos_caption_trgm_idx); порог 0.3 задан для
+  -- базы миграцией 00024. Функцией ниже — точная граница «> 0.3», как раньше.
+  AND p.caption %> $2
   AND word_similarity($2, p.caption) > 0.3
 ORDER BY sim DESC, p.created_at DESC, p.id
 LIMIT $3

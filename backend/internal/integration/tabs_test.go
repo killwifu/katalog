@@ -235,3 +235,84 @@ func TestSetTabOrder(t *testing.T) {
 		map[string]any{"tab_ids": []string{"00000000-0000-0000-0000-000000000001"}},
 		http.StatusNoContent, nil)
 }
+
+// TestNewTabAndSectionGoLast: новая вкладка встаёт после системных, новый
+// раздел — последним во вкладке. Раньше обе получали место 0, и своя
+// вкладка вставала на витрине перед «Главной».
+func TestNewTabAndSectionGoLast(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	var tab tabResp
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs",
+		map[string]any{"title": "Новинки", "slug": "novinki"}, http.StatusCreated, &tab)
+	tabs := listTabs(c, shop.ID)
+	if tabs[len(tabs)-1].ID != tab.ID {
+		t.Errorf("новая вкладка не последняя: %+v", tabs)
+	}
+	var first, second struct {
+		ID        string `json:"id"`
+		SortOrder int32  `json:"sort_order"`
+	}
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs/"+tab.ID+"/sections",
+		map[string]any{"title": "Первый"}, http.StatusCreated, &first)
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs/"+tab.ID+"/sections",
+		map[string]any{"title": "Второй"}, http.StatusCreated, &second)
+	if second.SortOrder <= first.SortOrder {
+		t.Errorf("второй раздел (место %d) не после первого (%d)", second.SortOrder, first.SortOrder)
+	}
+}
+
+// TestEmptyTabFlaggedForNav: своя вкладка без видимых альбомов приходит
+// с empty=true (витрина прячет её из навигации), системные — никогда;
+// альбом с фото в секции снимает флаг.
+func TestEmptyTabFlaggedForNav(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	var tab tabResp
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/tabs",
+		map[string]any{"title": "Новинки", "slug": "novinki"}, http.StatusCreated, &tab)
+
+	empty := func() map[string]bool {
+		var page struct {
+			Tabs []struct {
+				Slug  string `json:"slug"`
+				Empty bool   `json:"empty"`
+			} `json:"tabs"`
+		}
+		c.mustJSON("GET", "/api/v1/public/shops/"+shop.Slug, nil, http.StatusOK, &page)
+		out := map[string]bool{}
+		for _, tb := range page.Tabs {
+			out[tb.Slug] = tb.Empty
+		}
+		return out
+	}
+	got := empty()
+	if !got["novinki"] {
+		t.Fatalf("custom tab without albums: empty=false, want true (%v)", got)
+	}
+	for _, sys := range []string{"home", "albums", "contacts"} {
+		if v, ok := got[sys]; !ok || v {
+			t.Fatalf("system tab %q: present=%v empty=%v, want present and not empty", sys, ok, v)
+		}
+	}
+
+	var sec sectionResp
+	c.mustJSON("POST", fmt.Sprintf("/api/v1/shops/%s/tabs/%s/sections", shop.ID, tab.ID),
+		map[string]any{"title": "Хиты"}, http.StatusCreated, &sec)
+	album := createAlbum(c, shop.ID)
+	if status, body := c.do("PUT", fmt.Sprintf("/api/v1/shops/%s/sections/%s/albums", shop.ID, sec.ID),
+		map[string]any{"album_ids": []string{album.ID}}); status != http.StatusNoContent {
+		t.Fatalf("set section albums: status %d: %s", status, body)
+	}
+	// Пустой альбом покупателю не показывается — вкладка всё ещё пустая.
+	if !empty()["novinki"] {
+		t.Fatal("tab with only an empty album: empty=false, want true")
+	}
+	uploadReadyPhoto(t, c, shop.ID, album.ID, makeJPEG(t, 320, 240))
+	if empty()["novinki"] {
+		t.Fatal("tab with a visible album: empty=true, want false")
+	}
+}

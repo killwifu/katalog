@@ -59,12 +59,17 @@ func (a *API) handleCreateTab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tab, err := a.Q.CreateTab(r.Context(), db.CreateTabParams{
-		ShopID:    shop.ID,
-		Title:     req.Title,
-		Slug:      req.Slug,
-		IsSystem:  false,
-		SortOrder: req.SortOrder,
+	var tab db.Tab
+	err := a.inOrderLock(r.Context(), shop.ID, func(q *db.Queries) error {
+		var err error
+		tab, err = q.CreateTab(r.Context(), db.CreateTabParams{
+			ShopID:    shop.ID,
+			Title:     req.Title,
+			Slug:      req.Slug,
+			IsSystem:  false,
+			SortOrder: req.SortOrder,
+		})
+		return err
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -175,10 +180,15 @@ func (a *API) handleCreateSection(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-100 characters")
 		return
 	}
-	sec, err := a.Q.CreateSection(r.Context(), db.CreateSectionParams{
-		TabID:     tabID,
-		Title:     req.Title,
-		SortOrder: req.SortOrder,
+	var sec db.Section
+	err := a.inOrderLock(r.Context(), shop.ID, func(q *db.Queries) error {
+		var err error
+		sec, err = q.CreateSection(r.Context(), db.CreateSectionParams{
+			TabID:     tabID,
+			Title:     req.Title,
+			SortOrder: req.SortOrder,
+		})
+		return err
 	})
 	if err != nil {
 		a.internalError(w, "create section", err)

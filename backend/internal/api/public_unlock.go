@@ -1,0 +1,117 @@
+package api
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"katalog/backend/internal/auth"
+	"katalog/backend/internal/db"
+)
+
+// Пароль на альбом.
+//
+// Покупатель вводит пароль один раз и получает пропуск — случайный токен,
+// который живёт в Redis. С ним витрина запрашивает содержимое альбома
+// напрямую из браузера: серверный рендер и его кеш закрытого альбома не
+// видят вовсе.
+//
+// Чего пароль НЕ даёт: адреса картинок на CDN остаются публичными. Кто
+// получил прямую ссылку на файл, откроет его и без пароля — закрыта
+// страница альбома, а не сами файлы.
+
+const (
+	albumUnlockTTL    = 12 * time.Hour
+	albumTokenHeader  = "X-Album-Token"
+	albumUnlockPrefix = "albumunlock:"
+)
+
+// albumPassFingerprint привязывает пропуск к текущему паролю: сменил
+// продавец пароль — прежние пропуска перестали подходить.
+func albumPassFingerprint(album db.Album) string {
+	if album.PasswordHash == nil {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(*album.PasswordHash))
+	return album.ID.String() + ":" + hex.EncodeToString(sum[:8])
+}
+
+func (a *API) albumUnlocked(r *http.Request, album db.Album) bool {
+	token := r.Header.Get(albumTokenHeader)
+	if len(token) != 64 {
+		return false
+	}
+	got, err := a.RDB.Get(r.Context(), albumUnlockPrefix+token).Result()
+	if err != nil {
+		return false
+	}
+	return got == albumPassFingerprint(album)
+}
+
+// handlePublicAlbumUnlock проверяет пароль альбома и выдаёт пропуск.
+func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
+	shop, ok := a.publicShopFromURL(w, r)
+	if !ok {
+		return
+	}
+	albumID, err := uuid.Parse(chi.URLParam(r, "albumID"))
+	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "album not found")
+		return
+	}
+	album, err := a.Q.GetPublicAlbum(r.Context(), db.GetPublicAlbumParams{ID: albumID, ShopID: shop.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		apiError(w, http.StatusNotFound, "not_found", "album not found")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "load public album", err)
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if album.PasswordHash == nil {
+		apiError(w, http.StatusBadRequest, "not_protected", "album has no password")
+		return
+	}
+	// Слишком длинное не хешируем: argon2 дорогой, и это был бы способ
+	// нагрузить сервер без подбора.
+	if req.Password == "" || len([]rune(req.Password)) > maxAlbumPassword {
+		apiError(w, http.StatusForbidden, "wrong_password", "wrong password")
+		return
+	}
+	match, err := auth.VerifyPassword(req.Password, *album.PasswordHash)
+	if err != nil {
+		a.internalError(w, "verify album password", err)
+		return
+	}
+	if !match {
+		apiError(w, http.StatusForbidden, "wrong_password", "wrong password")
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		a.internalError(w, "album token", err)
+		return
+	}
+	token := hex.EncodeToString(raw)
+	if err := a.RDB.Set(r.Context(), albumUnlockPrefix+token, albumPassFingerprint(album), albumUnlockTTL).Err(); err != nil {
+		a.internalError(w, "store album token", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":      token,
+		"expires_in": int(albumUnlockTTL.Seconds()),
+	})
+}

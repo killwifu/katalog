@@ -5,6 +5,8 @@ package imaging
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"html"
 
@@ -66,6 +68,20 @@ func DetectFormat(data []byte) (string, error) {
 	}
 }
 
+// truncatedJPEG: после последнего маркера начала скана (FFDA) обязан быть
+// маркер конца изображения (FFD9). Внутри сжатых данных байт FF всегда
+// экранирован (FF00) или означает рестарт (FFD0–FFD7), поэтому FFD9 там
+// не встречается — у оборванного файла его после скана нет. Хвосты после
+// конца кадра (MPF, служебные блоки камер) этому не мешают: у них либо
+// свой скан со своим FFD9, либо после основного FFD9 нет нового FFDA.
+func truncatedJPEG(data []byte) bool {
+	sos := bytes.LastIndex(data, []byte{0xFF, 0xDA})
+	if sos < 0 {
+		return true
+	}
+	return !bytes.Contains(data[sos+2:], []byte{0xFF, 0xD9})
+}
+
 type Result struct {
 	Width       int
 	Height      int
@@ -82,6 +98,9 @@ type Result struct {
 type Watermark struct {
 	Text    string
 	Opacity float64 // 0..1; 0 или пусто — знака нет
+	// Position — одна из девяти точек кадра (imagingmeta.WatermarkPositions).
+	// Пусто — правый нижний угол.
+	Position string
 }
 
 // Process валидирует изображение и строит деривативы.
@@ -93,8 +112,14 @@ func Process(data []byte) (*Result, error) {
 }
 
 func ProcessWithWatermark(data []byte, wm Watermark) (*Result, error) {
-	if _, err := DetectFormat(data); err != nil {
+	format, err := DetectFormat(data)
+	if err != nil {
 		return nil, err
+	}
+	// libvips декодирует обрезанный JPEG без ошибки, заливая недостающее
+	// серым, — покупатель увидел бы полкадра. Ловим обрыв сами.
+	if format == "jpeg" && truncatedJPEG(data) {
+		return nil, &ValidationError{Code: FailCorrupt, Reason: "truncated jpeg: no end-of-image marker after scan data"}
 	}
 
 	// NewImageFromBuffer у vips ленивый: до обращения к пикселям читается
@@ -130,6 +155,17 @@ func ProcessWithWatermark(data []byte, wm Watermark) (*Result, error) {
 		params.Quality = WebpQuality
 		params.StripMetadata = true // полная зачистка EXIF/GPS
 		out, _, err := thumb.ExportWebp(params)
+		// Флагу strip верить нельзя: govips передаёт устаревший параметр, и
+		// libvips 8.16 (та, что в образе) пишет в WebP EXIF-чанк всегда —
+		// деривативы на витрине уходили с GPS-координатами продавца, хотя
+		// локальный тест на libvips 8.18 был зелёным. Вырезаем EXIF/XMP из
+		// контейнера сами, а дериватив, где они всё же остались, не публикуем.
+		if err == nil {
+			out = stripWebPMetadata(out)
+			if webpHasMetadata(out) {
+				err = errMetadataSurvived
+			}
+		}
 		if size == DerivativeSizes[len(DerivativeSizes)-1] {
 			// Размеры после autorotate берём с самого большого дериватива.
 			result.Width, result.Height = thumb.Width(), thumb.Height()
@@ -191,8 +227,8 @@ func averageHash(data []byte) (int64, error) {
 	return int64(hash), nil
 }
 
-// applyWatermark рисует подпись в правом нижнем углу. Размер шрифта —
-// доля ширины кадра, иначе на thumb знак закроет фото, а на large
+// applyWatermark рисует подпись в выбранной точке кадра. Размер шрифта —
+// доля ширины кадра, иначе на small знак закроет фото, а на large
 // потеряется.
 func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 	if wm.Text == "" || wm.Opacity <= 0 {
@@ -207,39 +243,155 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 	if opacity > 1 {
 		opacity = 1
 	}
-	// Геометрия подписи обязана уместиться в кадр. Внутри govips маска
-	// текста встраивается в холст размером (текст + смещение), а затем
-	// ifthenelse берёт наибольший из входов: если смещение плюс высота
-	// текста вылезают за картинку, растёт сама картинка. С Height 0.92
-	// и OffsetY 0.88 квадрат 400×400 превращался в 400×626 — покупатель
-	// видел пустую полосу под фотографией, а вёрстка ехала на неверном
-	// соотношении сторон.
+	// libvips отдаёт текст в Pango как разметку: «Обувь & сумки» или
+	// «цена < 5000» — это невалидный markup, и знак не просто не
+	// рисуется, а роняет обработку. Один амперсанд в настройках
+	// навсегда останавливал загрузку фотографий магазина.
 	//
-	// Держим сумму меньше единицы по обеим осям. Заодно Height задаёт
-	// autofit в vips_text: текст масштабируется под коробку, поэтому
-	// именно он, а не Font, определяет итоговый размер букв.
-	return img.Label(&vips.LabelParams{
-		// libvips отдаёт текст в Pango как разметку: «Обувь & сумки» или
-		// «цена < 5000» — это невалидный markup, и знак не просто не
-		// рисуется, а роняет обработку. Один амперсанд в настройках
-		// навсегда останавливал загрузку фотографий магазина.
-		Text:      html.EscapeString(wm.Text),
+	// Цвет и прозрачность задаются той же разметкой: подпись рисуется
+	// отдельной RGBA-картинкой и накладывается на кадр. Так известен её
+	// размер, а значит, и точка, куда её ставить. Label из govips размера
+	// не отдаёт и всегда ставил подпись слева внизу, хотя комментарий
+	// обещал правый угол; без autofit по высоте он к тому же рисует
+	// текст в пару пикселей.
+	markup := fmt.Sprintf(`<span foreground="white" alpha="%d%%">%s</span>`,
+		int(opacity*100+0.5), html.EscapeString(wm.Text))
+	overlay, err := vips.Text(&vips.TextParams{
+		Text:      markup,
 		Font:      fmt.Sprintf("sans %d", fontSize),
-		Width:     vips.Scalar{Value: watermarkBoxW, Relative: true},
-		Height:    vips.Scalar{Value: watermarkBoxH, Relative: true},
-		OffsetX:   vips.Scalar{Value: watermarkOffsetX, Relative: true},
-		OffsetY:   vips.Scalar{Value: watermarkOffsetY, Relative: true},
-		Opacity:   float32(opacity),
-		Color:     vips.Color{R: 255, G: 255, B: 255},
+		Width:     int(float64(img.Width()) * watermarkBoxW),
 		Alignment: vips.AlignLow,
+		DPI:       72,
+		RGBA:      true,
 	})
+	if err != nil {
+		return fmt.Errorf("render text: %w", err)
+	}
+	defer overlay.Close()
+	if overlay.Width() > img.Width() || overlay.Height() > img.Height() {
+		// Длинная подпись на узкой панораме переносится на несколько
+		// строк и в кадр не помещается — лучше без знака, чем обрезок.
+		return nil
+	}
+
+	hadAlpha := img.HasAlpha()
+	x, y := watermarkOffset(img.Width(), img.Height(), overlay.Width(), overlay.Height(), wm.Position)
+	if err := img.Composite(overlay, vips.BlendModeOver, x, y); err != nil {
+		return fmt.Errorf("composite: %w", err)
+	}
+	if !hadAlpha && img.HasAlpha() {
+		// Наложение добавляет кадру альфа-канал. Непрозрачному снимку он
+		// не нужен: WebP с альфой тяжелее, а это 95% трафика.
+		if err := img.Flatten(&vips.Color{}); err != nil {
+			return fmt.Errorf("flatten: %w", err)
+		}
+	}
+	return nil
 }
 
-// Коробка подписи и её смещение, в долях стороны кадра.
-// Инварианты: offsetX+boxW <= 1 и offsetY+boxH <= 1.
+// watermarkOffset — левый верхний угол подписи для выбранной точки кадра.
+//
+// Подпись обязана уместиться в кадр целиком: с прежним способом отрисовки
+// вылезший за край текст растягивал саму картинку — квадрат 400×400
+// превращался в 400×626, покупатель видел пустую полосу под фотографией.
+// Поэтому смещение зажимается так, чтобы offset + размер текста не
+// превышал сторону.
+func watermarkOffset(imgW, imgH, textW, textH int, pos string) (x, y int) {
+	if !imagingmeta.ValidWatermarkPosition(pos) || pos == "" {
+		pos = "br"
+	}
+	marginX := int(float64(imgW) * watermarkMargin)
+	marginY := int(float64(imgH) * watermarkMargin)
+	switch pos[1] {
+	case 'l':
+		x = marginX
+	case 'c':
+		x = (imgW - textW) / 2
+	default:
+		x = imgW - marginX - textW
+	}
+	switch pos[0] {
+	case 't':
+		y = marginY
+	case 'm':
+		y = (imgH - textH) / 2
+	default:
+		y = imgH - marginY - textH
+	}
+	return clamp(x, imgW-textW), clamp(y, imgH-textH)
+}
+
+func clamp(v, hi int) int {
+	if v > hi {
+		v = hi
+	}
+	if v < 0 {
+		v = 0
+	}
+	return v
+}
+
+// Коробка подписи и поля до края, в долях стороны кадра.
 const (
-	watermarkBoxW    = 0.92
-	watermarkBoxH    = 0.08
-	watermarkOffsetX = 0.04
-	watermarkOffsetY = 0.88
+	watermarkBoxW   = 0.92
+	watermarkMargin = 0.04
 )
+
+// errMetadataSurvived — в готовом WebP остались EXIF или XMP.
+var errMetadataSurvived = errors.New("metadata survived strip")
+
+// webpHasMetadata ищет в RIFF-контейнере WebP чанки EXIF и XMP.
+func webpHasMetadata(b []byte) bool {
+	if len(b) < 12 || string(b[0:4]) != "RIFF" || string(b[8:12]) != "WEBP" {
+		return false
+	}
+	for i := 12; i+8 <= len(b); {
+		fourcc := string(b[i : i+4])
+		size := int(binary.LittleEndian.Uint32(b[i+4 : i+8]))
+		if fourcc == "EXIF" || fourcc == "XMP " {
+			return true
+		}
+		if size < 0 || size > len(b) {
+			return false
+		}
+		i += 8 + size + size%2
+	}
+	return false
+}
+
+// StripWebPMetadata — stripWebPMetadata для разовой зачистки старых деривативов.
+func StripWebPMetadata(b []byte) []byte { return stripWebPMetadata(b) }
+
+// stripWebPMetadata вырезает из RIFF-контейнера WebP чанки EXIF и XMP и
+// снимает их флаги в VP8X (спецификация WebP Container: E=0x08, X=0x04).
+// Пиксели не трогает. Неизвестный формат возвращает как есть.
+func stripWebPMetadata(b []byte) []byte {
+	if len(b) < 12 || string(b[0:4]) != "RIFF" || string(b[8:12]) != "WEBP" {
+		return b
+	}
+	out := make([]byte, 0, len(b))
+	out = append(out, b[:12]...)
+	for i := 12; i+8 <= len(b); {
+		fourcc := string(b[i : i+4])
+		size := int(binary.LittleEndian.Uint32(b[i+4 : i+8]))
+		end := i + 8 + size + size%2
+		if size < 0 || end > len(b) {
+			return b // повреждённый контейнер — не правим
+		}
+		switch fourcc {
+		case "EXIF", "XMP ":
+			// пропускаем
+		case "VP8X":
+			chunk := append([]byte(nil), b[i:end]...)
+			if size >= 1 {
+				chunk[8] &^= 0x08 | 0x04
+			}
+			out = append(out, chunk...)
+		default:
+			out = append(out, b[i:end]...)
+		}
+		i = end
+	}
+	binary.LittleEndian.PutUint32(out[4:8], uint32(len(out)-8))
+	return out
+}

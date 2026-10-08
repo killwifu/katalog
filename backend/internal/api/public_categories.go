@@ -15,6 +15,8 @@ type publicCategoryResponse struct {
 	Title      string  `json:"title"`
 	Slug       string  `json:"slug"`
 	AlbumCount int64   `json:"album_count"`
+	// OnHome — категория показывается блоком на главной витрины.
+	OnHome bool `json:"on_home"`
 }
 
 // handlePublicCategories — дерево категорий магазина. Из него витрина строит
@@ -42,6 +44,7 @@ func (a *API) handlePublicCategories(w http.ResponseWriter, r *http.Request) {
 			Title:      c.Title,
 			Slug:       c.Slug,
 			AlbumCount: c.AlbumCount,
+			OnHome:     c.OnHome,
 		}
 		if c.ParentID.Valid {
 			if s, ok := slugByID[c.ParentID.UUID.String()]; ok {
@@ -74,6 +77,8 @@ func (a *API) handlePublicCategory(w http.ResponseWriter, r *http.Request) {
 			ID:         al.ID.String(),
 			Title:      al.Title,
 			PhotoCount: al.PhotoCount,
+			// Замок на плитке: обложки у закрытого альбома нет.
+			HasPassword: al.PasswordHash != nil,
 		}
 		if al.ParentID.Valid {
 			p := al.ParentID.UUID.String()

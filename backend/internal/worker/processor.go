@@ -71,14 +71,11 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("download original: %w", err)
 	}
 
-	res, err := imaging.ProcessWithWatermark(data, p.watermarkFor(ctx, photo.ShopID))
+	res, err := imaging.ProcessWithWatermark(data, p.watermarkFor(ctx, photo.ShopID, photo.AlbumID))
 	var vErr *imaging.ValidationError
 	if errors.As(err, &vErr) {
 		log.Warn("photo validation failed", "reason", vErr.Reason)
-		if dbErr := p.Q.SetPhotoFailed(ctx, db.SetPhotoFailedParams{
-			ID:         photo.ID,
-			FailReason: string(vErr.Code),
-		}); dbErr != nil {
+		if dbErr := p.failAndRelease(ctx, photo, string(vErr.Code)); dbErr != nil {
 			return fmt.Errorf("mark photo failed: %w", dbErr)
 		}
 		return fmt.Errorf("validation: %s: %w", vErr.Reason, asynq.SkipRetry)
@@ -144,10 +141,11 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	return nil
 }
 
-// watermarkFor читает настройку знака из shops.settings. Ошибка здесь
-// не должна ронять обработку: фото важнее подписи, поэтому при сбое
-// просто обрабатываем без знака и пишем в лог.
-func (p *Processor) watermarkFor(ctx context.Context, shopID uuid.UUID) imaging.Watermark {
+// watermarkFor читает настройку знака из shops.settings и переопределение
+// альбома (albums.watermark: включён ли и где). Ошибка здесь не должна
+// ронять обработку: фото важнее подписи, поэтому при сбое просто
+// обрабатываем без знака и пишем в лог.
+func (p *Processor) watermarkFor(ctx context.Context, shopID, albumID uuid.UUID) imaging.Watermark {
 	shop, err := p.Q.GetShopByID(ctx, shopID)
 	if err != nil {
 		p.Log.Warn("load shop for watermark", "shop_id", shopID, "error", err)
@@ -155,21 +153,81 @@ func (p *Processor) watermarkFor(ctx context.Context, shopID uuid.UUID) imaging.
 	}
 	var settings struct {
 		Watermark struct {
-			Enabled bool    `json:"enabled"`
-			Text    string  `json:"text"`
-			Opacity float64 `json:"opacity"`
+			Enabled  bool    `json:"enabled"`
+			Text     string  `json:"text"`
+			Opacity  float64 `json:"opacity"`
+			Position string  `json:"position"`
 		} `json:"watermark"`
 	}
 	if err := json.Unmarshal(shop.Settings, &settings); err != nil {
 		p.Log.Warn("parse shop settings", "shop_id", shopID, "error", err)
 		return imaging.Watermark{}
 	}
-	if !settings.Watermark.Enabled || settings.Watermark.Text == "" {
+	wm := settings.Watermark
+	// Альбом может включить, выключить знак или сдвинуть его (макет 11–12).
+	if raw, err := p.Q.GetAlbumWatermark(ctx, albumID); err != nil {
+		p.Log.Warn("load album watermark", "album_id", albumID, "error", err)
+	} else if len(raw) > 0 {
+		var own struct {
+			Enabled  bool   `json:"enabled"`
+			Position string `json:"position"`
+		}
+		if err := json.Unmarshal(raw, &own); err == nil {
+			wm.Enabled = own.Enabled
+			if own.Position != "" {
+				wm.Position = own.Position
+			}
+		}
+	}
+	if !wm.Enabled {
 		return imaging.Watermark{}
 	}
+	// Текст знака — подпись магазина; если её ещё не задавали, знаком
+	// служит название витрины (так же делает кабинет при включении).
+	if wm.Text == "" {
+		wm.Text = shop.Name
+	}
+	settings.Watermark = wm
 	opacity := settings.Watermark.Opacity
 	if opacity <= 0 {
 		opacity = 0.55
 	}
-	return imaging.Watermark{Text: settings.Watermark.Text, Opacity: opacity}
+	return imaging.Watermark{
+		Text:     settings.Watermark.Text,
+		Opacity:  opacity,
+		Position: settings.Watermark.Position,
+	}
+}
+
+// failAndRelease помечает фото failed и возвращает в тариф байты оригинала:
+// файл не прошёл проверку (не картинка, SVG, «бомба») и обработан не будет
+// никогда, а до фикса продолжал занимать место продавца, пока тот сам не
+// удалит фото и не очистит корзину. Статус и счётчик — одной транзакцией;
+// мусорный оригинал из S3 — после, без отката при сбое (его подберёт уборка).
+func (p *Processor) failAndRelease(ctx context.Context, photo db.Photo, reason string) error {
+	tx, err := p.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := p.Q.WithTx(tx)
+	released, err := q.FailPhotoReleaseOrig(ctx, db.FailPhotoReleaseOrigParams{ID: photo.ID, FailReason: reason})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil // уже не в processing — повторная доставка задачи
+	}
+	if err != nil {
+		return fmt.Errorf("fail photo: %w", err)
+	}
+	if released > 0 {
+		if err := q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{ID: photo.ShopID, StorageUsed: -released}); err != nil {
+			return fmt.Errorf("release original bytes: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	if err := p.Store.Delete(ctx, storage.OrigKey(photo.ShopID, photo.ID)); err != nil {
+		p.Log.Warn("failed photo: delete original", "photo_id", photo.ID, "error", err)
+	}
+	return nil
 }

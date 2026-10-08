@@ -575,3 +575,32 @@ func TestComplaintResolvesProductionMediaURL(t *testing.T) {
 		})
 	}
 }
+
+// TestComplaintValidation: имя из пробелов и ссылки не-http(s) отклоняются,
+// ссылка без схемы — принимается (её часто копируют без https://).
+func TestComplaintValidation(t *testing.T) {
+	c := newClient(t)
+	body := func(url, name string) map[string]string {
+		return map[string]string{
+			"url": url, "reporter_name": name,
+			"reporter_email": "rights@example.com", "reason": "нарушение прав на фотографии",
+		}
+	}
+	cases := []struct {
+		name, url, reporter string
+		want                int
+	}{
+		{"ok", "https://katalog.test/shop", "Иван", http.StatusCreated},
+		{"no scheme", "katalog.test/shop", "Иван", http.StatusCreated},
+		{"blank name", "https://katalog.test/shop", "   ", http.StatusBadRequest},
+		{"javascript url", "javascript:alert(1)", "Иван", http.StatusBadRequest},
+		{"data url", "data:text/html,x", "Иван", http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if status, _ := c.do("POST", "/api/v1/public/complaints", body(tc.url, tc.reporter)); status != tc.want {
+				t.Fatalf("status %d, want %d", status, tc.want)
+			}
+		})
+	}
+}

@@ -6,18 +6,20 @@
 -- от того, сколько их успел наделать продавец. Совпадает с потолком на
 -- создание альбомов, так что честный каталог не обрезается.
 -- name: ListPublicAlbums :many
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count, a.category_id,
+       a.created_at,
+       (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
-  AND NOT a.blocked_by_moderator
+  AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
 -- Пустой альбом покупателю показывать незачем: тап по нему упирается
 -- в «здесь пока нет фото». Родителя, у которого фотографии лежат в
 -- подальбомах, при этом прятать нельзя — иначе исчезает целая ветка.
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
-        WHERE ch.parent_id = a.id AND ch.status = 'published'
+        WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
           AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
           AND ch.photo_count > 0))
 ORDER BY a.sort_order, a.created_at
@@ -34,7 +36,7 @@ ORDER BY album_id, sort_order, created_at;
 -- name: GetPublicAlbum :one
 SELECT * FROM albums
 WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
-  AND NOT blocked_by_moderator;
+  AND NOT blocked_by_moderator AND deleted_at IS NULL;
 
 -- name: ListPublicPhotos :many
 SELECT * FROM photos
@@ -58,6 +60,9 @@ WHERE p.shop_id = $1
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
+  AND a.deleted_at IS NULL
+  -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
+  AND a.password_hash IS NULL
   AND p.caption_tsv @@ websearch_to_tsquery('russian', $2)
 ORDER BY rank DESC, p.created_at DESC, p.id
 LIMIT $3;
@@ -75,6 +80,12 @@ WHERE p.shop_id = $1
   AND a.status = 'published'
   AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator
+  AND a.deleted_at IS NULL
+  -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
+  AND a.password_hash IS NULL
+  -- %> — индексируемая форма (photos_caption_trgm_idx); порог 0.3 задан для
+  -- базы миграцией 00024. Функцией ниже — точная граница «> 0.3», как раньше.
+  AND p.caption %> $2
   AND word_similarity($2, p.caption) > 0.3
 ORDER BY sim DESC, p.created_at DESC, p.id
 LIMIT $3;
@@ -99,10 +110,11 @@ LIMIT 50000;
 -- альбомы показывались только на главной магазина.
 -- name: ListPublicChildAlbums :many
 SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+       (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
-WHERE a.parent_id = $1 AND a.status = 'published'
+WHERE a.parent_id = $1 AND a.status = 'published' AND a.deleted_at IS NULL
   AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
   -- Глубже двух уровней альбомов не бывает, поэтому здесь достаточно
   -- собственного счётчика.

@@ -106,8 +106,7 @@ func (a *API) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Длина в символах, а не в байтах (см. handleRegister).
-	if len([]rune(req.Password)) < 8 {
-		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
+	if !validNewPassword(w, req.Password) {
 		return
 	}
 	uid, err := a.Tokens.Consume(r.Context(), tokenPurposeReset, req.Token)
@@ -136,6 +135,10 @@ func (a *API) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	// работать сразу, а не по истечении TTL.
 	if err := a.Sessions.DeleteAllForUser(r.Context(), uid); err != nil {
 		a.Log.Error("reset: revoke sessions failed", "user_id", uid, "error", err)
+	}
+	// И прочие ссылки на сброс: пароль уже новый, старые письма не должны его менять.
+	if err := a.Tokens.RevokeAll(r.Context(), tokenPurposeReset, uid); err != nil {
+		a.Log.Error("reset: revoke reset tokens failed", "user_id", uid, "error", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -33,16 +33,18 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 	req.Reason = strings.TrimSpace(req.Reason)
 	req.ReporterName = strings.TrimSpace(req.ReporterName)
 	req.ReporterEmail = strings.TrimSpace(req.ReporterEmail)
-	if req.URL == "" || len([]rune(req.URL)) > 1000 {
-		apiError(w, http.StatusBadRequest, "invalid_url", "url must be 1-1000 characters")
+	if req.URL == "" || len([]rune(req.URL)) > 1000 || !webURL(req.URL) {
+		apiError(w, http.StatusBadRequest, "invalid_url", "url must be an http(s) link of 1-1000 characters")
 		return
 	}
 	if n := len([]rune(req.Reason)); n < 10 || n > 5000 {
 		apiError(w, http.StatusBadRequest, "invalid_reason", "reason must be 10-5000 characters")
 		return
 	}
-	if len([]rune(req.ReporterName)) > 200 {
-		apiError(w, http.StatusBadRequest, "invalid_name", "reporter_name must be at most 200 characters")
+	// Имя обязательно по контракту: анонимную претензию правообладателя
+	// модератору не с кем отрабатывать. Раньше проходило имя из пробелов.
+	if n := len([]rune(req.ReporterName)); n == 0 || n > 200 {
+		apiError(w, http.StatusBadRequest, "invalid_name", "reporter_name must be 1-200 characters")
 		return
 	}
 	if _, err := mail.ParseAddress(req.ReporterEmail); err != nil {
@@ -74,6 +76,16 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 		"id":     complaint.ID.String(),
 		"status": string(complaint.Status),
 	})
+}
+
+// webURL — ссылка без схемы или со схемой http(s). Схемы вроде javascript:
+// и data: в жалобе бессмысленны и засоряли очередь модератора.
+func webURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "" || u.Scheme == "http" || u.Scheme == "https"
 }
 
 // resolveComplaintTarget — best-effort привязка жалобы к магазину/фото по URL:

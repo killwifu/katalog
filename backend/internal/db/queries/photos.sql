@@ -30,7 +30,8 @@ WHERE album_id = $1 AND shop_id = $2 AND deleted_at IS NULL;
 
 -- Переход uploading -> processing после подтверждения загрузки в S3.
 -- Здесь же фотография занимает место в альбоме: sort_order приходит
--- из NextAlbumSortOrder. На presign он оставался нулём, и выдача падала
+-- сразу после обложки (FirstAlbumSortOrder + ShiftAlbumPhotosAfter).
+-- На presign он оставался нулём, и выдача падала
 -- на created_at — то есть на порядок, в котором до сервера доехали
 -- запросы параллельного загрузчика.
 -- name: SetPhotoProcessing :one
@@ -38,12 +39,6 @@ UPDATE photos
 SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
 RETURNING *;
-
--- Следующее место в альбоме. Считается в той же транзакции, что и переход
--- в processing, поэтому подтверждения одной пачки получают возрастающие
--- номера в том порядке, в каком их перечислил клиент.
--- name: NextAlbumSortOrder :one
-SELECT coalesce(max(sort_order), 0)::int + 1 FROM photos WHERE album_id = $1;
 
 -- name: SetPhotoReady :exec
 UPDATE photos
@@ -54,6 +49,17 @@ WHERE id = $1;
 UPDATE photos
 SET status = 'failed', fail_reason = $2, updated_at = now()
 WHERE id = $1;
+
+-- Файл не прошёл проверку (не картинка, SVG, «бомба»): оригинал — мусор,
+-- повторять обработку незачем. Байты оригинала возвращаются в тариф,
+-- orig_size обнуляется (инвариант: orig_size+drv_size — учтённые байты).
+-- Возвращает, сколько байт освободить; нет строки — фото уже не в processing.
+-- name: FailPhotoReleaseOrig :one
+UPDATE photos p
+SET status = 'failed', fail_reason = sqlc.arg(fail_reason), orig_size = 0, updated_at = now()
+FROM (SELECT ph.id, ph.orig_size FROM photos ph WHERE ph.id = sqlc.arg(id) AND ph.status = 'processing' FOR UPDATE) old
+WHERE p.id = old.id
+RETURNING old.orig_size::bigint AS released;
 
 -- name: UpdatePhotoCaption :one
 UPDATE photos
@@ -118,21 +124,27 @@ SET deleted_at = now(), updated_at = now()
 WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL;
 
 -- name: ListDeletedPhotos :many
-SELECT * FROM photos
-WHERE shop_id = $1 AND deleted_at IS NOT NULL
-ORDER BY deleted_at DESC, id
+SELECT photos.* FROM photos
+WHERE photos.shop_id = $1 AND photos.deleted_at IS NOT NULL
+  -- Фото, уехавшие вместе с альбомом, показываются одной строкой — самим
+  -- альбомом; по отдельности их не восстановить, альбома-то нет.
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL)
+ORDER BY photos.deleted_at DESC, photos.id
 LIMIT $2 OFFSET $3;
 
 -- name: CountDeletedPhotos :one
 SELECT count(*) FROM photos
-WHERE shop_id = $1 AND deleted_at IS NOT NULL;
+WHERE photos.shop_id = $1 AND photos.deleted_at IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL);
 
 -- Возврат из корзины. Альбом мог уехать вместе с удалением самого альбома —
 -- тогда каскад унёс и строку фотографии, и возвращать нечего.
 -- name: RestorePhoto :one
 UPDATE photos
 SET deleted_at = NULL, updated_at = now()
-WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+WHERE photos.id = $1 AND photos.shop_id = $2 AND photos.deleted_at IS NOT NULL
+  -- Возвращать фото в удалённый альбом некуда: сначала восстанавливают альбом.
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL)
 RETURNING *;
 
 -- Окончательное удаление одной фотографии из корзины.
@@ -153,3 +165,66 @@ DELETE FROM photos
 WHERE deleted_at IS NOT NULL
   AND deleted_at < now() - make_interval(days => $1::int)
 RETURNING id, shop_id, (orig_size + drv_size)::bigint AS bytes;
+
+-- Порядок фотографий в альбоме — как у вкладок, одним запросом. Список
+-- приходит страницей, а не альбомом целиком, поэтому новые номера не
+-- назначаются с единицы: перестановка раздаёт этим же фото их же номера
+-- в новом порядке, и фото с соседних страниц остаются на своих местах.
+-- shop_id и album_id в условии: чужие id не совпадут ни с одной строкой.
+-- name: SetPhotoOrder :execrows
+WITH wanted AS (
+    SELECT t.id, t.ord
+    FROM unnest($3::uuid[]) WITH ORDINALITY AS t(id, ord)
+), mine AS (
+    SELECT p.id,
+           p.sort_order,
+           row_number() OVER (ORDER BY p.sort_order, p.created_at, p.id) AS old_pos,
+           row_number() OVER (ORDER BY w.ord) AS new_pos
+    FROM photos p
+    JOIN wanted w ON w.id = p.id
+    WHERE p.shop_id = $1 AND p.album_id = $2 AND p.deleted_at IS NULL
+)
+UPDATE photos
+SET sort_order = slot.sort_order, updated_at = now()
+FROM mine m
+JOIN mine slot ON slot.old_pos = m.new_pos
+WHERE photos.id = m.id;
+
+-- Отмена загрузки: фото, которое так и не подтвердили, убирается совсем,
+-- а не в корзину — показывать и восстанавливать там нечего. Условие по
+-- статусу держит гонку с confirm: если он успел первым, строка не
+-- удалится и фото пойдёт обычным путём через корзину.
+-- name: DeleteUploadingPhoto :execrows
+DELETE FROM photos
+WHERE id = $1 AND shop_id = $2 AND status = 'uploading';
+
+-- Место первой фотографии альбома (она же обложка по умолчанию). Нужна,
+-- чтобы поставить новые фото сразу после неё.
+-- name: FirstAlbumSortOrder :one
+SELECT sort_order FROM photos
+WHERE album_id = $1 AND deleted_at IS NULL AND status <> 'uploading'
+ORDER BY sort_order, created_at, id
+LIMIT 1;
+
+-- Освободить номер под новое фото: всё, что стоит на нём и дальше, сдвигается
+-- на одну позицию. Неподтверждённые загрузки не трогаем — своё место они
+-- получат при подтверждении.
+-- name: ShiftAlbumPhotosFrom :exec
+UPDATE photos
+SET sort_order = sort_order + 1
+WHERE album_id = sqlc.arg(album_id) AND sort_order >= sqlc.arg(from_pos)::int AND status <> 'uploading';
+
+-- Раздача мест новым фото альбома идёт по очереди: строка альбома под замком
+-- до конца транзакции подтверждения.
+-- name: LockAlbumForOrder :exec
+SELECT id FROM albums WHERE id = $1 FOR UPDATE;
+
+-- Разовая зачистка метаданных в старых деривативах (worker strip-exif).
+-- name: ListReadyPhotoRefs :many
+SELECT id, shop_id FROM photos
+WHERE status = 'ready' AND drv_size > 0
+ORDER BY created_at;
+
+-- name: AdjustPhotoDrvSize :exec
+UPDATE photos SET drv_size = greatest(drv_size + sqlc.arg(delta)::bigint, 0)
+WHERE id = sqlc.arg(id);

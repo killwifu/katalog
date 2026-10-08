@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
+
+	"katalog/backend/internal/imagingmeta"
 )
 
 // Полную ссылку продавец вставить может — у MAX это обычный сценарий, — но
@@ -15,6 +18,15 @@ var contactHosts = map[string][]string{
 	"vk":  {"vk.me", "vk.com", "m.vk.com"},
 	"max": {"max.ru", "m.max.ru"},
 }
+
+// Telegram: ник (можно с @) или ссылка t.me / telegram.me на ник либо на
+// номер (t.me/+79991234567). Кабинет подсказывает «ссылка вида t.me/ник», и
+// продавцы вставляют её целиком — раньше она сохранялась «ником», и кнопка
+// на витрине вела на t.me/https%3A… Чужие ссылки отклоняем.
+var telegramContact = regexp.MustCompile(`^(?i:(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/)?@?(?:[A-Za-z0-9_]{3,32}|\+[0-9]{10,15})/?$`)
+
+// plainHandle — ник VK или MAX без ссылки.
+var plainHandle = regexp.MustCompile(`^@?[A-Za-z0-9_.\-]{2,64}$`)
 
 // maxContactValue — ник или ссылка; всё длиннее — мусор либо попытка
 // раздуть публичную выдачу магазина.
@@ -32,8 +44,9 @@ func validateSettings(raw json.RawMessage) string {
 	}
 	var settings struct {
 		Watermark struct {
-			Text    string  `json:"text"`
-			Opacity float64 `json:"opacity"`
+			Text     string  `json:"text"`
+			Opacity  float64 `json:"opacity"`
+			Position string  `json:"position"`
 		} `json:"watermark"`
 	}
 	if err := json.Unmarshal(raw, &settings); err != nil {
@@ -48,6 +61,9 @@ func validateSettings(raw json.RawMessage) string {
 	}
 	if wm.Opacity < 0 || wm.Opacity > 1 {
 		return "watermark.opacity must be between 0 and 1"
+	}
+	if !imagingmeta.ValidWatermarkPosition(wm.Position) {
+		return "watermark.position must be one of " + strings.Join(imagingmeta.WatermarkPositions, ", ")
 	}
 	return ""
 }
@@ -74,6 +90,12 @@ func validateContacts(raw json.RawMessage) (code, msg string) {
 		if strings.ContainsAny(v, "\n\r") {
 			return "invalid_contacts", fmt.Sprintf("%s: value must be a single line", channel)
 		}
+		if channel == "telegram" {
+			if !telegramContact.MatchString(v) {
+				return "invalid_telegram", "telegram: username (3-32 letters, digits, _) or a t.me link"
+			}
+			continue
+		}
 		if channel == "whatsapp" {
 			if m := validateWhatsApp(v); m != "" {
 				return "invalid_whatsapp", m
@@ -86,7 +108,12 @@ func validateContacts(raw json.RawMessage) (code, msg string) {
 		}
 		lower := strings.ToLower(v)
 		if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-			continue // обычный ник
+			// Обычный ник. «javascript:…» и прочие схемы раньше проходили
+			// как ник и давали на витрине битую кнопку.
+			if !plainHandle.MatchString(v) {
+				return "invalid_contacts", fmt.Sprintf("%s: nickname of letters, digits, _ . - or a link", channel)
+			}
+			continue
 		}
 		u, err := url.Parse(v)
 		if err != nil {

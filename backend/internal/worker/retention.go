@@ -67,6 +67,13 @@ func (p *Processor) purgeExpiredTrash(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("purge expired trash: %w", err)
 	}
+	// Альбомы из корзины — после фотографий: у фото та же метка времени,
+	// и их id с байтами уже собраны запросом выше.
+	if n, err := p.Q.PurgeExpiredAlbums(ctx, int32(p.Cfg.TrashKeepDays)); err != nil {
+		p.Log.Error("trash purge: albums failed", "error", err)
+	} else if n > 0 {
+		p.Log.Info("trash purge: albums removed", "albums", n)
+	}
 	if len(rows) == 0 {
 		return nil
 	}

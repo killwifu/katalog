@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -69,9 +70,20 @@ func TestAuthValidation(t *testing.T) {
 	}
 }
 
+// waitFreshRateWindow: лимитер считает попытки в окне календарной минуты, а
+// вход с неизвестным email намеренно медленный (argon2 по фиктивному хэшу) —
+// серия из 35 попыток идёт секунды и может перейти границу окна, где счётчик
+// обнуляется. Начинаем серию в начале минуты.
+func waitFreshRateWindow() {
+	if s := time.Now().Second(); s > 30 {
+		time.Sleep(time.Duration(60-s) * time.Second)
+	}
+}
+
 func TestAuthRateLimit(t *testing.T) {
 	c := newClient(t) // уникальный X-Forwarded-For -> изолированный лимит
 	body := map[string]string{"email": "ratelimit@test.local", "password": "wrong"}
+	waitFreshRateWindow()
 
 	limited := false
 	for i := 0; i < 35; i++ {
@@ -96,6 +108,7 @@ func TestAuthRateLimit(t *testing.T) {
 func TestAuthRateLimitSpoofedXFF(t *testing.T) {
 	c := newClient(t)
 	body := map[string]string{"email": "spoof@test.local", "password": "wrong"}
+	waitFreshRateWindow()
 
 	for i := 0; i < 35; i++ {
 		// Каждый раз новый «клиентский» адрес слева, реальный — справа.
@@ -210,6 +223,49 @@ func TestResetPasswordRevokesSessions(t *testing.T) {
 }
 
 // resetTokenFor находит выданный токен сброса в Redis по user_id.
+// После успешного сброса по одной ссылке остальные ссылки на сброс не
+// действуют: письмо, попавшее в чужие руки, не должно позволять сменить
+// пароль уже после того, как владелец сам его сменил.
+func TestResetRevokesOtherResetTokens(t *testing.T) {
+	ctx := context.Background()
+	c := newClient(t)
+	email := uniqueEmail()
+	c.mustJSON("POST", "/api/v1/auth/register",
+		map[string]string{"email": email, "password": "password123"}, http.StatusCreated, nil)
+	anon := newClient(t)
+	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
+	first := resetTokenFor(t, ctx, email)
+	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
+	var second string
+	for _, k := range env.rdb.Keys(ctx, "tok:pwreset:*").Val() {
+		if tok := strings.TrimPrefix(k, "tok:pwreset:"); tok != first {
+			if uid := env.rdb.Get(ctx, k).Val(); uid != "" {
+				var owner string
+				_ = env.pool.QueryRow(ctx, "SELECT id::text FROM users WHERE email = $1", email).Scan(&owner)
+				if uid == owner {
+					second = tok
+				}
+			}
+		}
+	}
+	if second == "" {
+		t.Fatal("second reset token not found")
+	}
+	anon.mustJSON("POST", "/api/v1/auth/password/reset",
+		map[string]string{"token": second, "password": "owner-new-pass"}, http.StatusNoContent, nil)
+	anon.mustJSON("POST", "/api/v1/auth/password/reset",
+		map[string]string{"token": first, "password": "attacker-pass"}, http.StatusBadRequest, nil)
+	// Смена пароля в кабинете тоже отзывает ссылки на сброс.
+	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
+	pending := resetTokenFor(t, ctx, email)
+	owner := newClient(t)
+	owner.mustJSON("POST", "/api/v1/auth/login", map[string]string{"email": email, "password": "owner-new-pass"}, http.StatusOK, nil)
+	owner.mustJSON("POST", "/api/v1/auth/password/change",
+		map[string]string{"current_password": "owner-new-pass", "new_password": "owner-newer-pass"}, http.StatusNoContent, nil)
+	anon.mustJSON("POST", "/api/v1/auth/password/reset",
+		map[string]string{"token": pending, "password": "attacker-pass"}, http.StatusBadRequest, nil)
+}
+
 func resetTokenFor(t *testing.T, ctx context.Context, email string) string {
 	t.Helper()
 	var uid string

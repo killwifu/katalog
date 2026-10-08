@@ -12,9 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adjustPhotoDrvSize = `-- name: AdjustPhotoDrvSize :exec
+UPDATE photos SET drv_size = greatest(drv_size + $1::bigint, 0)
+WHERE id = $2
+`
+
+type AdjustPhotoDrvSizeParams struct {
+	Delta int64     `json:"delta"`
+	ID    uuid.UUID `json:"id"`
+}
+
+func (q *Queries) AdjustPhotoDrvSize(ctx context.Context, arg AdjustPhotoDrvSizeParams) error {
+	_, err := q.db.Exec(ctx, adjustPhotoDrvSize, arg.Delta, arg.ID)
+	return err
+}
+
 const countDeletedPhotos = `-- name: CountDeletedPhotos :one
 SELECT count(*) FROM photos
-WHERE shop_id = $1 AND deleted_at IS NOT NULL
+WHERE photos.shop_id = $1 AND photos.deleted_at IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL)
 `
 
 func (q *Queries) CountDeletedPhotos(ctx context.Context, shopID uuid.UUID) (int64, error) {
@@ -141,6 +157,52 @@ func (q *Queries) DeleteStaleUploads(ctx context.Context, dollar_1 int32) ([]Del
 	return items, nil
 }
 
+const deleteUploadingPhoto = `-- name: DeleteUploadingPhoto :execrows
+DELETE FROM photos
+WHERE id = $1 AND shop_id = $2 AND status = 'uploading'
+`
+
+type DeleteUploadingPhotoParams struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Отмена загрузки: фото, которое так и не подтвердили, убирается совсем,
+// а не в корзину — показывать и восстанавливать там нечего. Условие по
+// статусу держит гонку с confirm: если он успел первым, строка не
+// удалится и фото пойдёт обычным путём через корзину.
+func (q *Queries) DeleteUploadingPhoto(ctx context.Context, arg DeleteUploadingPhotoParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUploadingPhoto, arg.ID, arg.ShopID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const failPhotoReleaseOrig = `-- name: FailPhotoReleaseOrig :one
+UPDATE photos p
+SET status = 'failed', fail_reason = $1, orig_size = 0, updated_at = now()
+FROM (SELECT ph.id, ph.orig_size FROM photos ph WHERE ph.id = $2 AND ph.status = 'processing' FOR UPDATE) old
+WHERE p.id = old.id
+RETURNING old.orig_size::bigint AS released
+`
+
+type FailPhotoReleaseOrigParams struct {
+	FailReason string    `json:"fail_reason"`
+	ID         uuid.UUID `json:"id"`
+}
+
+// Файл не прошёл проверку (не картинка, SVG, «бомба»): оригинал — мусор,
+// повторять обработку незачем. Байты оригинала возвращаются в тариф,
+// orig_size обнуляется (инвариант: orig_size+drv_size — учтённые байты).
+// Возвращает, сколько байт освободить; нет строки — фото уже не в processing.
+func (q *Queries) FailPhotoReleaseOrig(ctx context.Context, arg FailPhotoReleaseOrigParams) (int64, error) {
+	row := q.db.QueryRow(ctx, failPhotoReleaseOrig, arg.FailReason, arg.ID)
+	var released int64
+	err := row.Scan(&released)
+	return released, err
+}
+
 const failStaleProcessing = `-- name: FailStaleProcessing :many
 UPDATE photos
 SET status = 'failed', fail_reason = 'lost', updated_at = now()
@@ -174,6 +236,22 @@ func (q *Queries) FailStaleProcessing(ctx context.Context, dollar_1 int32) ([]uu
 		return nil, err
 	}
 	return items, nil
+}
+
+const firstAlbumSortOrder = `-- name: FirstAlbumSortOrder :one
+SELECT sort_order FROM photos
+WHERE album_id = $1 AND deleted_at IS NULL AND status <> 'uploading'
+ORDER BY sort_order, created_at, id
+LIMIT 1
+`
+
+// Место первой фотографии альбома (она же обложка по умолчанию). Нужна,
+// чтобы поставить новые фото сразу после неё.
+func (q *Queries) FirstAlbumSortOrder(ctx context.Context, albumID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, firstAlbumSortOrder, albumID)
+	var sort_order int32
+	err := row.Scan(&sort_order)
+	return sort_order, err
 }
 
 const getPhoto = `-- name: GetPhoto :one
@@ -278,9 +356,12 @@ func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([
 }
 
 const listDeletedPhotos = `-- name: ListDeletedPhotos :many
-SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
-WHERE shop_id = $1 AND deleted_at IS NOT NULL
-ORDER BY deleted_at DESC, id
+SELECT photos.id, photos.album_id, photos.shop_id, photos.caption, photos.caption_tsv, photos.status, photos.orig_size, photos.width, photos.height, photos.phash, photos.source, photos.sort_order, photos.created_at, photos.updated_at, photos.flagged, photos.drv_size, photos.fail_reason, photos.deleted_at FROM photos
+WHERE photos.shop_id = $1 AND photos.deleted_at IS NOT NULL
+  -- Фото, уехавшие вместе с альбомом, показываются одной строкой — самим
+  -- альбомом; по отдельности их не восстановить, альбома-то нет.
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL)
+ORDER BY photos.deleted_at DESC, photos.id
 LIMIT $2 OFFSET $3
 `
 
@@ -393,6 +474,49 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 	return items, nil
 }
 
+const listReadyPhotoRefs = `-- name: ListReadyPhotoRefs :many
+SELECT id, shop_id FROM photos
+WHERE status = 'ready' AND drv_size > 0
+ORDER BY created_at
+`
+
+type ListReadyPhotoRefsRow struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Разовая зачистка метаданных в старых деривативах (worker strip-exif).
+func (q *Queries) ListReadyPhotoRefs(ctx context.Context) ([]ListReadyPhotoRefsRow, error) {
+	rows, err := q.db.Query(ctx, listReadyPhotoRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReadyPhotoRefsRow
+	for rows.Next() {
+		var i ListReadyPhotoRefsRow
+		if err := rows.Scan(&i.ID, &i.ShopID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockAlbumForOrder = `-- name: LockAlbumForOrder :exec
+SELECT id FROM albums WHERE id = $1 FOR UPDATE
+`
+
+// Раздача мест новым фото альбома идёт по очереди: строка альбома под замком
+// до конца транзакции подтверждения.
+func (q *Queries) LockAlbumForOrder(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockAlbumForOrder, id)
+	return err
+}
+
 const lockShopForUpload = `-- name: LockShopForUpload :exec
 SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint)
 `
@@ -404,20 +528,6 @@ SELECT pg_advisory_xact_lock(hashtext($1::text)::bigint)
 func (q *Queries) LockShopForUpload(ctx context.Context, dollar_1 string) error {
 	_, err := q.db.Exec(ctx, lockShopForUpload, dollar_1)
 	return err
-}
-
-const nextAlbumSortOrder = `-- name: NextAlbumSortOrder :one
-SELECT coalesce(max(sort_order), 0)::int + 1 FROM photos WHERE album_id = $1
-`
-
-// Следующее место в альбоме. Считается в той же транзакции, что и переход
-// в processing, поэтому подтверждения одной пачки получают возрастающие
-// номера в том порядке, в каком их перечислил клиент.
-func (q *Queries) NextAlbumSortOrder(ctx context.Context, albumID uuid.UUID) (int32, error) {
-	row := q.db.QueryRow(ctx, nextAlbumSortOrder, albumID)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const purgeExpiredTrash = `-- name: PurgeExpiredTrash :many
@@ -531,7 +641,9 @@ func (q *Queries) ResetPhotoDerivativeSize(ctx context.Context, id uuid.UUID) er
 const restorePhoto = `-- name: RestorePhoto :one
 UPDATE photos
 SET deleted_at = NULL, updated_at = now()
-WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
+WHERE photos.id = $1 AND photos.shop_id = $2 AND photos.deleted_at IS NOT NULL
+  -- Возвращать фото в удалённый альбом некуда: сначала восстанавливают альбом.
+  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = photos.album_id AND a.deleted_at IS NOT NULL)
 RETURNING id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at
 `
 
@@ -584,6 +696,45 @@ func (q *Queries) SetPhotoFailed(ctx context.Context, arg SetPhotoFailedParams) 
 	return err
 }
 
+const setPhotoOrder = `-- name: SetPhotoOrder :execrows
+WITH wanted AS (
+    SELECT t.id, t.ord
+    FROM unnest($3::uuid[]) WITH ORDINALITY AS t(id, ord)
+), mine AS (
+    SELECT p.id,
+           p.sort_order,
+           row_number() OVER (ORDER BY p.sort_order, p.created_at, p.id) AS old_pos,
+           row_number() OVER (ORDER BY w.ord) AS new_pos
+    FROM photos p
+    JOIN wanted w ON w.id = p.id
+    WHERE p.shop_id = $1 AND p.album_id = $2 AND p.deleted_at IS NULL
+)
+UPDATE photos
+SET sort_order = slot.sort_order, updated_at = now()
+FROM mine m
+JOIN mine slot ON slot.old_pos = m.new_pos
+WHERE photos.id = m.id
+`
+
+type SetPhotoOrderParams struct {
+	ShopID  uuid.UUID   `json:"shop_id"`
+	AlbumID uuid.UUID   `json:"album_id"`
+	Column3 []uuid.UUID `json:"column_3"`
+}
+
+// Порядок фотографий в альбоме — как у вкладок, одним запросом. Список
+// приходит страницей, а не альбомом целиком, поэтому новые номера не
+// назначаются с единицы: перестановка раздаёт этим же фото их же номера
+// в новом порядке, и фото с соседних страниц остаются на своих местах.
+// shop_id и album_id в условии: чужие id не совпадут ни с одной строкой.
+func (q *Queries) SetPhotoOrder(ctx context.Context, arg SetPhotoOrderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPhotoOrder, arg.ShopID, arg.AlbumID, arg.Column3)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPhotoProcessing = `-- name: SetPhotoProcessing :one
 UPDATE photos
 SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
@@ -599,7 +750,8 @@ type SetPhotoProcessingParams struct {
 
 // Переход uploading -> processing после подтверждения загрузки в S3.
 // Здесь же фотография занимает место в альбоме: sort_order приходит
-// из NextAlbumSortOrder. На presign он оставался нулём, и выдача падала
+// сразу после обложки (FirstAlbumSortOrder + ShiftAlbumPhotosAfter).
+// На presign он оставался нулём, и выдача падала
 // на created_at — то есть на порядок, в котором до сервера доехали
 // запросы параллельного загрузчика.
 func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessingParams) (Photo, error) {
@@ -650,6 +802,25 @@ func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) er
 		arg.Phash,
 		arg.DrvSize,
 	)
+	return err
+}
+
+const shiftAlbumPhotosFrom = `-- name: ShiftAlbumPhotosFrom :exec
+UPDATE photos
+SET sort_order = sort_order + 1
+WHERE album_id = $1 AND sort_order >= $2::int AND status <> 'uploading'
+`
+
+type ShiftAlbumPhotosFromParams struct {
+	AlbumID uuid.UUID `json:"album_id"`
+	FromPos int32     `json:"from_pos"`
+}
+
+// Освободить номер под новое фото: всё, что стоит на нём и дальше, сдвигается
+// на одну позицию. Неподтверждённые загрузки не трогаем — своё место они
+// получат при подтверждении.
+func (q *Queries) ShiftAlbumPhotosFrom(ctx context.Context, arg ShiftAlbumPhotosFromParams) error {
+	_, err := q.db.Exec(ctx, shiftAlbumPhotosFrom, arg.AlbumID, arg.FromPos)
 	return err
 }
 

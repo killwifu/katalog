@@ -181,3 +181,37 @@ func TestCategoryReparent(t *testing.T) {
 	// Родителем не может стать вложенная категория.
 	patch(top.ID, map[string]any{"title": "Верх", "slug": "top-cat", "parent_id": child.ID}, http.StatusBadRequest)
 }
+
+// TestNewCategoryGoesLast: новая категория встаёт в конец своего уровня,
+// даже когда продавец уже расставил остальные перетаскиванием. Раньше она
+// получала место 0 и оказывалась перед расставленными.
+func TestNewCategoryGoesLast(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	first := createCategory(c, shop.ID, "Первая", "pervaya", nil)
+	second := createCategory(c, shop.ID, "Вторая", "vtoraya", nil)
+	if first.SortOrder >= second.SortOrder {
+		t.Fatalf("места при создании: первая %d, вторая %d — вторая должна быть дальше", first.SortOrder, second.SortOrder)
+	}
+	// Первую унесли в конец, как это делает перетаскивание в кабинете.
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/categories/"+first.ID,
+		map[string]any{"title": first.Title, "slug": first.Slug, "sort_order": 7}, http.StatusOK, nil)
+	third := createCategory(c, shop.ID, "Третья", "tretya", nil)
+	if third.SortOrder <= 7 {
+		t.Errorf("новая категория получила место %d — встала перед расставленными", third.SortOrder)
+	}
+	// Переименование без sort_order не двигает категорию: раньше кабинет
+	// слал 0, и переименованная категория прыгала в начало списка.
+	var renamed categoryResp
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/categories/"+third.ID,
+		map[string]any{"title": "Третья, новое имя", "slug": third.Slug}, http.StatusOK, &renamed)
+	if renamed.SortOrder != third.SortOrder {
+		t.Errorf("после переименования место %d, было %d", renamed.SortOrder, third.SortOrder)
+	}
+	// У подкатегорий свой счёт: первая подкатегория — в начале своего уровня.
+	sub := createCategory(c, shop.ID, "Вложенная", "vlozhennaya", &first.ID)
+	if sub.SortOrder != 0 {
+		t.Errorf("первая подкатегория получила место %d, ожидалось 0", sub.SortOrder)
+	}
+}

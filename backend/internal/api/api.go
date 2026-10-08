@@ -2,8 +2,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"strings"
@@ -43,6 +47,7 @@ func (a *API) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(rejectNUL)
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -58,6 +63,10 @@ func (a *API) Router() http.Handler {
 			r.Use(a.rateLimit("public", a.Cfg.PublicRateLimit))
 			r.Get("/shops/{slug}", a.handlePublicShop)
 			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
+			// Подбор пароля альбома ограничен так же жёстко, как вход:
+			// общий лимит публичных страниц для этого слишком щедрый.
+			r.With(a.rateLimit("unlock", a.Cfg.AuthRateLimit)).
+				Post("/shops/{slug}/albums/{albumID}/unlock", a.handlePublicAlbumUnlock)
 			r.Get("/shops/{slug}/search", a.handlePublicSearch)
 			r.Get("/shops/{slug}/tabs/{tabSlug}", a.handlePublicTab)
 			r.Get("/shops/{slug}/categories", a.handlePublicCategories)
@@ -85,6 +94,9 @@ func (a *API) Router() http.Handler {
 			r.Use(a.requireAuth)
 			r.Post("/auth/logout", a.handleLogout)
 			r.Get("/auth/me", a.handleMe)
+			// Подбор текущего пароля чужой открытой сессией ограничен тем же
+			// лимитом, что и вход.
+			r.With(a.rateLimit("auth", a.Cfg.AuthRateLimit)).Post("/auth/password/change", a.handleChangePassword)
 
 			r.Route("/shops", func(r chi.Router) {
 				r.Post("/", a.handleCreateShop)
@@ -122,12 +134,18 @@ func (a *API) Router() http.Handler {
 						r.Post("/", a.handleCreateCategory)
 						r.Get("/", a.handleListCategories)
 						r.Patch("/{categoryID}", a.handleUpdateCategory)
+						r.Patch("/{categoryID}/visibility", a.handleSetCategoryVisibility)
+						r.Put("/{categoryID}/albums/order", a.handleSetCategoryAlbumOrder)
+						r.Put("/{categoryID}/albums/{albumID}", a.handleAddAlbumToCategory)
+						r.Delete("/{categoryID}/albums/{albumID}", a.handleRemoveAlbumFromCategory)
 						r.Delete("/{categoryID}", a.handleDeleteCategory)
 					})
 
 					r.Route("/trash", func(r chi.Router) {
 						r.Get("/", a.handleListTrash)
 						r.Delete("/", a.handleEmptyTrash)
+						r.Post("/albums/{albumID}/restore", a.handleRestoreAlbum)
+						r.Delete("/albums/{albumID}", a.handlePurgeAlbum)
 						r.Post("/{photoID}/restore", a.handleRestorePhoto)
 						r.Delete("/{photoID}", a.handlePurgePhoto)
 					})
@@ -141,6 +159,9 @@ func (a *API) Router() http.Handler {
 							r.Patch("/category", a.handleSetAlbumCategory)
 							r.Delete("/", a.handleDeleteAlbum)
 							r.Get("/photos", a.handleListPhotos)
+							r.Put("/photos/order", a.handleSetPhotoOrder)
+							r.Get("/download", a.handleAlbumDownload)
+							r.Get("/stats", a.handleAlbumStats)
 						})
 					})
 				})
@@ -185,11 +206,37 @@ func apiError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	// Только application/json. «Простой» межсайтовый запрос (форма, text/plain)
+	// этот тип выставить не может без preflight, который мы не разрешаем, —
+	// защита от CSRF, не зависящая от SameSite у cookie (тот же сайт —
+	// это и соседние поддомены). Раньше JSON принимался с любым типом.
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
+		apiError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "request body must be application/json")
+		return false
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	dec := json.NewDecoder(r.Body)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: "+err.Error())
+		return false
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: "+err.Error())
+		return false
+	}
+	// NUL в строке Postgres не хранит («invalid byte sequence for encoding
+	// UTF8: 0x00»): такой запрос доходил до базы и отвечал 500 — на любом
+	// текстовом поле. В JSON NUL приходит только экранированным.
+	if hasEscapedNUL(raw) {
+		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: NUL character is not allowed")
+		return false
+	}
+	// Второй объект после первого (`{...}{...}`) раньше молча отбрасывался:
+	// тело принималось не таким, каким его отправили.
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: unexpected data after JSON object")
 		return false
 	}
 	return true
@@ -211,4 +258,36 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// hasEscapedNUL ищет в теле JSON экранированный NUL (\u0000), не считая
+// строки с экранированной обратной косой («\\u0000» — это текст, не NUL).
+func hasEscapedNUL(raw []byte) bool {
+	for i := 0; ; {
+		j := bytes.Index(raw[i:], []byte(`\u0000`))
+		if j < 0 {
+			return false
+		}
+		k := i + j
+		slashes := 0
+		for p := k - 1; p >= 0 && raw[p] == '\\'; p-- {
+			slashes++
+		}
+		if slashes%2 == 0 {
+			return true
+		}
+		i = k + 1
+	}
+}
+
+// rejectNUL отклоняет NUL в пути и параметрах запроса (%00): дальше они
+// уходили бы в запросы к базе (slug, поиск) и заканчивались 500.
+func rejectNUL(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.ContainsRune(r.URL.Path, 0) || strings.Contains(r.URL.RawQuery, "%00") || strings.ContainsRune(r.URL.RawQuery, 0) {
+			apiError(w, http.StatusBadRequest, "bad_request", "NUL character is not allowed")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

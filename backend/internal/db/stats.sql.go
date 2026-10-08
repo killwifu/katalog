@@ -24,6 +24,43 @@ func (q *Queries) CountActiveShops(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countAlbumLeadClicks = `-- name: CountAlbumLeadClicks :one
+SELECT count(*)
+FROM lead_clicks l
+JOIN photos p ON p.id = l.photo_id
+WHERE l.shop_id = $1 AND p.album_id = $2 AND l.created_at > now() - interval '7 days'
+`
+
+type CountAlbumLeadClicksParams struct {
+	ShopID  uuid.UUID `json:"shop_id"`
+	AlbumID uuid.UUID `json:"album_id"`
+}
+
+// Переходы в мессенджер с фотографий альбома за 7 дней — в реальном
+// времени, из lead_clicks.
+func (q *Queries) CountAlbumLeadClicks(ctx context.Context, arg CountAlbumLeadClicksParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlbumLeadClicks, arg.ShopID, arg.AlbumID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAlbumsViewedWeek = `-- name: CountAlbumsViewedWeek :one
+SELECT count(DISTINCT d.album_id)
+FROM daily_stats d
+JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
+WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.views > 0 AND d.date > current_date - 7
+`
+
+// Сколько разных альбомов открывали за последние 7 дней (обзор кабинета:
+// «N альбомов открыто»). Удалённые альбомы не считаем.
+func (q *Queries) CountAlbumsViewedWeek(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlbumsViewedWeek, shopID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLeadClicksBetween = `-- name: CountLeadClicksBetween :many
 SELECT shop_id, count(*) AS clicks
 FROM lead_clicks
@@ -104,6 +141,32 @@ func (q *Queries) DeleteOldLeadClicks(ctx context.Context, keepDays int32) (int6
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getAlbumWeekViews = `-- name: GetAlbumWeekViews :one
+SELECT coalesce(sum(d.views) FILTER (WHERE d.date > current_date - 7), 0)::bigint  AS week,
+       coalesce(sum(d.views) FILTER (WHERE d.date <= current_date - 7), 0)::bigint AS prev_week
+FROM daily_stats d
+WHERE d.shop_id = $1 AND d.album_id = $2 AND d.date > current_date - 14
+`
+
+type GetAlbumWeekViewsParams struct {
+	ShopID  uuid.UUID     `json:"shop_id"`
+	AlbumID uuid.NullUUID `json:"album_id"`
+}
+
+type GetAlbumWeekViewsRow struct {
+	Week     int64 `json:"week"`
+	PrevWeek int64 `json:"prev_week"`
+}
+
+// Показатели одного альбома для его страницы в кабинете (макет 13):
+// просмотры за неделю и за предыдущую — из ночной агрегации.
+func (q *Queries) GetAlbumWeekViews(ctx context.Context, arg GetAlbumWeekViewsParams) (GetAlbumWeekViewsRow, error) {
+	row := q.db.QueryRow(ctx, getAlbumWeekViews, arg.ShopID, arg.AlbumID)
+	var i GetAlbumWeekViewsRow
+	err := row.Scan(&i.Week, &i.PrevWeek)
+	return i, err
 }
 
 const getShopLeadsByChannel = `-- name: GetShopLeadsByChannel :many
@@ -225,7 +288,7 @@ func (q *Queries) GetShopStatsTotals(ctx context.Context, arg GetShopStatsTotals
 const getShopTopAlbums = `-- name: GetShopTopAlbums :many
 SELECT d.album_id, a.title, sum(d.views)::bigint AS views
 FROM daily_stats d
-JOIN albums a ON a.id = d.album_id
+JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
 WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.date >= $2 AND d.date <= $3
 GROUP BY d.album_id, a.title
 ORDER BY views DESC, a.title

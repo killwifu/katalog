@@ -70,6 +70,12 @@ func run(logger *slog.Logger) error {
 		Log:        logger,
 	}
 
+	// Разовая команда: `worker strip-exif` вычищает EXIF/XMP из уже
+	// сохранённых деривативов (до фикса libvips 8.16 оставляла в них GPS).
+	if len(os.Args) > 1 && os.Args[1] == "strip-exif" {
+		return processor.StripDerivativeMetadata(context.Background())
+	}
+
 	// Health + метрика глубины очереди для docker healthcheck / мониторинга.
 	inspector := asynq.NewInspector(redisOpt)
 	go serveHealth(cfg.WorkerHealthAddr, inspector, logger)

@@ -44,6 +44,36 @@ func normalizeEmail(raw string) string {
 	return strings.ToLower(addr.Address)
 }
 
+// maxAccountPassword — верхняя граница пароля аккаунта. argon2 хеширует вход
+// целиком, и пароль на мегабайт (столько пропускает тело запроса) был бы
+// дешёвым способом нагрузить сервер. 128 символов хватает любому менеджеру паролей.
+const maxAccountPassword = 128
+
+// dummyPasswordHash — хеш для сверки, когда пользователя нет (выравнивает время).
+var dummyPasswordHash = func() string {
+	h, err := auth.HashPassword("timing-equalizer-not-a-password")
+	if err != nil {
+		panic(err)
+	}
+	return h
+}()
+
+// validNewPassword проверяет новый пароль аккаунта (регистрация, сброс, смена).
+// Длина в символах, а не в байтах: по len() кириллический пароль проходил
+// с четырёх символов — «абвг» это ровно 8 байт.
+func validNewPassword(w http.ResponseWriter, password string) bool {
+	n := len([]rune(password))
+	if n < 8 {
+		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
+		return false
+	}
+	if n > maxAccountPassword {
+		apiError(w, http.StatusBadRequest, "password_too_long", "password must be at most 128 characters")
+		return false
+	}
+	return true
+}
+
 func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req credentialsRequest
 	if !decodeJSON(w, r, &req) {
@@ -60,10 +90,7 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email = strings.ToLower(addr.Address)
-	// Длина в символах, а не в байтах: по len() кириллический пароль
-	// проходил с четырёх символов — «абвг» это ровно 8 байт.
-	if len([]rune(req.Password)) < 8 {
-		apiError(w, http.StatusBadRequest, "weak_password", "password must be at least 8 characters")
+	if !validNewPassword(w, req.Password) {
 		return
 	}
 
@@ -84,6 +111,12 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 		Email:        &email,
 		PasswordHash: &hash,
 	})
+	// Проверка выше и вставка не атомарны: параллельные регистрации одного
+	// адреса обе проходят проверку, и вторая упиралась в UNIQUE — 500 вместо 409.
+	if isUniqueViolation(err) {
+		apiError(w, http.StatusConflict, "email_taken", "email is already registered")
+		return
+	}
 	if err != nil {
 		a.internalError(w, "create user", err)
 		return
@@ -103,8 +136,16 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Тот же разбор, что и при регистрации: иначе форма «Имя <a@b>»
 	// не совпадёт с сохранённым голым адресом.
 	email := normalizeEmail(req.Email)
+	// Слишком длинный пароль заведомо не подходит — не хешируем его.
+	if len([]rune(req.Password)) > maxAccountPassword {
+		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+		return
+	}
 	user, err := a.Q.GetUserByEmail(r.Context(), &email)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// Тот же argon2, что и для существующего адреса: иначе по времени
+		// ответа (2 мс против 35 мс) видно, зарегистрирован ли email.
+		_, _ = auth.VerifyPassword(req.Password, dummyPasswordHash)
 		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
 		return
 	}

@@ -102,3 +102,70 @@ func TestEXIFStrippedFromDerivatives(t *testing.T) {
 		t.Errorf("EXIF-ориентация не применена: %dx%d, ожидалось 800x1200", res.Width, res.Height)
 	}
 }
+
+// TestWebPMetadataGuard — страховка поверх зачистки: RIFF-разбор находит
+// чанки EXIF/XMP в WebP (такой дериватив не публикуется).
+func TestWebPMetadataGuard(t *testing.T) {
+	chunk := func(fourcc string, data []byte) []byte {
+		b := append([]byte(fourcc), byte(len(data)), byte(len(data)>>8), byte(len(data)>>16), byte(len(data)>>24))
+		b = append(b, data...)
+		if len(data)%2 == 1 {
+			b = append(b, 0)
+		}
+		return b
+	}
+	webp := func(chunks ...[]byte) []byte {
+		body := []byte("WEBP")
+		for _, c := range chunks {
+			body = append(body, c...)
+		}
+		n := len(body)
+		return append([]byte{'R', 'I', 'F', 'F', byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}, body...)
+	}
+	clean := webp(chunk("VP8X", make([]byte, 10)), chunk("VP8 ", []byte{1, 2, 3}))
+	if webpHasMetadata(clean) {
+		t.Fatal("clean webp reported as having metadata")
+	}
+	for _, fc := range []string{"EXIF", "XMP "} {
+		if !webpHasMetadata(webp(chunk("VP8X", make([]byte, 10)), chunk("VP8 ", []byte{1, 2, 3}), chunk(fc, []byte("Exif\x00\x00GPS")))) {
+			t.Fatalf("%s chunk not detected", fc)
+		}
+	}
+	// Настоящий дериватив из JPEG с EXIF чист.
+	res, err := Process(jpegWithEXIF(t, 120, 80))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for size, data := range res.Derivatives {
+		if webpHasMetadata(data) {
+			t.Fatalf("derivative %d carries EXIF/XMP", size)
+		}
+	}
+}
+
+// TestStripWebPMetadata: EXIF/XMP вырезаются, флаги VP8X снимаются, размер RIFF
+// пересчитан, остальные чанки целы.
+func TestStripWebPMetadata(t *testing.T) {
+	vp8x := []byte{'V', 'P', '8', 'X', 10, 0, 0, 0, 0x08 | 0x04 | 0x10, 0, 0, 0, 1, 0, 0, 1, 0, 0}
+	vp8 := []byte{'V', 'P', '8', ' ', 3, 0, 0, 0, 9, 9, 9, 0}
+	exif := append([]byte{'E', 'X', 'I', 'F', 9, 0, 0, 0}, []byte("Exif\x00\x00GPS")...)
+	exif = append(exif, 0)
+	xmp := append([]byte{'X', 'M', 'P', ' ', 4, 0, 0, 0}, []byte("<x/>")...)
+	body := append(append(append(append([]byte("WEBP"), vp8x...), vp8...), exif...), xmp...)
+	n := len(body)
+	src := append([]byte{'R', 'I', 'F', 'F', byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}, body...)
+
+	got := stripWebPMetadata(src)
+	if webpHasMetadata(got) {
+		t.Fatal("metadata chunks survived")
+	}
+	if got[12+8]&(0x08|0x04) != 0 || got[12+8]&0x10 == 0 {
+		t.Fatalf("VP8X flags = %#x, want EXIF/XMP cleared and alpha kept", got[12+8])
+	}
+	if size := int(got[4]) | int(got[5])<<8 | int(got[6])<<16 | int(got[7])<<24; size != len(got)-8 {
+		t.Fatalf("RIFF size = %d, want %d", size, len(got)-8)
+	}
+	if !bytes.Contains(got, []byte{'V', 'P', '8', ' ', 3, 0, 0, 0, 9, 9, 9}) {
+		t.Fatal("image chunk lost")
+	}
+}

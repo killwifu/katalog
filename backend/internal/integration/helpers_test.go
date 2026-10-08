@@ -24,6 +24,8 @@ type client struct {
 	t    *testing.T
 	http *http.Client
 	ip   string
+	// headers — дополнительные заголовки каждого запроса (пропуск альбома).
+	headers map[string]string
 }
 
 func newClient(t *testing.T) *client {
@@ -65,6 +67,9 @@ func (c *client) doWithXFF(method, path string, body any, xff string) (int, []by
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("X-Forwarded-For", xff)
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		c.t.Fatalf("%s %s: %v", method, path, err)
@@ -165,6 +170,15 @@ func createAlbum(c *client, shopID string) albumJSON {
 // uploadPhoto проходит presign -> PUT в MinIO -> confirm, возвращает photo_id.
 func uploadPhoto(c *client, shopID, albumID string, data []byte) string {
 	c.t.Helper()
+	id := putPhoto(c, shopID, albumID, data)
+	confirmPhotos(c, shopID, []string{id})
+	return id
+}
+
+// putPhoto — presign и PUT в MinIO без подтверждения: фото остаётся в
+// uploading. Нужен тестам, которые подтверждают несколько фото одним запросом.
+func putPhoto(c *client, shopID, albumID string, data []byte) string {
+	c.t.Helper()
 	var pre presignJSON
 	c.mustJSON("POST", "/api/v1/uploads/presign",
 		map[string]any{"shop_id": shopID, "album_id": albumID, "size": len(data)},
@@ -183,7 +197,12 @@ func uploadPhoto(c *client, shopID, albumID string, data []byte) string {
 		body, _ := io.ReadAll(resp.Body)
 		c.t.Fatalf("PUT to presigned url: status %d: %s", resp.StatusCode, body)
 	}
+	return pre.PhotoID
+}
 
+// confirmPhotos подтверждает пачку одним запросом, как это делает кабинет.
+func confirmPhotos(c *client, shopID string, ids []string) {
+	c.t.Helper()
 	var confirm struct {
 		Results []struct {
 			PhotoID string `json:"photo_id"`
@@ -192,12 +211,16 @@ func uploadPhoto(c *client, shopID, albumID string, data []byte) string {
 		} `json:"results"`
 	}
 	c.mustJSON("POST", "/api/v1/photos/confirm",
-		map[string]any{"shop_id": shopID, "photo_ids": []string{pre.PhotoID}},
+		map[string]any{"shop_id": shopID, "photo_ids": ids},
 		http.StatusOK, &confirm)
-	if len(confirm.Results) != 1 || confirm.Results[0].Status != "processing" {
+	if len(confirm.Results) != len(ids) {
 		c.t.Fatalf("confirm: unexpected results %+v", confirm.Results)
 	}
-	return pre.PhotoID
+	for _, r := range confirm.Results {
+		if r.Status != "processing" {
+			c.t.Fatalf("confirm: unexpected results %+v", confirm.Results)
+		}
+	}
 }
 
 // waitPhotoStatus ждёт целевого статуса фото, опрашивая список альбома.

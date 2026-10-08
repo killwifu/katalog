@@ -15,7 +15,7 @@ import (
 const addAlbumToSection = `-- name: AddAlbumToSection :exec
 INSERT INTO album_sections (album_id, section_id, sort_order)
 SELECT a.id, $2, $3 FROM albums a
-WHERE a.id = $1 AND a.shop_id = $4
+WHERE a.id = $1 AND a.shop_id = $4 AND a.deleted_at IS NULL
 ON CONFLICT (album_id, section_id) DO UPDATE SET sort_order = EXCLUDED.sort_order
 `
 
@@ -50,7 +50,12 @@ func (q *Queries) ClearSectionAlbums(ctx context.Context, sectionID uuid.UUID) e
 
 const createSection = `-- name: CreateSection :one
 INSERT INTO sections (tab_id, title, sort_order)
-VALUES ($1, $2, $3)
+VALUES (
+    $1, $2,
+    CASE WHEN $3::int > 0 THEN $3::int
+         ELSE (SELECT coalesce(max(s.sort_order), -1) + 1 FROM sections s WHERE s.tab_id = $1)
+    END
+)
 RETURNING id, tab_id, title, sort_order, created_at
 `
 
@@ -60,6 +65,7 @@ type CreateSectionParams struct {
 	SortOrder int32     `json:"sort_order"`
 }
 
+// Место не задано (0) — раздел встаёт последним во вкладке.
 func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (Section, error) {
 	row := q.db.QueryRow(ctx, createSection, arg.TabID, arg.Title, arg.SortOrder)
 	var i Section
@@ -75,7 +81,12 @@ func (q *Queries) CreateSection(ctx context.Context, arg CreateSectionParams) (S
 
 const createTab = `-- name: CreateTab :one
 INSERT INTO tabs (shop_id, title, slug, is_system, sort_order)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (
+    $1, $2, $3, $4,
+    CASE WHEN $5::int > 0 THEN $5::int
+         ELSE (SELECT coalesce(max(t.sort_order), -1) + 1 FROM tabs t WHERE t.shop_id = $1)
+    END
+)
 RETURNING id, shop_id, title, slug, is_system, sort_order, created_at, updated_at
 `
 
@@ -87,6 +98,8 @@ type CreateTabParams struct {
 	SortOrder int32     `json:"sort_order"`
 }
 
+// Место не задано (0) — вкладка встаёт последней. Раньше новая вкладка
+// получала 0 и вставала на витрине перед «Главной».
 func (q *Queries) CreateTab(ctx context.Context, arg CreateTabParams) (Tab, error) {
 	row := q.db.QueryRow(ctx, createTab,
 		arg.ShopID,
@@ -201,15 +214,15 @@ func (q *Queries) GetTabForShop(ctx context.Context, arg GetTabForShopParams) (T
 
 const listPublicSectionAlbums = `-- name: ListPublicSectionAlbums :many
 SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_order,
-       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator
+       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
-LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published'
+LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND a.deleted_at IS NULL
      AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
      AND (a.photo_count > 0 OR EXISTS (
            SELECT 1 FROM albums ch
-           WHERE ch.parent_id = a.id AND ch.status = 'published'
+           WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
              AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
              AND ch.photo_count > 0))
 WHERE t.shop_id = $1 AND t.slug = $2
@@ -240,6 +253,8 @@ type ListPublicSectionAlbumsRow struct {
 	HiddenByPlan       pgtype.Bool        `json:"hidden_by_plan"`
 	Description        *string            `json:"description"`
 	BlockedByModerator pgtype.Bool        `json:"blocked_by_moderator"`
+	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
+	Watermark          []byte             `json:"watermark"`
 }
 
 // Публичная выкладка: секции вкладки со своими альбомами, одним запросом.
@@ -272,6 +287,8 @@ func (q *Queries) ListPublicSectionAlbums(ctx context.Context, arg ListPublicSec
 			&i.HiddenByPlan,
 			&i.Description,
 			&i.BlockedByModerator,
+			&i.DeletedAt,
+			&i.Watermark,
 		); err != nil {
 			return nil, err
 		}
@@ -380,6 +397,44 @@ func (q *Queries) ListTabsByShop(ctx context.Context, shopID uuid.UUID) ([]Tab, 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTabsWithVisibleAlbums = `-- name: ListTabsWithVisibleAlbums :many
+SELECT DISTINCT s.tab_id
+FROM sections s
+JOIN tabs t ON t.id = s.tab_id
+JOIN album_sections asec ON asec.section_id = s.id
+JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND a.deleted_at IS NULL
+     AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+     AND (a.photo_count > 0 OR EXISTS (
+           SELECT 1 FROM albums ch
+           WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
+             AND NOT ch.hidden_by_plan AND NOT ch.blocked_by_moderator
+             AND ch.photo_count > 0))
+WHERE t.shop_id = $1
+`
+
+// Вкладки, в которых покупателю есть что показать: пустую пользовательскую
+// вкладку витрина прячет из навигации, как и пустые альбомы, — иначе тап
+// по ней упирался в «В этом разделе пока ничего нет».
+func (q *Queries) ListTabsWithVisibleAlbums(ctx context.Context, shopID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listTabsWithVisibleAlbums, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tab_id uuid.UUID
+		if err := rows.Scan(&tab_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tab_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

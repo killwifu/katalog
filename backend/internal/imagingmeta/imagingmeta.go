@@ -40,3 +40,28 @@ func DerivativeName(px int) string {
 	}
 	return strconv.Itoa(px)
 }
+
+// WatermarkPositions — допустимые положения водяного знака: первая буква —
+// строка (t верх, m середина, b низ), вторая — столбец (l, c, r). Та же
+// сетка 3×3 нарисована в кабинете. Живёт здесь, а не в imaging: настройку
+// проверяет api, а ему линковаться с libvips нельзя.
+var WatermarkPositions = []string{"tl", "tc", "tr", "ml", "mc", "mr", "bl", "bc", "br"}
+
+// ValidWatermarkPosition — пустое значение допустимо и означает умолчание
+// (правый нижний угол).
+func ValidWatermarkPosition(pos string) bool {
+	if pos == "" {
+		return true
+	}
+	for _, p := range WatermarkPositions {
+		if p == pos {
+			return true
+		}
+	}
+	return false
+}
+
+// FailFileTooLarge — код причины отказа для файла больше лимита на одно
+// фото. Ставит API при подтверждении, до воркера (см. confirmOne): здесь,
+// а не в imaging, потому что API собирается без cgo/libvips.
+const FailFileTooLarge = "file_too_large"

@@ -37,7 +37,7 @@ ORDER BY date;
 -- name: GetShopTopAlbums :many
 SELECT d.album_id, a.title, sum(d.views)::bigint AS views
 FROM daily_stats d
-JOIN albums a ON a.id = d.album_id
+JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
 WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.date >= $2 AND d.date <= $3
 GROUP BY d.album_id, a.title
 ORDER BY views DESC, a.title
@@ -116,3 +116,27 @@ WHERE created_at < now() - make_interval(days => sqlc.arg(keep_days)::int);
 -- name: DeleteOldDailyStats :execrows
 DELETE FROM daily_stats
 WHERE date < current_date - sqlc.arg(keep_days)::int;
+
+-- Показатели одного альбома для его страницы в кабинете (макет 13):
+-- просмотры за неделю и за предыдущую — из ночной агрегации.
+-- name: GetAlbumWeekViews :one
+SELECT coalesce(sum(d.views) FILTER (WHERE d.date > current_date - 7), 0)::bigint  AS week,
+       coalesce(sum(d.views) FILTER (WHERE d.date <= current_date - 7), 0)::bigint AS prev_week
+FROM daily_stats d
+WHERE d.shop_id = $1 AND d.album_id = $2 AND d.date > current_date - 14;
+
+-- Переходы в мессенджер с фотографий альбома за 7 дней — в реальном
+-- времени, из lead_clicks.
+-- name: CountAlbumLeadClicks :one
+SELECT count(*)
+FROM lead_clicks l
+JOIN photos p ON p.id = l.photo_id
+WHERE l.shop_id = $1 AND p.album_id = $2 AND l.created_at > now() - interval '7 days';
+
+-- Сколько разных альбомов открывали за последние 7 дней (обзор кабинета:
+-- «N альбомов открыто»). Удалённые альбомы не считаем.
+-- name: CountAlbumsViewedWeek :one
+SELECT count(DISTINCT d.album_id)
+FROM daily_stats d
+JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
+WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.views > 0 AND d.date > current_date - 7;

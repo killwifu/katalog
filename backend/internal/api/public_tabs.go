@@ -12,6 +12,10 @@ import (
 type publicTabResponse struct {
 	Title string `json:"title"`
 	Slug  string `json:"slug"`
+	// Empty — своя вкладка без видимых альбомов. Витрина прячет её из
+	// навигации, но страница по прямой ссылке открывается (продавец
+	// смотрит только что созданную вкладку).
+	Empty bool `json:"empty,omitempty"`
 }
 
 type publicSectionResponse struct {
@@ -74,6 +78,7 @@ func (a *API) publicSections(r *http.Request, shopID uuid.UUID, tabSlug string) 
 			p := row.ParentID.UUID.String()
 			item.ParentID = &p
 		}
+		item.HasPassword = row.PasswordHash != nil
 		out[pos].Albums = append(out[pos].Albums, item)
 	}
 	return out, nil

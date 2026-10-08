@@ -179,8 +179,21 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 	// весь корень домена (/{slug}), и без потолка один аккаунт мог занять
 	// сколько угодно адресов: приватные ручки rate-limit не покрывает.
 	// Кабинет всё равно работает с одним магазином, так что пять — заведомо
-	// больше любого честного сценария.
-	count, err := a.Q.CountShopsByOwner(r.Context(), userID(r))
+	// больше любого честного сценария. Подсчёт и вставка — под замком на
+	// владельца: без него параллельные запросы видели одно и то же число и
+	// из 20 одновременных создавали 9 магазинов.
+	tx, err := a.Pool.Begin(r.Context())
+	if err != nil {
+		a.internalError(w, "begin tx", err)
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	q := a.Q.WithTx(tx)
+	if err := q.LockShopForUpload(r.Context(), "shops:"+userID(r).String()); err != nil {
+		a.internalError(w, "lock owner shops", err)
+		return
+	}
+	count, err := q.CountShopsByOwner(r.Context(), userID(r))
 	if err != nil {
 		a.internalError(w, "count shops", err)
 		return
@@ -191,7 +204,7 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shop, err := a.Q.CreateShop(r.Context(), db.CreateShopParams{
+	shop, err := q.CreateShop(r.Context(), db.CreateShopParams{
 		OwnerID:     userID(r),
 		Slug:        req.Slug,
 		Name:        req.Name,
@@ -199,6 +212,9 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 		Contacts:    contacts,
 		Settings:    json.RawMessage(`{}`),
 	})
+	if err == nil {
+		err = tx.Commit(r.Context())
+	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		apiError(w, http.StatusConflict, "slug_taken", "this slug is already taken")
@@ -209,6 +225,10 @@ func (a *API) handleCreateShop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.createSystemTabs(r, shop.ID)
+	// Адрес могли открыть до регистрации (проверить, свободен ли), и Next
+	// закешировал 404. По TTL закешированный 404 не обновляется — только
+	// вебхуком.
+	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusCreated, a.toShopResponse(shop))
 }
 

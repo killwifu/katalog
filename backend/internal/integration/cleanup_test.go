@@ -106,8 +106,8 @@ func backdate(t *testing.T, photoID, interval string) {
 	}
 }
 
-// TestDeleteAlbumReleasesQuota: удаление альбома возвращает квоту магазина
-// и убирает объекты из S3. Каскад по внешнему ключу сносит только строки,
+// TestDeleteAlbumReleasesQuota: окончательное удаление альбома возвращает
+// квоту магазина и убирает объекты из S3. Каскад по внешнему ключу сносит только строки,
 // поэтому без явного учёта storage_used растёт до потолка тарифа
 // и продавец больше не может грузить фото.
 func TestDeleteAlbumReleasesQuota(t *testing.T) {
@@ -128,7 +128,17 @@ func TestDeleteAlbumReleasesQuota(t *testing.T) {
 		t.Fatal("storage_used not accounted after upload")
 	}
 
+	// Удаление теперь двухшаговое: альбом уезжает в корзину (место занято,
+	// файлы на месте), а квоту и S3 освобождает окончательное удаление.
 	c.mustJSON("DELETE", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID, nil, http.StatusNoContent, nil)
+	var inTrash int64
+	if err := env.pool.QueryRow(ctx, `SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&inTrash); err != nil {
+		t.Fatalf("read storage_used: %v", err)
+	}
+	if inTrash != used {
+		t.Fatalf("квота изменилась при удалении в корзину: было %d, стало %d", used, inTrash)
+	}
+	c.mustJSON("DELETE", "/api/v1/shops/"+shop.ID+"/trash/albums/"+album.ID, nil, http.StatusNoContent, nil)
 
 	if err := env.pool.QueryRow(ctx, `SELECT storage_used FROM shops WHERE id = $1`, shop.ID).Scan(&used); err != nil {
 		t.Fatalf("read storage_used: %v", err)

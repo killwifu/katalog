@@ -73,3 +73,27 @@ func TestRevalidateOnShopAndAlbumChanges(t *testing.T) {
 		map[string]any{"title": "Переименован"}, http.StatusOK, nil)
 	waitRevalidated(t, shop.Slug, 10*time.Second)
 }
+
+// TestRevalidateOnShopCreateAndSuspend: адрес могли открыть до регистрации,
+// и Next закешировал 404 — по TTL он не обновляется, нужен вебхук.
+// Блокировка и разблокировка модератором меняют витрину так же.
+func TestRevalidateOnShopCreateAndSuspend(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+
+	drainRevalidated()
+	shop := createShop(c)
+	waitRevalidated(t, shop.Slug, 10*time.Second)
+
+	admin := newClient(t)
+	adminUser := registerUser(admin)
+	makeAdmin(t, adminUser.ID)
+
+	drainRevalidated()
+	admin.mustJSON("POST", "/api/v1/admin/shops/"+shop.ID+"/suspend", nil, http.StatusNoContent, nil)
+	waitRevalidated(t, shop.Slug, 10*time.Second)
+
+	drainRevalidated()
+	admin.mustJSON("POST", "/api/v1/admin/shops/"+shop.ID+"/unsuspend", nil, http.StatusNoContent, nil)
+	waitRevalidated(t, shop.Slug, 10*time.Second)
+}
