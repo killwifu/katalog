@@ -43,7 +43,10 @@ export function contactHref(channel: Channel, value: string, text: string): stri
   const enc = encodeURIComponent(text)
   switch (channel) {
     case 'telegram':
-      return `https://t.me/${encodeURIComponent(v)}?text=${enc}`
+      // Продавец мог сохранить ссылку целиком (t.me/ник) — берём из неё ник,
+      // иначе кнопка вела на t.me/https%3A…
+      // «+» у номера (t.me/+79991234567) должен остаться буквальным.
+      return `https://t.me/${encodeURIComponent(telegramHandle(v)).replace(/^%2B/, '+')}?text=${enc}`
     case 'whatsapp':
       return `https://wa.me/${v.replace(/\D/g, '')}?text=${enc}`
     case 'vk':
@@ -52,6 +55,11 @@ export function contactHref(channel: Channel, value: string, text: string): stri
     case 'max':
       return fullLink('max', v) ?? `https://max.ru/${encodeURIComponent(v)}`
   }
+}
+
+function telegramHandle(v: string): string {
+  const m = v.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/@?([^/?#]+)/i)
+  return m ? m[1] : v
 }
 
 // Каналы магазина в фиксированном порядке (contacts может содержать мусор).

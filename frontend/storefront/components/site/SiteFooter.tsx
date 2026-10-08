@@ -1,3 +1,4 @@
+import { ReportLink } from './ReportLink'
 import styles from './site.module.css'
 
 // Подвал: один на публичные страницы и на витрину магазина —
@@ -10,7 +11,7 @@ export function SiteFooter() {
         <a href="/terms">Оферта</a>
         <a href="/content-policy">Политика контента</a>
         <a href="/privacy">Персональные данные</a>
-        <a href="/abuse">Пожаловаться на контент</a>
+        <ReportLink />
       </div>
     </footer>
   )

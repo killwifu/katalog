@@ -4,6 +4,7 @@ import { getAlbumPage, loadOrUnavailable } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
 import { ContactBar } from '@/components/ContactBar'
 import { AlbumGrid } from '@/components/AlbumGrid'
+import { LockedAlbum } from '@/components/LockedAlbum'
 import { PhotoGrid } from '@/components/PhotoGrid'
 import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
@@ -14,26 +15,35 @@ import { TrackView } from '@/components/TrackView'
 
 type Props = {
   params: { slug: string; albumId: string }
-  searchParams: { page?: string }
+  searchParams: { page?: string; p?: string }
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug, albumId } = params
-  const res = await loadOrUnavailable(() => getAlbumPage(slug, albumId, 1))
+  const page = Math.max(1, Number.parseInt(searchParams.page ?? '1', 10) || 1)
+  const res = await loadOrUnavailable(() => getAlbumPage(slug, albumId, page))
   if (!res.ok) return { title: `${res.payload.shop.name} — каталог временно недоступен` }
   const data = res.data
   if (!data) return { title: 'Альбом не найден' }
-  const cover = data.photos[0]?.urls
+  // Покупатель пересылает ссылку на конкретный товар (?p=) — в превью
+  // мессенджера должен быть он, а не обложка альбома.
+  const shared = searchParams.p ? data.photos.find((ph) => ph.id === searchParams.p) : undefined
+  const cover = (shared ?? data.photos[0])?.urls
+  const ogTitle = shared?.caption
+    ? `${shared.caption.slice(0, 100)} — ${data.shop.name}`
+    : `${data.album.title} — ${data.shop.name}`
   return {
     // Продавец убрал альбом из списков витрины — в поисковой выдаче ему
     // тоже не место, иначе «по ссылке» перестаёт что-либо значить.
-    robots: data.album.unlisted ? { index: false, follow: true } : undefined,
+    // Закрытый паролем альбом в выдаче тоже ни к чему: поисковик увидит
+    // только форму ввода пароля.
+    robots: data.album.unlisted || data.album.has_password ? { index: false, follow: true } : undefined,
     title: `${data.album.title} — ${data.shop.name}`,
     description:
       data.album.description?.slice(0, 160) ||
       `${data.album.title}: ${data.album.photo_count} фото в каталоге ${data.shop.name}`,
     openGraph: {
-      title: `${data.album.title} — ${data.shop.name}`,
+      title: ogTitle,
       type: 'website',
       images: cover ? [{ url: cover.medium }] : undefined,
     },
@@ -56,7 +66,8 @@ export default async function AlbumPage({ params, searchParams }: Props) {
   // Ссылка на страницу за пределами альбома — не редкость: продавец удалил
   // часть фото, а покупатель вернулся по старой ссылке или из выдачи.
   // Пустая сетка без навигации читается как «в магазине ничего нет».
-  if (page > totalPages) redirect(base)
+  // У закрытого альбома страниц на сервере нет вовсе — их листает LockedAlbum.
+  if (page > totalPages && !album.locked) redirect(base)
 
   return (
     <main className="page">
@@ -66,7 +77,9 @@ export default async function AlbumPage({ params, searchParams }: Props) {
           <a href={`/${encodeURIComponent(slug)}`}>{shop.name}</a> / <span>{album.title}</span>
         </nav>
         <h1>{album.title}</h1>
-        <p className="album-count">{album.photo_count} фото</p>
+        <p className="album-count">
+          {album.photo_count} фото{album.has_password && ' · по паролю'}
+        </p>
         {/* Условия отправки и оплаты — здесь, до фотографий: покупатель
             должен прочитать их прежде, чем писать продавцу.
             whiteSpace сохраняет переносы, которые продавец расставил сам. */}
@@ -79,14 +92,15 @@ export default async function AlbumPage({ params, searchParams }: Props) {
       {/* Вложенные альбомы: по ссылке на родительскую категорию покупатель
           раньше попадал на пустую страницу — подальбомы были видны только
           на главной магазина. */}
-      {children.length > 0 && (
+      {album.locked && <LockedAlbum slug={slug} albumId={album.id} title={album.title} shop={shop} />}
+      {!album.locked && children.length > 0 && (
         <section className="section">
           <h2 className="section__head">Внутри</h2>
           <AlbumGrid shopSlug={slug} albums={children} />
         </section>
       )}
-      <PhotoGrid photos={photos} shop={shop} />
-      {totalPages > 1 && (
+      {!album.locked && <PhotoGrid photos={photos} shop={shop} />}
+      {!album.locked && totalPages > 1 && (
         <nav className="pagination" aria-label="Страницы альбома">
           {page > 1 && (
             <a href={page === 2 ? base : `${base}?page=${page - 1}`} rel="prev">

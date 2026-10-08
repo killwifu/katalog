@@ -1,36 +1,53 @@
-import type { TabPublic } from '@/lib/api'
+import type { CategoryPublic, TabPublic } from '@/lib/api'
+import { CategoryDropdown } from './CategoryDropdown'
 
-// Вкладку «Главная» скрываем, пока у магазина нет секций: до этого она
-// показывает то же самое, что «Альбомы» (kit).
+// Меню витрины (макет 15): «Главная · Альбомы · Категории · Контакты» и
+// вкладки, которые продавец завёл сам. «Категории» — не вкладка, а
+// выпадающий список; если категорий нет совсем, пункта нет.
 export function ShopTabs({
   shopSlug,
   tabs,
-  hasSections,
+  categories,
   activeSlug,
 }: {
   shopSlug: string
   tabs: TabPublic[]
-  hasSections: boolean
+  categories: CategoryPublic[]
   activeSlug: string
 }) {
-  const visible = tabs.filter((t) => t.slug !== 'home' || hasSections)
-  if (visible.length <= 1) return null
-
-  const href = (slug: string) =>
-    slug === 'home' ? `/${shopSlug}` : `/${shopSlug}/t/${slug}`
+  const base = `/${encodeURIComponent(shopSlug)}`
+  const href = (slug: string) => (slug === 'home' ? base : `${base}/t/${slug}`)
+  // «Категории» стоят сразу за «Альбомами» (или за «Главной», если
+  // вкладки «Альбомы» у магазина нет).
+  const anchor = tabs.some((t) => t.slug === 'albums') ? 'albums' : 'home'
+  const dropdown =
+    categories.length > 0 ? (
+      <CategoryDropdown
+        key="categories"
+        shopSlug={shopSlug}
+        categories={categories}
+        active={activeSlug === 'categories'}
+      />
+    ) : null
 
   return (
     <nav className="shop-nav" aria-label="Разделы магазина">
-      {visible.map((tab) => (
-        <a
-          key={tab.slug}
-          href={href(tab.slug)}
-          className="shop-tab"
-          aria-current={tab.slug === activeSlug ? 'page' : undefined}
-        >
-          {tab.title}
-        </a>
-      ))}
+      {tabs.flatMap((tab) => {
+        // Пустую вкладку покупателю не показываем: тап по ней вёл в «В этом
+        // разделе пока ничего нет». Открытую по прямой ссылке — оставляем.
+        if (tab.empty && tab.slug !== activeSlug) return []
+        const link = (
+          <a
+            key={tab.slug}
+            href={href(tab.slug)}
+            className="shop-tab"
+            aria-current={tab.slug === activeSlug ? 'page' : undefined}
+          >
+            {tab.title}
+          </a>
+        )
+        return tab.slug === anchor ? [link, dropdown] : [link]
+      })}
     </nav>
   )
 }

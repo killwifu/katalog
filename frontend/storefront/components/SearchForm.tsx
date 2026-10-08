@@ -6,12 +6,14 @@ export function SearchForm({ slug, initial }: { slug: string; initial?: string }
         type="search"
         name="q"
         defaultValue={initial ?? ''}
-        placeholder="Поиск по всему каталогу"
+        placeholder="Поиск по альбомам"
         maxLength={100}
         required
         aria-label="Поиск по всему каталогу магазина"
       />
-      <button type="submit" className="btn btn--primary">
+      {/* Кнопки в макете нет: поиск уходит по Enter. Сама кнопка остаётся
+          для скринридера и для клавиатуры телефона («Найти»). */}
+      <button type="submit" className="sr-only">
         Найти
       </button>
     </form>

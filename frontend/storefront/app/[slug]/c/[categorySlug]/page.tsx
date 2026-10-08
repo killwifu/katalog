@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getCategories, getCategoryAlbums, getShopPage, loadOrUnavailable } from '@/lib/api'
+import { getCategories, getCategoryAlbums, getShopPage, loadOrUnavailable, withAlbumCounts } from '@/lib/api'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
+import { AlbumGrid } from '@/components/AlbumGrid'
 import { ShopHeader } from '@/components/ShopHeader'
 import { CategoryMenu } from '@/components/CategoryMenu'
 
@@ -40,10 +41,21 @@ export default async function CategoryPage({ params }: Props) {
   if (!data || !categories || !albums) notFound()
   const category = categories.find((c) => c.slug === categorySlug)
   if (!category) notFound()
+  // Выдача категории приходит без обложек; они есть в сетке магазина,
+  // которую страница всё равно загружает для шапки. Без этого плитки
+  // категории стояли пустыми серыми квадратами — а с главной сюда теперь
+  // ведёт ссылка «Все N →».
+  const fromShop = new Map(data.albums.map((a) => [a.id, a]))
+  const withCovers = albums.map((a) => fromShop.get(a.id) ?? a)
+  const counted = withAlbumCounts(categories, data.albums)
 
   return (
     <main className="page">
-      <ShopHeader shop={data.shop} />
+      <ShopHeader
+        shop={data.shop}
+        albumCount={data.albums.filter((a) => !a.parent_id).length}
+        nav={{ tabs: data.tabs, categories: counted, active: 'categories' }}
+      />
 
       <nav className="breadcrumbs" aria-label="Хлебные крошки">
         <a href={`/${slug}`}>{data.shop.name}</a>
@@ -56,7 +68,7 @@ export default async function CategoryPage({ params }: Props) {
       <div className="catlayout">
         <CategoryMenu
           shopSlug={slug}
-          categories={categories}
+          categories={counted}
           layout="tree"
           activeSlug={categorySlug}
         />
@@ -66,29 +78,7 @@ export default async function CategoryPage({ params }: Props) {
           {albums.length === 0 ? (
             <p className="empty">В этой категории пока нет альбомов.</p>
           ) : (
-            <ul className="album-grid">
-              {albums.map((album) => (
-                <li key={album.id} className="album-card">
-                  <a href={`/${slug}/a/${album.id}`}>
-                    {album.cover_urls ? (
-                      <img
-                        src={album.cover_urls.small}
-                        srcSet={`${album.cover_urls.small} 500w, ${album.cover_urls.medium} 800w`}
-                        sizes="(max-width: 860px) 50vw, 25vw"
-                        alt=""
-                        loading="lazy"
-                        width={300}
-                        height={375}
-                      />
-                    ) : (
-                      <span className="album-placeholder" aria-hidden="true" />
-                    )}
-                    <span className="album-title">{album.title}</span>
-                    <span className="album-count">{album.photo_count}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <AlbumGrid shopSlug={slug} albums={withCovers} />
           )}
         </div>
       </div>

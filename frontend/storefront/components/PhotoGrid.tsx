@@ -1,5 +1,6 @@
 'use client'
 
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PhotoPublic, ShopPublic } from '@/lib/api'
 import { CHANNEL_LABELS, contactHref, messageText, shopChannels } from '@/lib/links'
@@ -166,7 +167,10 @@ function Lightbox({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, prev, next])
 
-  const text = messageText(shop.msg_template, photo.caption)
+  // Фото без подписи давало «Интересует: » — пустое сообщение, по которому
+  // продавец не понимал, о каком товаре речь. Тогда подставляем ссылку на
+  // само фото: она открывает его в лайтбоксе (с нужной страницей альбома).
+  const text = messageText(shop.msg_template, photo.caption.trim() || photoLink(photo.id))
   const channels = shopChannels(shop.contacts)
 
   return (
@@ -179,15 +183,15 @@ function Lightbox({
     >
       <div className="lightbox-body" ref={body} onClick={(e) => e.stopPropagation()}>
         <button type="button" className="lb-close" onClick={onClose} aria-label="Закрыть">
-          ×
+          <X size={22} strokeWidth={1.6} aria-hidden="true" />
         </button>
         {photos.length > 1 && (
           <>
             <button type="button" className="lb-nav lb-prev" onClick={prev} aria-label="Назад">
-              ‹
+              <ChevronLeft size={26} strokeWidth={1.6} aria-hidden="true" />
             </button>
             <button type="button" className="lb-nav lb-next" onClick={next} aria-label="Вперёд">
-              ›
+              <ChevronRight size={26} strokeWidth={1.6} aria-hidden="true" />
             </button>
           </>
         )}
@@ -209,14 +213,27 @@ function Lightbox({
                   channel={channel}
                   href={contactHref(channel, value, text)}
                   className={`btn btn-${channel}`}
+                  copyText={channel === 'vk' || channel === 'max' ? text : undefined}
                 >
                   Написать в {CHANNEL_LABELS[channel]}
                 </LeadLink>
               ))}
             </div>
           )}
+          {channels.some((c) => c.channel === 'vk' || c.channel === 'max') && (
+            <p className="lead-hint">
+              В VK и MAX текст о товаре не подставится сам — мы скопируем его, вставьте в чат.
+            </p>
+          )}
         </div>
       </div>
     </div>
   )
+}
+
+function photoLink(id: string): string {
+  if (typeof window === 'undefined') return ''
+  const params = new URLSearchParams(location.search)
+  params.set('p', id)
+  return `${location.origin}${location.pathname}?${params.toString()}`
 }

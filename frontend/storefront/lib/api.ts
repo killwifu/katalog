@@ -26,6 +26,18 @@ export type AlbumPublic = {
   title: string
   photo_count: number
   cover_urls?: PhotoUrls
+  // Слаги категорий альбома (он может лежать в нескольких) — по ним
+  // главная собирает блоки категорий.
+  category_slugs?: string[]
+  // Место альбома в каждой из категорий (слаг → номер).
+  category_pos?: Record<string, number>
+  // Когда альбом создан — только в сетке магазина; «Альбомы» показывают
+  // их от новых к старым.
+  created_at?: string
+  // Альбом закрыт паролем: в сетке у него замок вместо обложки.
+  has_password?: boolean
+  // Содержимое не отдано — нужен пароль (см. LockedAlbum).
+  locked?: boolean
 }
 
 export type PhotoUrls = { small: string; medium: string; large: string }
@@ -39,7 +51,8 @@ export type PhotoPublic = {
   urls: PhotoUrls
 }
 
-export type TabPublic = { title: string; slug: string }
+// empty — своя вкладка без видимых альбомов: в навигации не показываем.
+export type TabPublic = { title: string; slug: string; empty?: boolean }
 
 export type SectionPublic = { title: string; albums: AlbumPublic[] }
 
@@ -55,6 +68,8 @@ export type CategoryPublic = {
   title: string
   slug: string
   album_count: number
+  // Категория показывается блоком на главной витрины.
+  on_home?: boolean
 }
 
 export type AlbumPage = {
@@ -162,4 +177,17 @@ export async function getSitemapShops(): Promise<{ slug: string; updated_at: str
     // API недоступен (например, во время next build) — пустой sitemap.
     return []
   }
+}
+
+// Счётчики категорий для меню витрины — по тем же альбомам, что покупатель
+// увидит, открыв категорию: сетка магазина уже без пустых и скрытых
+// альбомов, а категория верхнего уровня показывает и альбомы подкатегорий.
+// album_count из API считает только прямые привязки, и у родителя с
+// альбомами в подкатегориях стоял бы ноль.
+export function withAlbumCounts(categories: CategoryPublic[], albums: AlbumPublic[]): CategoryPublic[] {
+  const top = albums.filter((a) => !a.parent_id)
+  return categories.map((c) => {
+    const slugs = new Set([c.slug, ...categories.filter((s) => s.parent_slug === c.slug).map((s) => s.slug)])
+    return { ...c, album_count: top.filter((a) => a.category_slugs?.some((s) => slugs.has(s))).length }
+  })
 }

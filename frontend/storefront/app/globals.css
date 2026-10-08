@@ -25,7 +25,7 @@
   --surface-alt:      #F1F0EC;
   --text:             #1A1A18;
   --text-2:           #62615C;
-  --text-3:           #6E6D67;   /* 4.8:1 на --page, 5.2:1 на белом */
+  --text-3:           #6E6D67;   /* в макете #90908A, но это 3.2:1 на белом; #6E6D67 — 4.8:1 на --page, 5.2:1 на белом */
   --border:           #E4E2DC;
   --border-strong:    #CFCCC4;
 
@@ -33,7 +33,8 @@
   /* Системный стек — база, в том числе на витрине магазина: это 95% трафика
      и жёсткий бюджет LCP < 2.5s. Фирменный Golos Text подключается только
      на публичных страницах (см. app/(marketing)/layout.tsx). */
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Макет 15: витрина целиком в Inter. */
+  --font: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --fs-h1:   clamp(26px, 4.2vw, 38px);
   --fs-h2:   clamp(20px, 2.6vw, 27px);
   --fs-h3:   17px;
@@ -75,6 +76,17 @@ h2,
 h3,
 p {
   margin: 0;
+}
+
+/* Названия и подписи без пробелов (артикулы, слитные слова, длинные ссылки)
+   растягивали страницу вбок на телефоне — переносим где угодно. */
+h1,
+h2,
+h3,
+.breadcrumbs,
+.albumdesc,
+.caption {
+  overflow-wrap: anywhere;
 }
 
 h1 {
@@ -329,6 +341,7 @@ img {
 .btn-max      { background: #7B3FF2; }  /* 5.5:1 */
 
 .lead-buttons .btn:hover { filter: brightness(0.93); }
+.lead-hint { margin: -8px 0 16px; font-size: 13px; text-align: center; color: rgba(255, 255, 255, 0.82); } /* на тёмной подложке лайтбокса */
 
 /* Поиск */
 .search-form {
@@ -647,6 +660,8 @@ img {
 
 .cattree {
   list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .cattree a {
@@ -814,3 +829,656 @@ img {
   font-weight: 500;
   border-bottom-color: var(--brand);
 }
+
+/* --- Альбом под паролем ----------------------------------------------------
+   Плитка с замком в сетке и форма ввода пароля на странице альбома. */
+.album-placeholder--lock {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+
+.lockgate {
+  max-width: 380px;
+  margin: 28px auto 40px;
+  padding: 24px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  text-align: center;
+}
+.lockgate__ico {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.lockgate h2 { font-size: var(--fs-h3, 18px); margin-bottom: 6px; }
+.lockgate p { color: var(--text-2); font-size: var(--fs-sm); margin-bottom: 16px; }
+.lockgate__field { display: block; text-align: left; margin-bottom: 12px; }
+.lockgate__field span { display: block; font-size: var(--fs-sm); color: var(--text-2); margin-bottom: 6px; }
+/* 16px — иначе iOS Safari зумит страницу на фокусе поля. */
+.lockgate__field input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.lockgate__field input[aria-invalid="true"] { border-color: #B00020; }
+.lockgate p.lockgate__err { color: #B00020; text-align: left; margin: -4px 0 12px; }
+.pagination button {
+  font: inherit;
+  color: var(--brand);
+  background: none;
+  border: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+/* --- Главная по категориям (макет 15) ------------------------------------- */
+.section--cat { padding: 22px 0 6px; border-bottom: 0; }
+.cathead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.cathead h2 { font-size: var(--fs-h3, 18px); }
+.cathead span { color: var(--text-3); font-size: var(--fs-sm); }
+.cathead a { margin-left: auto; color: var(--brand); font-size: var(--fs-sm); font-weight: 500; }
+.section--cat .album-grid { margin-top: 14px; }
+
+/* ==========================================================================
+   Витрина покупателя по макету 15: полоса площадки, шапка продавца с
+   поиском, меню витрины, разделы-категории, переключатель страниц.
+   Правила стоят в конце файла и перекрывают прежнюю шапку и карточки.
+   ========================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Страницы витрины: белое поле под контентом, серое — под шапкой. Полосы
+   тянутся на всю ширину окна псевдоэлементом, сам контент — в колонке. */
+html:has(.shopbar) { overflow-x: clip; }
+
+body:has(.shopbar) {
+  background: var(--surface);
+  overflow-x: clip;
+}
+
+.page:has(.shopbar) {
+  max-width: 1240px;
+  padding-top: 0;
+}
+
+.shopbar,
+.shophead {
+  position: relative;
+}
+
+.shopbar::before,
+.shophead::before {
+  content: '';
+  position: absolute;
+  inset: 0 -100vw;
+  z-index: -1;
+  border-bottom: 1px solid var(--border);
+}
+
+.shopbar::before { background: var(--surface); }
+.shophead::before { background: var(--page); }
+
+.shopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+}
+
+.shopbar__brand { font-size: 18px; font-weight: 600; }
+.shopbar__cta { color: var(--brand); font-size: 13.5px; font-weight: 500; }
+
+.shophead { padding-top: 24px; }
+
+.shophead__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.shophead__ava {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.shophead__info { flex: 1; min-width: 0; }
+.shophead h1 { font-size: 24px; font-weight: 600; line-height: 1.25; }
+.shophead h1 a { color: inherit; }
+/* pre-line: продавец пишет описание в несколько строк (доставка, часы),
+   а витрина склеивала их в одну. */
+.shophead__about { margin: 4px 0 0; color: var(--text-2); font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+.shophead__contacts { margin: 4px 0 0; color: var(--text-3); font-size: 13px; }
+.shophead__contacts a:hover { color: var(--brand); }
+
+.shophead .search-form {
+  flex: none;
+  width: 350px;
+  max-width: none;
+  margin: 0;
+}
+
+.shophead .search-form input {
+  height: 40px;
+  padding-left: 44px;
+  border-color: var(--border);
+  border-radius: var(--r-el);
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%238A8880' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='6.2'/%3E%3Cpath d='m14 14 4 4'/%3E%3C/svg%3E")
+    14px 50% no-repeat;
+}
+
+/* Меню витрины */
+.shophead .shop-nav {
+  gap: 32px;
+  margin: 12px 0 0;
+  padding-top: 0;
+  border-bottom: 0;
+  /* Выпадающий список «Категорий» не должен обрезаться прокруткой меню. */
+  overflow: visible;
+}
+
+.shophead .shop-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.shophead .shop-tab:hover { color: var(--text); }
+
+.shophead .shop-tab[aria-current='page'],
+.shophead .shop-tab[data-active] {
+  color: var(--brand);
+  font-weight: 600;
+  border-bottom-color: var(--brand);
+}
+
+/* «Категории» */
+.catdd { position: relative; }
+.catdd__btn svg { transition: transform 0.15s; }
+.catdd.is-open .catdd__btn svg { transform: rotate(180deg); }
+.catdd__shade, .catdd__head { display: none; }
+
+.catdd__panel {
+  position: absolute;
+  top: 100%;
+  left: -12px;
+  z-index: 30;
+  width: 264px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+}
+
+.catdd__panel ul { list-style: none; margin: 0; padding: 0; }
+.catdd__row { display: flex; align-items: center; border-radius: 8px; }
+.catdd__row:hover, .catdd__sub a:hover { background: var(--page); }
+
+.catdd__panel a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.catdd__n { color: var(--text-3); font-size: 13px; }
+
+.catdd__more {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.catdd__sub { display: none; }
+.catdd__sub a { color: var(--text-2); }
+.catdd li.is-expanded > .catdd__sub { display: block; padding-left: 14px; }
+.catdd li.is-expanded .catdd__more svg { transform: rotate(180deg); }
+
+/* Десктоп с мышью: второй уровень — отдельным списком справа, по наведению. */
+@media (hover: hover) and (min-width: 1025px) {
+  .catdd__panel > ul > li { position: relative; }
+  .catdd__more { pointer-events: none; width: 28px; }
+  .catdd__more svg { transform: rotate(-90deg) !important; }
+
+  .catdd__panel > ul > li > .catdd__sub {
+    position: absolute;
+    top: -7px;
+    left: calc(100% + 14px);
+    width: 244px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+  }
+
+  /* Мостик через зазор между списками: без него курсор по пути ко
+     второму уровню на мгновение уходит с пункта, и список гаснет. */
+  .catdd__panel > ul > li > .catdd__sub::before {
+    content: '';
+    position: absolute;
+    inset: 0 100% 0 -22px;
+  }
+
+  .catdd__panel > ul > li:hover > .catdd__sub { display: block; }
+  .catdd__sub a { color: var(--text); }
+}
+
+/* Разделы главной */
+.page:has(.shopbar) .section--cat { padding: 28px 0 0; }
+.cathead h2 {
+  padding-left: 12px;
+  border-left: 4px solid var(--brand);
+  border-radius: 2px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Сетка альбомов: 6 в ряд на десктопе, 4 на планшете, 2 на телефоне. */
+.album-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 24px 16px;
+}
+
+.album-card > a,
+.album-card > a:hover {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+
+.album-cover {
+  position: relative;
+  display: block;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-alt);
+}
+
+.album-cover img { transition: transform 0.25s; }
+.album-card > a:hover .album-cover img { transform: scale(1.03); }
+
+.album-cover .album-count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: rgb(26 26 24 / 72%);
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.album-title {
+  padding: 10px 0 0;
+  font-size: 14px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Переключатель страниц и подпись площадки */
+.pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 40px 0 0;
+  font-size: 14px;
+}
+
+.pager__group { display: contents; }
+.pager__gap { color: var(--text-3); }
+
+.pager a,
+.pager b,
+.pager > span[aria-hidden] {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-el);
+  background: var(--surface);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.pager a:hover { border-color: var(--brand); color: var(--brand); }
+.pager b { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.pager > span[aria-hidden] { color: var(--border-strong); }
+
+.powered {
+  margin: 48px 0 24px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.powered a:hover { color: var(--brand); }
+.contacts-tab { padding-top: 12px; }
+
+/* Страница категории: рядом дерево, колонка уже — альбомы по ширине. */
+.catlayout .album-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.page:has(.shopbar) .breadcrumbs { margin-top: 20px; }
+
+/* Планшет: поля 32, альбомы по 4 в ряд, поиск 280. */
+@media (max-width: 1100px) {
+  .page:has(.shopbar) { padding-left: 32px; padding-right: 32px; }
+  .album-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .shophead .search-form { width: 280px; }
+}
+
+/* Телефон: поля 18, поиск под шапкой продавца, меню листается вбок,
+   разделы главной — ленты, «Категории» — нижняя шторка. */
+@media (max-width: 640px) {
+  .page:has(.shopbar) { padding-left: 18px; padding-right: 18px; }
+  .shophead { padding-top: 18px; }
+  .shophead__row { flex-wrap: wrap; align-items: flex-start; }
+  .shophead__info { flex-basis: 0; }
+  .shophead h1 { font-size: 22px; }
+  .shophead .search-form { width: 100%; }
+  .shophead .search-form input { height: 44px; }
+
+  .shophead .shop-nav {
+    gap: 22px;
+    margin: 6px -18px 0;
+    padding: 0 18px;
+    overflow-x: auto;
+  }
+
+  .cathead span { display: none; }
+  .shopbar__cta span { display: none; }
+  .cathead h2 { font-size: 18px; }
+  .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+
+  /* Лента раздела: видно два альбома и край третьего. */
+  .album-grid--row {
+    display: flex;
+    gap: 12px;
+    margin-left: -18px;
+    margin-right: -18px;
+    padding: 0 18px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-padding-left: 18px;
+    scrollbar-width: none;
+  }
+
+  .album-grid--row::-webkit-scrollbar { display: none; }
+  .album-grid--row > li { flex: 0 0 41%; scroll-snap-align: start; }
+
+  .catdd { position: static; }
+
+  .catdd__shade {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgb(0 0 0 / 40%);
+  }
+
+  .catdd__panel {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 91;
+    width: auto;
+    max-height: 72vh;
+    overflow-y: auto;
+    padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  /* «Ручка» шторки */
+  .catdd__panel::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 0 auto 12px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .catdd__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 18px;
+  }
+
+  .catdd__head button {
+    width: 44px;
+    height: 44px;
+    margin-right: -12px;
+    border: 0;
+    background: none;
+    font-size: 18px;
+    color: var(--text-2);
+  }
+
+  .catdd__panel a { padding: 13px 12px; font-size: 16px; }
+  .catdd__sub a { font-size: 15px; }
+  .catdd__more { width: 44px; height: 44px; }
+  .catdd li.is-expanded > .catdd__row { background: var(--page); }
+}
+
+/* «Все альбомы · N альбомов · Сначала новые» (макет 15 · «Альбомы»). */
+.cathead--all { margin-top: 28px; }
+.cathead .cathead__sort { margin-left: auto; color: var(--text-2); font-size: 14px; font-weight: 500; }
+@media (max-width: 640px) { .cathead--all span { display: inline; white-space: nowrap; } }
+
+/* Лупа у поиска — везде, как в шапке магазина (макет 15): на странице
+   альбома и в результатах поиска поле было без неё. */
+.search-form input {
+  padding-left: 44px;
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%238A8880' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='6.2'/%3E%3Cpath d='m14 14 4 4'/%3E%3C/svg%3E")
+    no-repeat 14px center;
+}
+
+/* Страница категории уже экрана 860px: дерево категорий слева уходило над
+   альбомами и отодвигало их на полэкрана, хотя те же категории есть
+   в шапке («Категории ▾», шторка). Дерево — только рядом с сеткой. */
+@media (max-width: 859px) {
+  .catlayout > .catmenu--tree { display: none; }
+}
+
+/* Кнопки лайтбокса: svg — блочный, и в кнопке он прижимался к левому
+   краю (крестик на 5px, стрелки на 3px мимо центра круга). */
+.lb-close,
+.lb-nav { display: grid; place-items: center; padding: 0; }
+
+/* ==========================================================================
+   Витрина v2 — по «15 · Desktop · Главная · страница 1» (аудит Figma):
+   шапка магазина 28 сверху, имя 24/30, описание 14/20, контакты 13/18; поиск
+   340×42 r10 с иконкой 28; меню 15/22, под ним 12 и полоса 2; разделы через
+   44 (первый — 36), заголовок 20/28 с полосой 4×22 через 10, счётчик и
+   «Все →» 14/20; сетка 6 × 186 через 16 (ряды через 24), подпись 14/20 500
+   через 8, плашка «N фото» 2/8 11.5/17 500.
+   ========================================================================== */
+@media (min-width: 1200px) {
+  .page:has(.shopbar) .shophead { padding-top: 28px; }
+  .shophead h1 { line-height: 30px; letter-spacing: 0; }
+  .shophead__about { line-height: 20px; }
+  .shophead__contacts { line-height: 18px; }
+  .shophead .search-form { width: 340px; }
+  .shophead .search-form input {
+    height: 42px;
+    padding-left: 51px;
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--surface)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%2390908A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E")
+      15px 50% / 28px 28px no-repeat;
+  }
+  .shophead .shop-nav { margin-top: 22px; }
+  .shophead .shop-tab { padding: 0 0 12px; line-height: 22px; }
+  .page:has(.shopbar) .section--cat { padding: 0; margin-top: 44px; }
+  .page:has(.shopbar) .shophead + .section--cat, .page:has(.shopbar) .shophead ~ .section--cat:first-of-type { margin-top: 36px; }
+  .cathead { align-items: center; column-gap: 10px; }
+  .cathead h2 { position: relative; padding-left: 14px; border-left: 0; font-size: 20px; line-height: 28px; letter-spacing: 0; }
+  .cathead h2::before { content: ''; position: absolute; left: 0; top: 3px; width: 4px; height: 22px; border-radius: 2px; background: var(--brand); }
+  .cathead span, .cathead a { font-size: 14px; line-height: 20px; }
+  .section--cat .album-grid { margin: 16px 0 0; }
+  .album-title { padding-top: 8px; font-size: 14px; line-height: 20px; font-weight: 500; }
+  .album-cover .album-count { padding: 2px 8px; font-size: 11.5px; line-height: 17px; font-weight: 500; }
+}
+
+/* Меню «Категории» (15 · «dropdown / Категории»): 260, r12, тень 0 24 56 /18%,
+   пункты 38 (9/10/9/12) через 2, текст 14/20, число 13/18, стрелка 8×4 в поле 16;
+   подменю 240 справа. Открытая вкладка — цвет текста #1A1A18. */
+@media (hover: hover) and (min-width: 1200px) {
+  .catdd.is-open .catdd__btn { color: var(--text); }
+  .catdd__panel { top: calc(100% + 4px); width: 260px; box-shadow: 0 24px 56px rgb(0 0 0 / 18%); }
+  .catdd__panel > ul, .catdd__sub > ul { display: flex; flex-direction: column; gap: 2px; }
+  .catdd__row { min-height: 38px; }
+  .catdd__panel a { gap: 8px; padding: 9px 8px 9px 12px; line-height: 20px; }
+  .catdd__n { line-height: 18px; }
+  .catdd__more { width: 26px; height: 38px; padding: 0 10px 0 0; }
+  .catdd__row > a:only-child { padding-right: 10px; }
+  .catdd__panel > ul > li > .catdd__sub { left: calc(100% + 13px); top: -6px; width: 240px; box-shadow: 0 24px 56px rgb(0 0 0 / 18%); }
+}
+/* Страница «Альбомы» (15 · Desktop · Альбомы): заголовок через 36 от шапки, сетка через 20. */
+@media (min-width: 1200px) {
+  .page:has(.shopbar) .cathead--all { margin-top: 36px; }
+  .page:has(.shopbar) .cathead--all + .album-grid { margin-top: 20px; }
+}
+@media (min-width: 1200px) { .shopbar { height: 55px; } }
+
+/* ==========================================================================
+   Витрина на телефоне — по «15 · Mobile · Главная · страница 1»: верхняя
+   полоса 51, шапка 18 сверху и шаг 14 (продавец, поиск 44, меню); аватар 48
+   (16), имя 20/26, описание 13.5/19, контакты 12.5/18 через 3; меню 14.5/22
+   во всю ширину (2/0/11, полоса 2); разделы 24 сверху и через 28, заголовок
+   18/24 с полосой 4×20 через 8, лента карточек 150 через 12 (14 от заголовка),
+   подпись 14/20 500 через 8.
+   ========================================================================== */
+@media (max-width: 640px) {
+  .shopbar { height: 51px; }
+  .shopbar__cta { font-size: 13px; }
+  .page:has(.shopbar) .shophead { padding-top: 18px; }
+  .shophead__row { gap: 14px 12px; }
+  .shophead__ava { width: 48px; height: 48px; font-size: 16px; }
+  .shophead h1 { font-size: 20px; line-height: 26px; letter-spacing: 0; }
+  .shophead__about { margin-top: 3px; font-size: 13.5px; line-height: 19px; }
+  .shophead__contacts { margin-top: 3px; font-size: 12.5px; line-height: 18px; }
+  .shophead .search-form input {
+    height: 44px;
+    padding-left: 51px;
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--surface)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%2390908A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E")
+      15px 50% / 28px 28px no-repeat;
+  }
+  .shophead .shop-nav { justify-content: space-between; gap: 0; margin-top: 14px; }
+  .shophead .shop-tab { padding: 2px 0 11px; font-size: 14.5px; line-height: 22px; }
+  .page:has(.shopbar) .section--cat { padding-top: 28px; }
+  .page:has(.shopbar) .shophead + .section--cat { padding-top: 24px; }
+  .cathead h2 { font-size: 18px; line-height: 24px; letter-spacing: 0; }
+  .cathead a { font-size: 14px; line-height: 20px; }
+  .section--cat .album-grid--row { margin-top: 14px; }
+  .album-grid--row > li { flex: 0 0 150px; }
+  .album-title { padding-top: 8px; font-size: 14px; line-height: 20px; font-weight: 500; }
+  .album-cover .album-count { padding: 2px 8px; font-size: 11.5px; line-height: 17px; font-weight: 500; }
+}
+@media (max-width: 640px) { .cathead h2 { padding-left: 8px; } }
+/* Витрина на планшете (15 · Tablet · Главная): шапка 24 сверху и шаг 20,
+   аватар 56 (19), имя 22/28, описание 14/20, контакты 13/18; поиск 280×44 с
+   иконкой 28; меню 15/22 через 28 (2/0/12); разделы 32 сверху и через 40,
+   заголовок 20/28 с полосой 4×22 через 10; сетка 4 × 228 через 16. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .page:has(.shopbar) .shophead { padding-top: 24px; }
+  .shopbar { height: 55px; }
+  .shophead__ava { width: 56px; height: 56px; font-size: 19px; }
+  .shophead h1 { font-size: 22px; line-height: 28px; letter-spacing: 0; }
+  .shophead__about { line-height: 20px; }
+  .shophead__contacts { line-height: 18px; }
+  .shophead .search-form { width: 280px; }
+  .shophead .search-form input {
+    height: 44px;
+    padding-left: 51px;
+    border-radius: 10px;
+    font-size: 14px;
+    background: var(--surface)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%2390908A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E")
+      15px 50% / 28px 28px no-repeat;
+  }
+  .shophead .shop-nav { gap: 28px; margin-top: 20px; }
+  .shophead .shop-tab { padding: 2px 0 12px; line-height: 22px; }
+  .page:has(.shopbar) .section--cat { padding: 0; margin-top: 40px; }
+  .page:has(.shopbar) .shophead + .section--cat { margin-top: 32px; }
+  .cathead { align-items: center; column-gap: 10px; }
+  .cathead h2 { padding-left: 10px; font-size: 20px; line-height: 28px; letter-spacing: 0; }
+  .cathead span, .cathead a { font-size: 14px; line-height: 20px; }
+  .section--cat .album-grid { margin: 16px 0 0; }
+  .album-title { padding-top: 8px; font-size: 14px; line-height: 20px; font-weight: 500; }
+  .album-cover .album-count { padding: 2px 8px; font-size: 11.5px; line-height: 17px; font-weight: 500; }
+}
+@media (min-width: 641px) and (max-width: 1199px) { .shophead__row { column-gap: 14px; } }

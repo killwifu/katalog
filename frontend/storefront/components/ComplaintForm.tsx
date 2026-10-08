@@ -1,11 +1,27 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 // Форма notice-and-takedown: без auth, POST в публичный API.
+
+// Сообщения API — английские и для разработчика; заявителю показываем,
+// что именно поправить.
+const ERRORS: Record<string, string> = {
+  invalid_url: 'Проверьте ссылку: нужен адрес страницы или фото, начинающийся с https://',
+  invalid_name: 'Укажите имя или название организации',
+  invalid_email: 'Проверьте email — на него придёт ответ',
+  invalid_reason: 'Опишите претензию: от 10 до 5000 символов',
+  rate_limited: 'Слишком много попыток. Подождите минуту и отправьте снова',
+}
 export function ComplaintForm() {
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
+  // Пришли по ссылке «Пожаловаться» со страницы витрины — адрес уже известен.
+  const urlInput = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const from = new URLSearchParams(location.search).get('url')
+    if (from && urlInput.current && !urlInput.current.value) urlInput.current.value = from
+  }, [])
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -25,14 +41,23 @@ export function ComplaintForm() {
         }),
       })
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string }
-        throw new Error(body.message ?? `Ошибка ${res.status}`)
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(
+          (body.error && ERRORS[body.error]) ?? 'Не удалось отправить жалобу. Попробуйте ещё раз',
+        )
       }
       setState('done')
       form.reset()
     } catch (err) {
       setState('error')
-      setError(err instanceof Error ? err.message : 'Не удалось отправить жалобу')
+      // fetch падает TypeError'ом («Failed to fetch»), когда нет сети.
+      setError(
+        err instanceof TypeError
+          ? 'Нет соединения. Проверьте интернет и отправьте снова'
+          : err instanceof Error
+            ? err.message
+            : 'Не удалось отправить жалобу',
+      )
     }
   }
 
@@ -48,7 +73,7 @@ export function ComplaintForm() {
     <form onSubmit={(e) => void submit(e)} className="complaint-form">
       <label>
         Ссылка на контент
-        <input name="url" type="url" required maxLength={1000} placeholder="https://…" />
+        <input ref={urlInput} name="url" type="url" required maxLength={1000} placeholder="https://…" />
       </label>
       <label>
         Ваше имя или организация
