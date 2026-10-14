@@ -146,6 +146,25 @@ func (a *API) decodeAdminAction(w http.ResponseWriter, r *http.Request) (adminAc
 			return req, false
 		}
 	}
+	// Жалобу проверяем до действия: moderation_log ссылается на complaints
+	// внешним ключом, и с несуществующим id действие выполнялось, а запись
+	// аудита падала на FK и терялась (ошибка уходила только в лог).
+	// Непарсящийся id раньше молча отбрасывался — связь с жалобой терялась.
+	if req.ComplaintID != "" {
+		id, err := uuid.Parse(req.ComplaintID)
+		if err != nil {
+			apiError(w, http.StatusBadRequest, "invalid_complaint", "complaint_id must be a UUID")
+			return req, false
+		}
+		if _, err := a.Q.GetComplaint(r.Context(), id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				apiError(w, http.StatusBadRequest, "invalid_complaint", "complaint not found")
+				return req, false
+			}
+			a.internalError(w, "load complaint", err)
+			return req, false
+		}
+	}
 	return req, true
 }
 
@@ -177,7 +196,12 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "load photo", err)
 		return
 	}
-	if _, err := a.Q.AdminBlockPhoto(r.Context(), photo.ID); err != nil {
+	// Дальше — по строке, которую вернула блокировка, а не по прочитанной
+	// выше: воркер мог закончить обработку между ними, и устаревший
+	// drv_size = 0 оставлял байты деривативов учтёнными (после снятия
+	// блокировки воркер учитывал их второй раз).
+	blocked, err := a.Q.AdminBlockPhoto(r.Context(), photo.ID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Уже заблокировано — идемпотентно, без повторных side effects.
 			writeJSON(w, http.StatusOK, map[string]string{"id": photo.ID.String(), "status": "blocked"})
@@ -186,13 +210,9 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "block photo", err)
 		return
 	}
-	if photo.Status == db.PhotoStatusReady {
-		if err := a.Q.AddAlbumPhotoCount(r.Context(), db.AddAlbumPhotoCountParams{
-			ID:         photo.AlbumID,
-			PhotoCount: -1,
-		}); err != nil {
-			a.Log.Error("block: decrement album count failed", "error", err)
-		}
+	photo = blocked
+	if err := a.recountAlbumPhotos(r.Context(), photo.AlbumID); err != nil {
+		a.Log.Error("block: recount album photos failed", "error", err)
 	}
 	// Деривативы удаляются, оригинал остаётся. Витрина фото больше не
 	// показывает, а вот прямая ссылка на дериватив живёт ровно столько,

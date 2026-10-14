@@ -278,6 +278,11 @@ JOIN album_categories ac ON ac.album_id = a.id
 JOIN categories c ON c.id = ac.category_id
 WHERE a.shop_id = $1 AND a.deleted_at IS NULL
   AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+  -- Подальбом не виднее родителя: скрытый, черновой, закрытый паролем
+  -- или снятый модератором родитель уводит из выдачи и свою ветку.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
         WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
@@ -338,7 +343,10 @@ func (q *Queries) ListPublicAlbumsByCategory(ctx context.Context, arg ListPublic
 }
 
 const listPublicCategories = `-- name: ListPublicCategories :many
-SELECT c.id, c.shop_id, c.parent_id, c.title, c.slug, c.sort_order, c.created_at, c.updated_at, c.is_hidden, c.on_home, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL) AS album_count
+SELECT c.id, c.shop_id, c.parent_id, c.title, c.slug, c.sort_order, c.created_at, c.updated_at, c.is_hidden, c.on_home, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+          AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+               OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))) AS album_count
 FROM categories c
 LEFT JOIN album_categories ac ON ac.category_id = c.id
 LEFT JOIN albums a ON a.id = ac.album_id

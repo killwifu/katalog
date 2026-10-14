@@ -780,10 +780,10 @@ func (q *Queries) SetPhotoProcessing(ctx context.Context, arg SetPhotoProcessing
 	return i, err
 }
 
-const setPhotoReady = `-- name: SetPhotoReady :exec
+const setPhotoReady = `-- name: SetPhotoReady :execrows
 UPDATE photos
 SET status = 'ready', width = $2, height = $3, phash = $4, drv_size = $5, updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'processing'
 `
 
 type SetPhotoReadyParams struct {
@@ -794,15 +794,21 @@ type SetPhotoReadyParams struct {
 	DrvSize int64       `json:"drv_size"`
 }
 
-func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) error {
-	_, err := q.db.Exec(ctx, setPhotoReady,
+// Только из processing: пока воркер собирал деривативы, модератор мог
+// заблокировать фото, и безусловный ready снимал блокировку — фото
+// возвращалось на витрину. Ноль строк — фото уже не ждёт обработки.
+func (q *Queries) SetPhotoReady(ctx context.Context, arg SetPhotoReadyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPhotoReady,
 		arg.ID,
 		arg.Width,
 		arg.Height,
 		arg.Phash,
 		arg.DrvSize,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const shiftAlbumPhotosFrom = `-- name: ShiftAlbumPhotosFrom :exec

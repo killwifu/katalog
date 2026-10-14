@@ -11,7 +11,9 @@ info:
     Тенант-изоляция: любой чужой или несуществующий ресурс — 404.
     Тело запроса принимается только с `Content-Type: application/json`
     (иначе 415, error=unsupported_media_type) и ровно одним JSON-объектом;
-    символ NUL (\u0000) в строках и в адресе запроса — 400.
+    символ NUL (\u0000) в строках и в адресе запроса — 400; поля, которых
+    нет в схеме тела, — 400 (bad_json). Числовые параметры запроса (page,
+    per_page, days) не отклоняются: выход за границы приводится к границе.
   version: 0.7.0
 servers:
   - url: /
@@ -50,6 +52,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/auth/login:
     post:
@@ -66,6 +69,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   # Вход и выход выставляют две cookie: httpOnly-сессию katalog_session
   # и открытый скрипту маркер katalog_signed="1". Маркер нужен статической
@@ -106,6 +111,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [email]
               properties:
                 email: { type: string, format: email }
@@ -113,6 +119,7 @@ paths:
         "204": { description: Принято }
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/auth/password/reset:
     post:
@@ -124,6 +131,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [token, password]
               properties:
                 token: { type: string }
@@ -136,6 +144,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/auth/password/change:
     post:
@@ -150,6 +159,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [current_password, new_password]
               properties:
                 current_password: { type: string }
@@ -165,6 +175,7 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/auth/verify-email:
     post:
@@ -176,6 +187,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [token]
               properties:
                 token: { type: string }
@@ -187,6 +199,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/shops:
     post:
@@ -206,9 +219,10 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [slug, name]
               properties:
-                slug: { type: string, minLength: 3, maxLength: 63 }
+                slug: { type: string, pattern: "^[a-z0-9](?:[a-z0-9]|-[a-z0-9]){2,62}$" }
                 name: { type: string, maxLength: 200 }
                 description: { type: string }
                 contacts:
@@ -232,6 +246,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     get:
       operationId: listShops
       summary: Магазины текущего пользователя
@@ -270,6 +285,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 name: { type: string, maxLength: 200 }
                 description: { type: string }
@@ -285,6 +301,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     delete:
       operationId: deleteShop
       summary: Удалить магазин
@@ -323,7 +340,8 @@ paths:
         - name: days
           in: query
           required: false
-          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+          schema: { type: integer, default: 30 }
+          description: Период 1–365 дней; больше 365 — 365, остальное некорректное — 30.
       responses:
         "200":
           description: OK
@@ -350,6 +368,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [plan]
               properties:
                 plan: { type: string, enum: [basic, pro] }
@@ -377,6 +396,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/shops/{shopID}/billing/cancel:
     parameters:
@@ -457,6 +477,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [album_ids]
               properties:
                 album_ids:
@@ -469,6 +490,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/shops/{shopID}/categories/{categoryID}/albums/{albumID}:
     parameters:
@@ -519,6 +541,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 is_hidden: { type: boolean }
                 on_home: { type: boolean }
@@ -531,6 +554,8 @@ paths:
                 $ref: "#/components/schemas/Category"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/shops/{shopID}/trash:
     parameters:
@@ -544,7 +569,8 @@ paths:
       parameters:
         - in: query
           name: page
-          schema: { type: integer, minimum: 1, default: 1 }
+          schema: { type: integer, default: 1 }
+          description: Номер страницы 1–1000000; больше — 1000000, остальное некорректное — 1.
       responses:
         "200":
           description: OK
@@ -577,6 +603,8 @@ paths:
                   keep_days:
                     type: integer
                     description: срок хранения до окончательной уборки, дней
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     delete:
       operationId: emptyTrash
       description: >
@@ -585,6 +613,8 @@ paths:
       responses:
         "204":
           description: Очищено
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/trash/albums/{albumID}/restore:
     post:
@@ -633,6 +663,8 @@ paths:
       responses:
         "204":
           description: Удалено
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/trash/{photoID}/restore:
     parameters:
@@ -651,6 +683,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Photo" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/albums:
     parameters:
@@ -668,11 +702,12 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [title]
               properties:
                 title: { type: string, maxLength: 200 }
                 parent_id: { type: string, format: uuid }
-                sort_order: { type: integer }
+                sort_order: { type: integer, format: int32 }
                 watermark: { $ref: "#/components/schemas/AlbumWatermark" }
       responses:
         "201":
@@ -684,6 +719,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     get:
       operationId: listAlbums
       summary: Альбомы магазина
@@ -728,9 +764,10 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 title: { type: string, maxLength: 200 }
-                sort_order: { type: integer }
+                sort_order: { type: integer, format: int32 }
                 status: { $ref: "#/components/schemas/AlbumStatus" }
                 description:
                   type: string
@@ -759,6 +796,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     delete:
       operationId: deleteAlbum
       summary: Удалить альбом — в «Удаленное»
@@ -784,10 +822,12 @@ paths:
       parameters:
         - name: page
           in: query
-          schema: { type: integer, minimum: 1, default: 1 }
+          schema: { type: integer, default: 1 }
+          description: Номер страницы 1–1000000; больше — 1000000, остальное некорректное — 1.
         - name: per_page
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          schema: { type: integer, default: 100 }
+          description: Размер страницы 1–500; больше 500 — 500, остальное некорректное — 100.
       responses:
         "200":
           description: OK
@@ -820,6 +860,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [shop_id, album_id, size]
               properties:
                 shop_id: { type: string, format: uuid }
@@ -848,6 +889,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/photos/confirm:
     post:
@@ -866,6 +908,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [shop_id, photo_ids]
               properties:
                 shop_id: { type: string, format: uuid }
@@ -904,6 +947,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/photos/{photoID}:
     parameters:
@@ -920,6 +964,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 caption: { type: string, maxLength: 2000 }
       responses:
@@ -932,6 +977,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     delete:
       operationId: deletePhoto
       summary: Удалить фото — в «Удаленное»; незавершённую загрузку — совсем
@@ -983,6 +1029,7 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/DowngradeAlbum" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     put:
       operationId: applyDowngrade
       summary: Сохранить выбор видимых альбомов
@@ -1000,6 +1047,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [album_ids]
               properties:
                 album_ids:
@@ -1009,6 +1057,8 @@ paths:
         "204": { description: No Content }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/tabs:
     get:
@@ -1025,6 +1075,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Tab" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       operationId: createTab
       summary: Своя вкладка
@@ -1036,11 +1087,12 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [title, slug]
               properties:
                 title: { type: string, minLength: 1, maxLength: 100 }
-                slug: { type: string }
-                sort_order: { type: integer, default: 0 }
+                slug: { type: string, pattern: "^[a-z0-9](?:[a-z0-9]|-[a-z0-9]){2,62}$" }
+                sort_order: { type: integer, format: int32, default: 0 }
       responses:
         "201":
           description: Created
@@ -1049,6 +1101,9 @@ paths:
               schema: { $ref: "#/components/schemas/Tab" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { description: slug уже занят в этом магазине }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/albums/{albumID}/stats:
     get:
@@ -1132,6 +1187,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [photo_ids]
               properties:
                 photo_ids:
@@ -1145,6 +1201,8 @@ paths:
           description: Порядок сохранён
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/tabs/order:
     put:
@@ -1161,6 +1219,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [tab_ids]
               properties:
                 tab_ids:
@@ -1171,6 +1230,8 @@ paths:
           description: Порядок сохранён
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/tabs/{tabID}:
     patch:
@@ -1184,10 +1245,11 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [title]
               properties:
                 title: { type: string, minLength: 1, maxLength: 100 }
-                sort_order: { type: integer }
+                sort_order: { type: integer, format: int32 }
       responses:
         "200":
           description: OK
@@ -1195,6 +1257,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Tab" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     delete:
       operationId: deleteTab
       summary: Удалить свою вкладку; системная отвечает 404
@@ -1204,6 +1269,7 @@ paths:
       responses:
         "204": { description: No Content }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/tabs/{tabID}/sections:
     post:
@@ -1217,10 +1283,11 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [title]
               properties:
                 title: { type: string, minLength: 1, maxLength: 100 }
-                sort_order: { type: integer, default: 0 }
+                sort_order: { type: integer, format: int32, default: 0 }
       responses:
         "201":
           description: Created
@@ -1228,6 +1295,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Section" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/sections:
     get:
@@ -1243,6 +1313,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Section" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/sections/{sectionID}:
     patch:
@@ -1256,10 +1327,11 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [title]
               properties:
                 title: { type: string, minLength: 1, maxLength: 100 }
-                sort_order: { type: integer }
+                sort_order: { type: integer, format: int32 }
       responses:
         "200":
           description: OK
@@ -1267,6 +1339,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Section" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     delete:
       operationId: deleteSection
       parameters:
@@ -1275,6 +1350,7 @@ paths:
       responses:
         "204": { description: No Content }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/sections/{sectionID}/albums:
     put:
@@ -1290,6 +1366,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [album_ids]
               properties:
                 album_ids:
@@ -1299,6 +1376,8 @@ paths:
         "204": { description: No Content }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/public/shops/{slug}/tabs/{tabSlug}:
     get:
@@ -1334,6 +1413,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Category" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       operationId: createCategory
       summary: Создать категорию (вложенность максимум 2 уровня)
@@ -1357,6 +1437,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: slug уже занят в этом магазине
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/categories/{categoryID}:
     patch:
@@ -1387,6 +1469,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: slug уже занят в этом магазине
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     delete:
       operationId: deleteCategory
       summary: Удалить категорию; альбомы не удаляются
@@ -1409,6 +1493,7 @@ paths:
         "204": { description: No Content }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}/albums/{albumID}/category:
     patch:
@@ -1423,6 +1508,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               properties:
                 category_id:
                   type: string
@@ -1435,6 +1521,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Album" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/public/shops/{slug}/categories:
     get:
@@ -1508,7 +1597,10 @@ paths:
         X-Album-Token в getPublicAlbum. Смена пароля продавцом гасит выданные
         пропуска. Лимит попыток — как у входа. Пароль закрывает страницу
         альбома, обложку в списках и поиск по подписям; адреса файлов на CDN
-        остаются публичными.
+        остаются публичными. Подальбом без своего пароля закрыт паролем
+        родителя: его unlock проверяет пароль родителя, и пропуск родителя
+        открывает подальбом. Подальбом скрытого родителя (черновик, тариф,
+        модератор) не отдаётся вовсе — 404 и нет в списках и поиске.
       parameters:
         - $ref: "#/components/parameters/ShopSlug"
         - $ref: "#/components/parameters/AlbumID"
@@ -1518,6 +1610,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [password]
               properties:
                 password: { type: string, maxLength: 64 }
@@ -1537,6 +1630,7 @@ paths:
           description: Неверный пароль (wrong_password)
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/public/shops/{slug}/albums/{albumID}:
     get:
@@ -1552,10 +1646,12 @@ paths:
           description: Пропуск закрытого паролем альбома (см. unlockPublicAlbum)
         - name: page
           in: query
-          schema: { type: integer, minimum: 1, default: 1 }
+          schema: { type: integer, default: 1 }
+          description: Номер страницы 1–1000000; больше — 1000000, остальное некорректное — 1.
         - name: per_page
           in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 60 }
+          schema: { type: integer, default: 60 }
+          description: Размер страницы 1–100; больше 100 — 100, остальное некорректное — 60.
       responses:
         "200":
           description: OK
@@ -1624,6 +1720,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [shop_id, channel]
               properties:
                 shop_id: { type: string, format: uuid }
@@ -1635,6 +1732,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/public/sitemap:
     get:
@@ -1673,9 +1771,10 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [url, reporter_name, reporter_email, reason]
               properties:
-                url: { type: string, maxLength: 1000, description: "Ссылка http(s) (схема необязательна)" }
+                url: { type: string, minLength: 1, maxLength: 1000, description: "Ссылка на страницу витрины или файл, http(s) (схема необязательна); иначе 400 invalid_url" }
                 reporter_name: { type: string, minLength: 1, maxLength: 200 }
                 reporter_email: { type: string, format: email }
                 reason: { type: string, minLength: 10, maxLength: 5000 }
@@ -1692,6 +1791,7 @@ paths:
                   status: { type: string, const: open }
         "400": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/admin/overview:
     get:
@@ -1713,6 +1813,7 @@ paths:
                   storage_used: { type: integer, format: int64 }
         "404":
           description: Не админ — админ-зона не раскрывается
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/admin/shops:
     get:
@@ -1721,7 +1822,8 @@ paths:
       parameters:
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          schema: { type: integer, default: 100 }
+          description: 1–500; значение вне диапазона или не число — 100.
       responses:
         "200":
           description: OK
@@ -1732,6 +1834,7 @@ paths:
                 items: { $ref: "#/components/schemas/AdminShop" }
         "404":
           description: Не админ — админ-зона не раскрывается
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/admin/complaints:
     get:
@@ -1751,6 +1854,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/AdminComplaint" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1769,6 +1873,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [status]
               properties:
                 status: { type: string, enum: [open, in_review, resolved, rejected] }
@@ -1786,6 +1891,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/admin/photos/flagged:
     get:
@@ -1841,6 +1947,8 @@ paths:
                   status: { type: string, const: blocked }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/admin/photos/{photoID}/unflag:
     post:
@@ -1874,6 +1982,8 @@ paths:
         "204": { description: Альбом скрыт }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/admin/photos/{photoID}/unblock:
     post:
@@ -1897,6 +2007,9 @@ paths:
         "200":
           description: Блокировка снята, фото в обработке
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/admin/albums/{albumID}/unhide:
     post:
@@ -1916,6 +2029,9 @@ paths:
         "204":
           description: Блокировка снята
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/admin/shops/{shopID}/unsuspend:
     post:
@@ -1936,6 +2052,9 @@ paths:
         "204":
           description: Блокировка снята
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/admin/shops/{shopID}/suspend:
     post:
@@ -1952,6 +2071,8 @@ paths:
         "204": { description: Магазин снят с публикации }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
 components:
   parameters:
@@ -1978,6 +2099,7 @@ components:
         application/json:
           schema:
             type: object
+            additionalProperties: false
             required: [email, password]
             properties:
               email: { type: string, format: email }
@@ -2022,6 +2144,11 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
       description: Конфликт (занятый email/slug)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UnsupportedMediaType:
+      description: Тело не application/json (error=unsupported_media_type)
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2107,6 +2234,7 @@ components:
 
     AdminActionBody:
       type: object
+      additionalProperties: false
       description: Необязательная привязка действия модератора к жалобе (аудит-лог)
       properties:
         complaint_id: { type: string, format: uuid }
@@ -2219,7 +2347,7 @@ components:
         parent_id: { type: [string, "null"], format: uuid }
         title: { type: string }
         cover_photo_id: { type: [string, "null"], format: uuid }
-        sort_order: { type: integer }
+        sort_order: { type: integer, format: int32 }
         status: { $ref: "#/components/schemas/AlbumStatus" }
         description:
           type: string
@@ -2323,7 +2451,7 @@ components:
         is_system:
           type: boolean
           description: Системные («Главная», «Альбомы», «Контакты») не удаляются
-        sort_order: { type: integer }
+        sort_order: { type: integer, format: int32 }
 
     Section:
       type: object
@@ -2332,7 +2460,7 @@ components:
         id: { type: string, format: uuid }
         tab_id: { type: string, format: uuid }
         title: { type: string, maxLength: 100 }
-        sort_order: { type: integer }
+        sort_order: { type: integer, format: int32 }
         album_ids:
           type: array
           items: { type: string, format: uuid }
@@ -2377,7 +2505,7 @@ components:
         parent_id: { type: string, format: uuid, nullable: true }
         title: { type: string, maxLength: 200 }
         slug: { type: string }
-        sort_order: { type: integer }
+        sort_order: { type: integer, format: int32 }
         is_hidden:
           type: boolean
           description: Скрыта с витрины (вместе с подкатегориями)
@@ -2387,15 +2515,18 @@ components:
 
     CategoryInput:
       type: object
+      additionalProperties: false
       required: [title, slug]
       properties:
         title: { type: string, minLength: 1, maxLength: 200 }
         slug:
           type: string
-          description: "3-64 символа: a-z, 0-9, одиночные дефисы"
+          pattern: "^[a-z0-9](?:[a-z0-9]|-[a-z0-9]){2,62}$"
+          description: "3-63 символа: a-z, 0-9, одиночные дефисы"
         parent_id: { type: string, format: uuid, nullable: true }
         sort_order:
           type: integer
+          format: int32
           description: >
             Место среди категорий своего уровня. Не передано: при создании
             категория встаёт в конец, при правке остаётся на своём месте.
@@ -2505,7 +2636,7 @@ components:
         status: { type: string, enum: [uploading, processing, ready, failed, blocked] }
         width: { type: integer }
         height: { type: integer }
-        sort_order: { type: integer }
+        sort_order: { type: integer, format: int32 }
         fail_reason:
           type: string
           enum: [unsupported_format, corrupt, too_large, empty, lost]

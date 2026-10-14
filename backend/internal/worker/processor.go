@@ -19,6 +19,7 @@ import (
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
+	"katalog/backend/internal/imagingmeta"
 	"katalog/backend/internal/mail"
 	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
@@ -105,14 +106,22 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := p.Q.WithTx(tx)
 
-	if err := q.SetPhotoReady(ctx, db.SetPhotoReadyParams{
+	if err := q.LockAlbumForOrder(ctx, photo.AlbumID); err != nil {
+		return fmt.Errorf("lock album: %w", err)
+	}
+	n, err := q.SetPhotoReady(ctx, db.SetPhotoReadyParams{
 		ID:      photo.ID,
 		Width:   int32(res.Width),
 		Height:  int32(res.Height),
 		Phash:   pgtype.Int8{Int64: res.PHash, Valid: true},
 		DrvSize: drvBytes,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("mark photo ready: %w", err)
+	}
+	if n == 0 {
+		_ = tx.Rollback(ctx)
+		return p.dropLateDerivatives(ctx, photo)
 	}
 	if err := q.AddShopStorageUsed(ctx, db.AddShopStorageUsedParams{
 		ID:          photo.ShopID,
@@ -120,11 +129,8 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	}); err != nil {
 		return fmt.Errorf("account derivative bytes: %w", err)
 	}
-	if err := q.AddAlbumPhotoCount(ctx, db.AddAlbumPhotoCountParams{
-		ID:         photo.AlbumID,
-		PhotoCount: 1,
-	}); err != nil {
-		return fmt.Errorf("increment album photo count: %w", err)
+	if err := q.RecountAlbumPhotos(ctx, photo.AlbumID); err != nil {
+		return fmt.Errorf("recount album photos: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit photo ready: %w", err)
@@ -197,6 +203,29 @@ func (p *Processor) watermarkFor(ctx context.Context, shopID, albumID uuid.UUID)
 		Opacity:  opacity,
 		Position: settings.Watermark.Position,
 	}
+}
+
+// dropLateDerivatives: пока шла обработка, фото перестало её ждать —
+// обычно его заблокировал модератор. Деривативы уже залиты, а блокировка
+// удаляла их раньше, чем они появились; оставить их — значит раздавать
+// заблокированное по прямой ссылке. Готовое фото (параллельная доставка
+// той же задачи) не трогаем: его деривативы и есть эти файлы.
+func (p *Processor) dropLateDerivatives(ctx context.Context, photo db.Photo) error {
+	cur, err := p.Q.GetPhoto(ctx, photo.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		cur.Status = db.PhotoStatusFailed // строки нет — файлы ничьи
+	} else if err != nil {
+		return fmt.Errorf("reload photo: %w", err)
+	}
+	if cur.Status == db.PhotoStatusReady {
+		return nil
+	}
+	p.Log.Info("photo left processing during work, dropping derivatives",
+		"photo_id", photo.ID, "status", cur.Status)
+	if err := p.Store.RemoveDerivatives(ctx, photo.ShopID, photo.ID, imagingmeta.DerivativeSizes()); err != nil {
+		return fmt.Errorf("remove late derivatives: %w", err)
+	}
+	return nil
 }
 
 // failAndRelease помечает фото failed и возвращает в тариф байты оригинала:

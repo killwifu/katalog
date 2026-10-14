@@ -297,12 +297,23 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	// Альбом под паролем: без действующего пропуска отдаём только название
 	// и признак «закрыто». Ни фото, ни описания, ни подальбомов — страница
 	// витрины кешируется, и содержимое закрытого альбома в кеш попасть
-	// не должно.
-	if album.PasswordHash != nil && !a.albumUnlocked(r, album) {
+	// не должно. Подальбом без своего пароля закрыт паролем родителя.
+	lock, err := a.albumLock(r.Context(), album)
+	if err != nil {
+		a.internalError(w, "album lock", err)
+		return
+	}
+	var parentID *string
+	if album.ParentID.Valid {
+		s := album.ParentID.UUID.String()
+		parentID = &s
+	}
+	if lock.PasswordHash != nil && !a.albumUnlocked(r, lock) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"shop": toPublicShopResponse(shop),
 			"album": publicAlbumResponse{
 				ID:          album.ID.String(),
+				ParentID:    parentID,
 				Title:       album.Title,
 				PhotoCount:  album.PhotoCount,
 				Unlisted:    album.Status == db.AlbumStatusUnlisted,
@@ -346,11 +357,8 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 		Description: album.Description,
 		PhotoCount:  album.PhotoCount,
 		Unlisted:    album.Status == db.AlbumStatusUnlisted,
-		HasPassword: album.PasswordHash != nil,
-	}
-	if album.ParentID.Valid {
-		s := album.ParentID.UUID.String()
-		albumOut.ParentID = &s
+		HasPassword: lock.PasswordHash != nil,
+		ParentID:    parentID,
 	}
 	// Подальбомы: покупатель приходит по прямой ссылке на родительскую
 	// категорию, и без них видит пустую страницу — вложенные альбомы

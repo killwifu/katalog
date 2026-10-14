@@ -206,7 +206,7 @@ func (a *API) handleYooKassaWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var note yooKassaNotification
-	if !decodeJSON(w, r, &note) {
+	if !decodeExternalJSON(w, r, &note) {
 		return
 	}
 	if note.Object.ID == "" {

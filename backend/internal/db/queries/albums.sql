@@ -34,10 +34,20 @@ SELECT count(*) FROM albums WHERE parent_id = $1 AND deleted_at IS NULL;
 DELETE FROM albums
 WHERE id = $1 AND shop_id = $2;
 
--- name: AddAlbumPhotoCount :exec
-UPDATE albums
-SET photo_count = photo_count + $2, updated_at = now()
-WHERE id = $1;
+-- photo_count — готовые фото альбома, не убранные в корзину по одному
+-- (уехавшие вместе с альбомом считаются: альбом вернётся с ними). Раньше
+-- счётчик двигали на ±1 по статусу, прочитанному до изменения, и гонки
+-- (блокировка во время обработки, блокировка фото из корзины) уводили его
+-- от факта навсегда. Пересчёт идёт после LockAlbumForOrder в той же
+-- транзакции: без замка подзапрос видит снимок до чужого коммита.
+-- name: RecountAlbumPhotos :exec
+UPDATE albums a
+SET photo_count = (
+    SELECT count(*) FROM photos p
+    WHERE p.album_id = a.id AND p.status = 'ready'
+      AND (p.deleted_at IS NULL OR p.deleted_at = a.deleted_at)
+), updated_at = now()
+WHERE a.id = $1;
 
 -- Экран понижения тарифа: альбомы с числом фото и просмотрами за 30 дней.
 -- Просмотры нужны для варианта «самые просматриваемые» — он предзаполнен,

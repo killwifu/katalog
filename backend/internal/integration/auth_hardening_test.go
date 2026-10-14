@@ -106,3 +106,25 @@ func TestJSONContentTypeRequired(t *testing.T) {
 		t.Errorf("application/json; charset=utf-8: got %d, want 201", resp.StatusCode)
 	}
 }
+
+// Тело `null` — не объект: раньше оно раскладывалось в пустую структуру,
+// и PATCH альбома отвечал 200, ничего не получив.
+func TestNullJSONBodyRejected(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	album := createAlbum(c, shop.ID)
+	for _, body := range []string{"null", " null\n"} {
+		req, _ := http.NewRequest("PATCH", env.srv.URL+"/api/v1/shops/"+shop.ID+"/albums/"+album.ID, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", c.ip)
+		resp, err := c.http.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("body %q: got %d, want 400", body, resp.StatusCode)
+		}
+	}
+}

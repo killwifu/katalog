@@ -95,6 +95,9 @@ JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
 LEFT JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND a.deleted_at IS NULL
      AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+     AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+           AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+                OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
      AND (a.photo_count > 0 OR EXISTS (
            SELECT 1 FROM albums ch
            WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
@@ -113,6 +116,9 @@ JOIN tabs t ON t.id = s.tab_id
 JOIN album_sections asec ON asec.section_id = s.id
 JOIN albums a ON a.id = asec.album_id AND a.status = 'published' AND a.deleted_at IS NULL
      AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+     AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+           AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+                OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
      AND (a.photo_count > 0 OR EXISTS (
            SELECT 1 FROM albums ch
            WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL

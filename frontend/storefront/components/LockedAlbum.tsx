@@ -13,7 +13,10 @@ import { PhotoGrid } from './PhotoGrid'
 // прямо из браузера. Пропуск живёт в sessionStorage: вкладку закрыли —
 // пароль спросят снова, а на общем телефоне он не останется навсегда.
 
-type Props = { slug: string; albumId: string; title: string; shop: ShopPublic }
+// parentId — у подальбома без своего пароля замок родителя, и пропуск,
+// полученный на странице родителя, открывает и его: второй раз пароль
+// не спрашиваем.
+type Props = { slug: string; albumId: string; parentId?: string | null; title: string; shop: ShopPublic }
 
 const tokenKey = (albumId: string) => `album-pass:${albumId}`
 
@@ -28,7 +31,7 @@ async function loadAlbum(slug: string, albumId: string, token: string, page: num
   return data.album.locked ? null : data
 }
 
-export function LockedAlbum({ slug, albumId, title, shop }: Props) {
+export function LockedAlbum({ slug, albumId, parentId, title, shop }: Props) {
   const [data, setData] = useState<AlbumPage | null>(null)
   const [token, setToken] = useState('')
   // checking — пока проверяем пропуск, сохранённый в этой вкладке: форму
@@ -39,29 +42,36 @@ export function LockedAlbum({ slug, albumId, title, shop }: Props) {
 
   useEffect(() => {
     let alive = true
-    let saved = ''
+    const saved: string[] = []
     try {
-      saved = sessionStorage.getItem(tokenKey(albumId)) ?? ''
+      for (const id of [albumId, parentId]) {
+        const t = id ? sessionStorage.getItem(tokenKey(id)) : null
+        if (t) saved.push(t)
+      }
     } catch {
       // Хранилище недоступно (приватный режим) — просто спросим пароль.
     }
-    if (!saved) {
+    if (saved.length === 0) {
       setState('form')
       return
     }
     const page = Math.max(1, Number.parseInt(new URLSearchParams(location.search).get('page') ?? '1', 10) || 1)
-    void loadAlbum(slug, albumId, saved, page).then((album) => {
-      if (!alive) return
-      if (album) {
-        setToken(saved)
-        setData(album)
+    void (async () => {
+      for (const t of saved) {
+        const album = await loadAlbum(slug, albumId, t, page)
+        if (!alive) return
+        if (album) {
+          setToken(t)
+          setData(album)
+          break
+        }
       }
       setState('form')
-    })
+    })()
     return () => {
       alive = false
     }
-  }, [slug, albumId])
+  }, [slug, albumId, parentId])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()

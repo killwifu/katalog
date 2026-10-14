@@ -12,22 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const addAlbumPhotoCount = `-- name: AddAlbumPhotoCount :exec
-UPDATE albums
-SET photo_count = photo_count + $2, updated_at = now()
-WHERE id = $1
-`
-
-type AddAlbumPhotoCountParams struct {
-	ID         uuid.UUID `json:"id"`
-	PhotoCount int32     `json:"photo_count"`
-}
-
-func (q *Queries) AddAlbumPhotoCount(ctx context.Context, arg AddAlbumPhotoCountParams) error {
-	_, err := q.db.Exec(ctx, addAlbumPhotoCount, arg.ID, arg.PhotoCount)
-	return err
-}
-
 const applyPlanVisibility = `-- name: ApplyPlanVisibility :exec
 UPDATE albums
 SET hidden_by_plan = NOT (id = ANY($2::uuid[])),
@@ -417,6 +401,27 @@ func (q *Queries) PurgeExpiredAlbums(ctx context.Context, dollar_1 int32) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recountAlbumPhotos = `-- name: RecountAlbumPhotos :exec
+UPDATE albums a
+SET photo_count = (
+    SELECT count(*) FROM photos p
+    WHERE p.album_id = a.id AND p.status = 'ready'
+      AND (p.deleted_at IS NULL OR p.deleted_at = a.deleted_at)
+), updated_at = now()
+WHERE a.id = $1
+`
+
+// photo_count — готовые фото альбома, не убранные в корзину по одному
+// (уехавшие вместе с альбомом считаются: альбом вернётся с ними). Раньше
+// счётчик двигали на ±1 по статусу, прочитанному до изменения, и гонки
+// (блокировка во время обработки, блокировка фото из корзины) уводили его
+// от факта навсегда. Пересчёт идёт после LockAlbumForOrder в той же
+// транзакции: без замка подзапрос видит снимок до чужого коммита.
+func (q *Queries) RecountAlbumPhotos(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, recountAlbumPhotos, id)
+	return err
 }
 
 const restoreAlbumTree = `-- name: RestoreAlbumTree :execrows

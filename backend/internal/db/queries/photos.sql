@@ -40,10 +40,13 @@ SET status = 'processing', orig_size = $2, sort_order = $3, updated_at = now()
 WHERE id = $1 AND status = 'uploading'
 RETURNING *;
 
--- name: SetPhotoReady :exec
+-- Только из processing: пока воркер собирал деривативы, модератор мог
+-- заблокировать фото, и безусловный ready снимал блокировку — фото
+-- возвращалось на витрину. Ноль строк — фото уже не ждёт обработки.
+-- name: SetPhotoReady :execrows
 UPDATE photos
 SET status = 'ready', width = $2, height = $3, phash = $4, drv_size = $5, updated_at = now()
-WHERE id = $1;
+WHERE id = $1 AND status = 'processing';
 
 -- name: SetPhotoFailed :exec
 UPDATE photos

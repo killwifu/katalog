@@ -123,7 +123,7 @@ func validateCategory(w http.ResponseWriter, req *categoryRequest) bool {
 	// применяем: категория живёт внутри /{shop}/c/..., с системными
 	// страницами не пересекается.
 	if !slugPattern.MatchString(req.Slug) {
-		apiError(w, http.StatusBadRequest, "invalid_slug", "slug must be 3-64 chars: a-z, 0-9, single dashes")
+		apiError(w, http.StatusBadRequest, "invalid_slug", "slug must be 3-63 chars: a-z, 0-9, single dashes")
 		return false
 	}
 	return true

@@ -206,6 +206,18 @@ func apiError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeBody(w, r, dst, true)
+}
+
+// decodeExternalJSON — тело от внешнего сервиса (вебхук ЮKassa): его формат
+// задаём не мы, и провайдер присылает больше полей, чем мы читаем (paid,
+// created_at, test, authorization_details…). Со строгим разбором каждое
+// настоящее уведомление получало 400.
+func decodeExternalJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeBody(w, r, dst, false)
+}
+
+func decodeBody(w http.ResponseWriter, r *http.Request, dst any, strict bool) bool {
 	// Только application/json. «Простой» межсайтовый запрос (форма, text/plain)
 	// этот тип выставить не может без preflight, который мы не разрешаем, —
 	// защита от CSRF, не зависящая от SameSite у cookie (тот же сайт —
@@ -220,8 +232,16 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: "+err.Error())
 		return false
 	}
+	// Тело `null` раскладывалось в пустую структуру без ошибки, и запрос
+	// без единого поля проходил как валидный. Контракт — JSON-объект.
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: must be a JSON object")
+		return false
+	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
+	if strict {
+		dec.DisallowUnknownFields()
+	}
 	if err := dec.Decode(dst); err != nil {
 		apiError(w, http.StatusBadRequest, "bad_json", "invalid request body: "+err.Error())
 		return false

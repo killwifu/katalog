@@ -75,9 +75,14 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
-WHERE id = $1 AND shop_id = $2 AND status <> 'draft' AND NOT hidden_by_plan
-  AND NOT blocked_by_moderator AND deleted_at IS NULL
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark FROM albums a
+WHERE a.id = $1 AND a.shop_id = $2 AND a.status <> 'draft' AND NOT a.hidden_by_plan
+  AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
+  -- Подальбом по прямой ссылке не открывается, если родитель снят с витрины
+  -- (черновик, тариф, модератор, корзина). Пароль родителя проверяет handler.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status = 'draft' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL))
 `
 
 type GetPublicAlbumParams struct {
@@ -187,6 +192,11 @@ FROM albums a
 LEFT JOIN photos c ON c.id = a.cover_photo_id AND c.status = 'ready' AND c.deleted_at IS NULL
 WHERE a.shop_id = $1 AND a.status = 'published' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
+  -- Подальбом не виднее родителя: скрытый, черновой, закрытый паролем
+  -- или снятый модератором родитель уводит из выдачи и свою ветку.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
         WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL
@@ -369,6 +379,11 @@ WHERE p.shop_id = $1
   AND a.deleted_at IS NULL
   -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
   AND a.password_hash IS NULL
+  -- Подальбом не виднее родителя: скрытый, черновой, закрытый паролем
+  -- или снятый модератором родитель уводит из выдачи и свою ветку.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
   AND p.caption_tsv @@ websearch_to_tsquery('russian', $2)
 ORDER BY rank DESC, p.created_at DESC, p.id
 LIMIT $3
@@ -457,6 +472,11 @@ WHERE p.shop_id = $1
   AND a.deleted_at IS NULL
   -- Подписи из закрытого паролем альбома в поиске выдали бы его содержимое.
   AND a.password_hash IS NULL
+  -- Подальбом не виднее родителя: скрытый, черновой, закрытый паролем
+  -- или снятый модератором родитель уводит из выдачи и свою ветку.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
   -- %> — индексируемая форма (photos_caption_trgm_idx); порог 0.3 задан для
   -- базы миграцией 00024. Функцией ниже — точная граница «> 0.3», как раньше.
   AND p.caption %> $2

@@ -55,7 +55,7 @@ func (a *API) handleCreateTab(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Slug = strings.ToLower(strings.TrimSpace(req.Slug))
 	if !slugPattern.MatchString(req.Slug) {
-		apiError(w, http.StatusBadRequest, "invalid_slug", "slug must be 3-64 chars: a-z, 0-9, single dashes")
+		apiError(w, http.StatusBadRequest, "invalid_slug", "slug must be 3-63 chars: a-z, 0-9, single dashes")
 		return
 	}
 
@@ -265,12 +265,24 @@ func (a *API) handleUpdateSection(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update section", err)
 		return
 	}
+	// Ответ — тот же раздел, что в списке: без альбомов клиент получал
+	// album_ids: null вместо массива.
+	ids, err := a.Q.ListSectionAlbumIDs(r.Context(), sec.ID)
+	if err != nil {
+		a.internalError(w, "list section albums", err)
+		return
+	}
+	albumIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		albumIDs = append(albumIDs, id.String())
+	}
 	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusOK, sectionResponse{
 		ID:        sec.ID.String(),
 		TabID:     sec.TabID.String(),
 		Title:     sec.Title,
 		SortOrder: sec.SortOrder,
+		AlbumIDs:  albumIDs,
 	})
 }
 

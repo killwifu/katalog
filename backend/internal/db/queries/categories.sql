@@ -124,7 +124,10 @@ WHERE a.shop_id = $1
 -- Публичное дерево категорий витрины: только те, где есть видимые альбомы,
 -- либо есть потомок с видимыми. Горячий путь покупателя — один запрос.
 -- name: ListPublicCategories :many
-SELECT c.*, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL) AS album_count
+SELECT c.*, count(a.id) FILTER (WHERE a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+          AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+               OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))) AS album_count
 FROM categories c
 LEFT JOIN album_categories ac ON ac.category_id = c.id
 LEFT JOIN albums a ON a.id = ac.album_id
@@ -143,6 +146,11 @@ JOIN album_categories ac ON ac.album_id = a.id
 JOIN categories c ON c.id = ac.category_id
 WHERE a.shop_id = $1 AND a.deleted_at IS NULL
   AND a.status = 'published' AND NOT a.hidden_by_plan AND NOT a.blocked_by_moderator
+  -- Подальбом не виднее родителя: скрытый, черновой, закрытый паролем
+  -- или снятый модератором родитель уводит из выдачи и свою ветку.
+  AND NOT EXISTS (SELECT 1 FROM albums pa WHERE pa.id = a.parent_id
+        AND (pa.status <> 'published' OR pa.hidden_by_plan OR pa.blocked_by_moderator
+             OR pa.deleted_at IS NOT NULL OR pa.password_hash IS NOT NULL))
   AND (a.photo_count > 0 OR EXISTS (
         SELECT 1 FROM albums ch
         WHERE ch.parent_id = a.id AND ch.status = 'published' AND ch.deleted_at IS NULL

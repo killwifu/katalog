@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -55,6 +57,28 @@ func (a *API) albumUnlocked(r *http.Request, album db.Album) bool {
 	return got == albumPassFingerprint(album)
 }
 
+// albumLock — чей пароль закрывает альбом: свой, а без своего — родителя.
+// Раньше подальбом закрытого альбома открывался по прямой ссылке без пароля
+// (его id есть в ответе главной). Пропуск родителя подходит и подальбому:
+// покупатель вводит пароль один раз на всю ветку.
+func (a *API) albumLock(ctx context.Context, album db.Album) (db.Album, error) {
+	if album.PasswordHash != nil || !album.ParentID.Valid {
+		return album, nil
+	}
+	parent, err := a.Q.GetPublicAlbum(ctx, db.GetPublicAlbumParams{ID: album.ParentID.UUID, ShopID: album.ShopID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Не бывает: GetPublicAlbum не отдаёт подальбом скрытого родителя.
+		return album, nil
+	}
+	if err != nil {
+		return album, fmt.Errorf("load parent album: %w", err)
+	}
+	if parent.PasswordHash != nil {
+		return parent, nil
+	}
+	return album, nil
+}
+
 // handlePublicAlbumUnlock проверяет пароль альбома и выдаёт пропуск.
 func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
 	shop, ok := a.publicShopFromURL(w, r)
@@ -79,6 +103,11 @@ func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	album, err = a.albumLock(r.Context(), album)
+	if err != nil {
+		a.internalError(w, "album lock", err)
 		return
 	}
 	if album.PasswordHash == nil {

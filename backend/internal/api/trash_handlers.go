@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,10 +45,9 @@ type trashResponse struct {
 
 func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 	shop := shopFromCtx(r)
-	page := 1
-	if v, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && v > 1 {
-		page = v
-	}
+	// Потолок как у остальных списков: без него огромный page переполнял
+	// int32-смещение и запрос падал с 500.
+	page := queryInt(r, "page", 1, 1, 1_000_000)
 	rows, err := a.Q.ListDeletedPhotos(r.Context(), db.ListDeletedPhotosParams{
 		ShopID: shop.ID,
 		Limit:  trashPerPage,
@@ -114,13 +112,8 @@ func (a *API) handleRestorePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Счётчик альбома снимался при пометке — возвращаем его обратно.
-	if photo.Status == db.PhotoStatusReady {
-		if err := a.Q.AddAlbumPhotoCount(r.Context(), db.AddAlbumPhotoCountParams{
-			ID:         photo.AlbumID,
-			PhotoCount: 1,
-		}); err != nil {
-			a.Log.Error("restore: increment album count failed", "error", err)
-		}
+	if err := a.recountAlbumPhotos(r.Context(), photo.AlbumID); err != nil {
+		a.Log.Error("restore: recount album photos failed", "error", err)
 	}
 	a.Revalidate.Shop(shop.Slug)
 	writeJSON(w, http.StatusOK, a.toPhotoResponse(photo))

@@ -92,7 +92,7 @@ export default async function AlbumPage({ params, searchParams }: Props) {
       {/* Вложенные альбомы: по ссылке на родительскую категорию покупатель
           раньше попадал на пустую страницу — подальбомы были видны только
           на главной магазина. */}
-      {album.locked && <LockedAlbum slug={slug} albumId={album.id} title={album.title} shop={shop} />}
+      {album.locked && <LockedAlbum slug={slug} albumId={album.id} parentId={album.parent_id} title={album.title} shop={shop} />}
       {!album.locked && children.length > 0 && (
         <section className="section">
           <h2 className="section__head">Внутри</h2>

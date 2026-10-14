@@ -538,16 +538,30 @@ func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "photo not found")
 		return
 	}
-	if photo.Status == db.PhotoStatusReady {
-		if err := a.Q.AddAlbumPhotoCount(r.Context(), db.AddAlbumPhotoCountParams{
-			ID:         photo.AlbumID,
-			PhotoCount: -1,
-		}); err != nil {
-			a.Log.Error("delete: decrement album count failed", "error", err)
-		}
+	if err := a.recountAlbumPhotos(r.Context(), photo.AlbumID); err != nil {
+		a.Log.Error("delete: recount album photos failed", "error", err)
 	}
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// recountAlbumPhotos выравнивает photo_count альбома по факту. Замок строки
+// альбома — до пересчёта, отдельным запросом: так пересчёт видит всё, что
+// закоммитили до нас (в том числе воркер, державший замок).
+func (a *API) recountAlbumPhotos(ctx context.Context, albumID uuid.UUID) error {
+	tx, err := a.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := a.Q.WithTx(tx)
+	if err := q.LockAlbumForOrder(ctx, albumID); err != nil {
+		return fmt.Errorf("lock album: %w", err)
+	}
+	if err := q.RecountAlbumPhotos(ctx, albumID); err != nil {
+		return fmt.Errorf("recount: %w", err)
+	}
+	return tx.Commit(ctx)
 }
 
 // hasStopWord — регистронезависимое вхождение стоп-слова в подпись
