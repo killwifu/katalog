@@ -3,7 +3,7 @@
 // «Пожаловаться на контент» уносит в форму адрес страницы, с которой
 // пришли (с открытым фото — вместе с ?p=). Раньше правообладатель попадал
 // в пустую форму и копировал ссылку на фото вручную.
-const OWN_PAGES = ['/', '/abuse', '/terms', '/privacy', '/content-policy', '/pricing', '/updates']
+const OWN_PAGES = ['/', '/abuse', '/terms', '/privacy', '/content-policy', '/pricing']
 
 export function ReportLink() {
   return (

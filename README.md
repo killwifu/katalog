@@ -44,7 +44,7 @@ make down                    # останавливает стек
 
 | URL | Что |
 | --- | --- |
-| `localhost/` | публичные страницы: главная, `/pricing`, `/updates`, `/remove-bg` |
+| `localhost/` | публичные страницы: главная, `/pricing`, `/remove-bg` |
 | `localhost/{slug}` | витрина магазина (Next.js SSR) |
 | `localhost/app/` | обзор кабинета: сведения об альбомах, тариф, статистика, быстрый доступ |
 | `localhost/app/albums` | альбомы; категории — `/app/categories`, вкладки — `/app/tabs` |

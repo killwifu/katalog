@@ -15,7 +15,6 @@ import styles from './site.module.css'
 const NAV = [
   { href: '/', label: 'Главная' },
   { href: '/pricing', label: 'Тарифы' },
-  { href: '/updates', label: 'Обновления' },
 ]
 
 export function SiteHeader() {

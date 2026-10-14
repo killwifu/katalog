@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 // Публичные страницы сервиса — их адреса статичны.
 // «Убрать фон» в карту сайта не отдаём: вёрстка есть, обработки в API нет.
-const PUBLIC_PAGES = ['', '/pricing', '/updates']
+const PUBLIC_PAGES = ['', '/pricing']
 
 // Sitemap: публичные страницы + активные магазины
 // (скрытые альбомы в выдачу API не попадают).

@@ -12,7 +12,7 @@ const golos = Golos_Text({
   display: 'swap',
 })
 
-// Общая обвязка публичных страниц: главная, тарифы, обновления,
+// Общая обвязка публичных страниц: главная, тарифы,
 // «убрать фон» и юридические страницы. Витрина магазина сюда не входит —
 // у неё своя шапка (см. app/[slug]/layout.tsx).
 export default function MarketingLayout({ children }: { children: ReactNode }) {

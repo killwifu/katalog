@@ -861,12 +861,6 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
   .alcard__status { flex: 1 0 100%; justify-content: flex-start; }
 }
 
-/* --- Обзор: объявления (макет 09) ----------------------------------------- */
-.ovnews { display: grid; gap: 8px; list-style: none; padding: 0; }
-.ovnews li { display: flex; gap: 14px; font-size: var(--text-sm); }
-.ovnews span { flex: none; width: 96px; color: var(--color-ink-3); }
-.ovnews a:hover { color: var(--color-brand); }
-
 /* Категории: строка дерева, на которую сейчас бросят категорию или альбом. */
 .cattree__row--drop { background: var(--color-brand-soft); box-shadow: inset 0 2px 0 var(--color-brand); }
 .cattree__row[draggable="true"] { cursor: grab; }
@@ -1127,7 +1121,7 @@ button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 @media (max-width: 640px) { .modal--sheet .modal__foot > .hint { flex-basis: 100%; } .modal--sheet .modal__foot > .spacer { display: none; } .modal--sheet .modal__foot > .btn { flex: 1 1 0; } }
 
 /* Обзор · «Быстрый доступ» (макет 09): шесть ярлыков, иконка над подписью. */
-@media (min-width: 1100px) { .ov__row--news { grid-template-columns: 1fr 532px; } }
+@media (min-width: 1100px) { .ov__row--quick { grid-template-columns: 1fr 532px; } }
 .quick { display: grid; grid-template-columns: repeat(6, minmax(0, 80px)); gap: 10px; }
 .quick a { display: grid; justify-items: center; align-content: start; gap: 10px; padding: 0 2px; font-size: 12.5px; line-height: 1.3; text-align: center; color: var(--color-ink-2); }
 .quick a svg { color: var(--color-brand); }
@@ -1449,12 +1443,11 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .ovcard i { overflow: hidden; }
 .ovcard i img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
-/* «Быстрый доступ» (макет 09): иконки тёмные; на планшете — 3×2 рядом с
-   объявлениями, на телефоне — 3×2 с иконкой в серой плашке. */
+/* «Быстрый доступ» (макет 09): иконки тёмные; на планшете — 3×2,
+   на телефоне — 3×2 с иконкой в серой плашке. */
 .quick a svg { color: var(--color-ink); }
-.ovnews span { width: 82px; }
 @media (min-width: 641px) and (max-width: 1099px) {
-  .ov__row--news { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .ov__row--quick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .quick { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
 }
 @media (max-width: 640px) {
@@ -1702,7 +1695,7 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .btn--sm { min-height: 40px; padding: 0 16px; font-size: 13.5px; }
 .btn--primary { padding: 0 16px; border: 0; }
 .btn--quiet { border-radius: 999px; }
-/* Заголовки секций («Сведения об альбомах», «Тариф», «Объявления»…):
+/* Заголовки секций («Сведения об альбомах», «Тариф», «Быстрый доступ»…):
    Inter 17/22 600, трекинг −0.17. */
 .ov__head h2 { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.17px; }
 
@@ -1730,8 +1723,8 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
    строка заголовка 34 без своего поля; большое число 52/600/−1.5. */
 .ov__row:not(.ov__row--top) > section { display: flex; flex-direction: column; gap: 16px; }
 .ov__row:not(.ov__row--top) > section > .ov__head { min-height: 34px; margin: 0; }
-.ov__row--news > section > .ov__head { min-height: 22px; }
-.ov__row--news > section:has(.quick) { gap: 20px; }
+.ov__row--quick > section > .ov__head { min-height: 22px; }
+.ov__row--quick > section:has(.quick) { gap: 20px; }
 .bignum { font-size: 52px; line-height: normal; font-weight: 600; letter-spacing: -1.5px; color: #2547CE; }
 /* «Фото / ГБ» (макет 09): 34, #F1F0EC, отступ 3, шаг 2; сегменты по
    содержимому 4/12, 12.5/18 500; выбранный — белый с обводкой #E4E2DC,
@@ -1742,10 +1735,6 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .seg.seg--fit::before { left: 0; width: var(--seg-w, 0); top: 3px; bottom: 3px; transform: translateX(var(--seg-x, 3px)) !important; border-color: #E4E2DC; box-shadow: none; transition: transform .22s cubic-bezier(.2, .8, .2, 1), width .22s cubic-bezier(.2, .8, .2, 1); }
 .ov__row--top { align-items: start; }
 .ov__head a { font-size: 13.5px; line-height: 21.6px; font-weight: 500; }
-.ovnews li, .ovnews span, .ovnews a { font-size: 13.5px; line-height: 21.6px; }
-.ovnews li { gap: 12px; }
-.ovnews span { width: 74px; color: var(--color-ink-3); }
-.ovnews a { color: #62615C; }
 .ov__metrics, .ov__metrics * { font-size: 13.5px; line-height: 21.6px; }
 .bignum + span { font-size: 16px; line-height: normal; color: var(--color-ink-3); }
 .quick a { gap: 10px; padding: 0; font-size: 12.5px; line-height: 17px; color: #62615C; }

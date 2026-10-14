@@ -31,18 +31,6 @@ export function OverviewPage() {
   // Корзина в блоке хранилища: удалённое продолжает занимать место, и без
   // этой строки продавец у лимита не понимает, куда оно делось.
   const trash = useQuery({ queryKey: ['trash', shop.id, 1], queryFn: () => api.listTrash(shop.id) })
-  // «Объявления» (макет 09): свежие записи публичной ленты обновлений.
-  // Источник — сама лента на витрине; нет ответа — блока просто нет.
-  const news = useQuery({
-    queryKey: ['updates-feed'],
-    queryFn: async (): Promise<{ id: string; date: string; title: string }[]> => {
-      const res = await fetch('/updates.json')
-      if (!res.ok) throw new Error('updates feed unavailable')
-      return (await res.json()) as { id: string; date: string; title: string }[]
-    },
-    staleTime: 60 * 60 * 1000,
-    retry: false,
-  })
   const [sharing, setSharing] = useState(false)
   // Макет предлагает считать расход и в фотографиях, и в гигабайтах:
   // лимит тарифа упирается то в одно, то в другое.
@@ -409,52 +397,11 @@ export function OverviewPage() {
         </section>
       </div>
 
-      {news.isPending && (
-        <>
-          <div className="ov__sep" />
-          <section aria-busy="true">
-            <div className="ov__head">
-              <h2>Объявления</h2>
-            </div>
-            <div className="grid gap-3">
-              {skel('w-3/4')}
-              {skel('w-2/3')}
-              {skel('w-1/2')}
-            </div>
-          </section>
-        </>
-      )}
-
-      {/* Объявления и «Быстрый доступ» — одной строкой (макет 09). Ярлыки
+      {/* «Быстрый доступ» — в правой колонке строки (макет 09). Ярлыки
           ведут в частые разделы; «Загрузить фото» сразу открывает окно. */}
       <div className="ov__sep" />
-      <div className="ov__row ov__row--news">
-      {(news.data?.length ?? 0) > 0 ? (
-        <>
-          <section>
-            <div className="ov__head">
-              <h2>Объявления</h2>
-              <a href="/updates" target="_blank" rel="noopener noreferrer" className="ml-auto">
-                Ещё
-              </a>
-            </div>
-            <ul className="ovnews">
-              {news.data!.slice(0, 5).map((n) => (
-                <li key={n.id}>
-                  {/* Дата цифрами, как в макете 09: «27.09.2026». id записи —
-                      ISO-дата; если вдруг нет — подпись из ленты. */}
-                  <span>{/^\d{4}-\d{2}-\d{2}/.test(n.id) ? n.id.slice(0, 10).split('-').reverse().join('.') : n.date}</span>
-                  <a href={`/updates#${n.id}`} target="_blank" rel="noopener noreferrer">
-                    {n.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      ) : (
+      <div className="ov__row ov__row--quick">
         <span />
-      )}
         <section>
           <div className="ov__head">
             <h2>Быстрый доступ</h2>
