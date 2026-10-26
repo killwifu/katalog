@@ -158,7 +158,7 @@ func (a *API) handleShopStats(w http.ResponseWriter, r *http.Request) {
 			Clicks:  p.Clicks,
 		}
 		if p.Status == db.PhotoStatusReady {
-			tp.ThumbURL = a.mediaURLs(shop.ID, p.PhotoID.UUID)["small"]
+			tp.ThumbURL = a.mediaURLs(shop.MediaRev, shop.ID, p.PhotoID.UUID)["small"]
 		}
 		resp.TopPhotos = append(resp.TopPhotos, tp)
 	}

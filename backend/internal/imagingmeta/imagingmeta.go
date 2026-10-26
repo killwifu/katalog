@@ -2,7 +2,11 @@
 // импорта без CGO (api-бинарник не должен линковаться с libvips).
 package imagingmeta
 
-import "strconv"
+import (
+	"slices"
+	"strconv"
+	"strings"
+)
 
 // Derivative — то, что уходит покупателю: имя в S3-ключе и длинная
 // сторона в пикселях.
@@ -47,18 +51,34 @@ func DerivativeName(px int) string {
 // проверяет api, а ему линковаться с libvips нельзя.
 var WatermarkPositions = []string{"tl", "tc", "tr", "ml", "mc", "mr", "bl", "bc", "br"}
 
-// ValidWatermarkPosition — пустое значение допустимо и означает умолчание
-// (правый нижний угол).
-func ValidWatermarkPosition(pos string) bool {
+// WatermarkTile — знак повторяется по всему кадру, а не стоит в точках.
+const WatermarkTile = "tile"
+
+// WatermarkCells разбирает положение знака: одна или несколько точек сетки
+// через запятую («tl,br») либо WatermarkTile. Пусто — правый нижний угол.
+// ok=false — неизвестная точка, повтор или «tile» вперемешку с точками.
+func WatermarkCells(pos string) (cells []string, ok bool) {
 	if pos == "" {
-		return true
+		return []string{"br"}, true
 	}
-	for _, p := range WatermarkPositions {
-		if p == pos {
-			return true
+	if pos == WatermarkTile {
+		return []string{WatermarkTile}, true
+	}
+	seen := map[string]bool{}
+	for _, c := range strings.Split(pos, ",") {
+		if seen[c] || !slices.Contains(WatermarkPositions, c) {
+			return nil, false
 		}
+		seen[c] = true
+		cells = append(cells, c)
 	}
-	return false
+	return cells, true
+}
+
+// ValidWatermarkPosition — см. WatermarkCells.
+func ValidWatermarkPosition(pos string) bool {
+	_, ok := WatermarkCells(pos)
+	return ok
 }
 
 // FailFileTooLarge — код причины отказа для файла больше лимита на одно

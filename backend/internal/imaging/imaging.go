@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"image"
 
 	"github.com/davidbyttow/govips/v2/vips"
 
@@ -90,16 +91,16 @@ type Result struct {
 }
 
 // Watermark — текстовая подпись поверх деривативов. Накладывается при
-// загрузке, а не на лету: смена настроек не затрагивает уже загруженное
-// (так и написано в интерфейсе кабинета).
+// обработке, а не на лету: смена знака альбома перерисовывает его фото
+// отдельной задачей (worker.HandleAlbumRewatermark).
 //
 // Только текст. Логотип-картинка — отдельная загрузка файла и хранение,
 // заводить их ради одного тарифа рано.
 type Watermark struct {
 	Text    string
 	Opacity float64 // 0..1; 0 или пусто — знака нет
-	// Position — одна из девяти точек кадра (imagingmeta.WatermarkPositions).
-	// Пусто — правый нижний угол.
+	// Position — точки сетки 3×3 через запятую или «tile» — по всему кадру
+	// (imagingmeta.WatermarkCells). Пусто — правый нижний угол.
 	Position string
 }
 
@@ -254,29 +255,45 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 	// не отдаёт и всегда ставил подпись слева внизу, хотя комментарий
 	// обещал правый угол; без autofit по высоте он к тому же рисует
 	// текст в пару пикселей.
-	markup := fmt.Sprintf(`<span foreground="white" alpha="%d%%">%s</span>`,
-		int(opacity*100+0.5), html.EscapeString(wm.Text))
-	overlay, err := vips.Text(&vips.TextParams{
-		Text:      markup,
-		Font:      fmt.Sprintf("sans %d", fontSize),
-		Width:     int(float64(img.Width()) * watermarkBoxW),
-		Alignment: vips.AlignLow,
-		DPI:       72,
-		RGBA:      true,
-	})
+	text := html.EscapeString(wm.Text)
+	render := func(markup string) (*vips.ImageRef, error) {
+		return vips.Text(&vips.TextParams{
+			Text:      markup,
+			Font:      fmt.Sprintf("sans %d", fontSize),
+			Width:     int(float64(img.Width()) * watermarkBoxW),
+			Alignment: vips.AlignLow,
+			DPI:       72,
+			RGBA:      true,
+		})
+	}
+	overlay, err := render(fmt.Sprintf(`<span foreground="white" alpha="%d%%">%s</span>`, int(opacity*100+0.5), text))
 	if err != nil {
 		return fmt.Errorf("render text: %w", err)
 	}
 	defer overlay.Close()
+	// Тёмная тень под белым текстом: на белом фоне одна белая подпись
+	// не видна совсем.
+	shadow, err := render(fmt.Sprintf(`<span foreground="black" alpha="%d%%">%s</span>`, int(opacity*60+0.5), text))
+	if err != nil {
+		return fmt.Errorf("render shadow: %w", err)
+	}
+	defer shadow.Close()
 	if overlay.Width() > img.Width() || overlay.Height() > img.Height() {
 		// Длинная подпись на узкой панораме переносится на несколько
 		// строк и в кадр не помещается — лучше без знака, чем обрезок.
 		return nil
 	}
 
+	var layers []*vips.ImageComposite
+	shift := max(1, fontSize/14)
+	for _, p := range watermarkPoints(img.Width(), img.Height(), overlay.Width(), overlay.Height(), wm.Position) {
+		layers = append(layers,
+			&vips.ImageComposite{Image: shadow, BlendMode: vips.BlendModeOver, X: p.X + shift, Y: p.Y + shift},
+			&vips.ImageComposite{Image: overlay, BlendMode: vips.BlendModeOver, X: p.X, Y: p.Y},
+		)
+	}
 	hadAlpha := img.HasAlpha()
-	x, y := watermarkOffset(img.Width(), img.Height(), overlay.Width(), overlay.Height(), wm.Position)
-	if err := img.Composite(overlay, vips.BlendModeOver, x, y); err != nil {
+	if err := img.CompositeMulti(layers); err != nil {
 		return fmt.Errorf("composite: %w", err)
 	}
 	if !hadAlpha && img.HasAlpha() {
@@ -287,6 +304,34 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 		}
 	}
 	return nil
+}
+
+// watermarkPoints — левые верхние углы всех копий подписи: по точке на
+// каждую выбранную клетку сетки или шахматная раскладка по всему кадру.
+func watermarkPoints(imgW, imgH, textW, textH int, pos string) []image.Point {
+	cells, ok := imagingmeta.WatermarkCells(pos)
+	if !ok {
+		cells = []string{"br"}
+	}
+	if cells[0] == imagingmeta.WatermarkTile {
+		// Шаг — подпись плюс зазор; каждая вторая строка сдвинута на
+		// полшага, иначе копии встают столбиками. Края обрезаются кадром.
+		// Короткая подпись дала бы сотни копий (по два слоя на каждую) —
+		// шаг не меньше 1/6 ширины и 1/10 высоты кадра.
+		stepX, stepY := max(textW+textW/2, imgW/6), max(textH*3, imgH/10)
+		var pts []image.Point
+		for row, y := 0, textH/2; y < imgH; row, y = row+1, y+stepY {
+			for x := -(row % 2) * stepX / 2; x < imgW; x += stepX {
+				pts = append(pts, image.Point{X: x, Y: y})
+			}
+		}
+		return pts
+	}
+	pts := make([]image.Point, len(cells))
+	for i, c := range cells {
+		pts[i].X, pts[i].Y = watermarkOffset(imgW, imgH, textW, textH, c)
+	}
+	return pts
 }
 
 // watermarkOffset — левый верхний угол подписи для выбранной точки кадра.

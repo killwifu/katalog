@@ -19,6 +19,18 @@ export function rejectReason(file: File): string {
   return ''
 }
 
+// Почему файлы не подошли, с числом по каждой причине: «больше 10 МБ — 3,
+// формат не поддерживается — 2». Одна причина — без числа.
+export function rejectSummary(files: File[]): string {
+  const count = new Map<string, number>()
+  for (const f of files) {
+    const r = rejectReason(f)
+    if (r) count.set(r, (count.get(r) ?? 0) + 1)
+  }
+  const lower = (r: string) => r.charAt(0).toLowerCase() + r.slice(1)
+  return [...count].map(([r, n]) => (count.size === 1 ? lower(r) : `${lower(r)} — ${n}`)).join(', ')
+}
+
 export type RunFile = { key: string; file: File }
 
 export type RunResult = {

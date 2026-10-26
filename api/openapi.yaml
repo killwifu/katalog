@@ -2439,13 +2439,7 @@ components:
             enabled: { type: boolean }
             text: { type: string, maxLength: 40 }
             opacity: { type: number, minimum: 0, maximum: 1 }
-            position:
-              type: string
-              enum: [tl, tc, tr, ml, mc, mr, bl, bc, br]
-              description: >
-                Точка кадра на сетке 3×3: первая буква — строка (t верх,
-                m середина, b низ), вторая — столбец (l, c, r). Не задано —
-                правый нижний угол.
+            position: { $ref: '#/components/schemas/WatermarkPosition' }
 
     AlbumStatus:
       type: string
@@ -2500,7 +2494,17 @@ components:
         создаётся и не меняется (остальные поля запроса тоже не пишутся).
       properties:
         enabled: { type: boolean }
-        position: { type: string, enum: [tl, tc, tr, ml, mc, mr, bl, bc, br] }
+        position: { $ref: '#/components/schemas/WatermarkPosition' }
+
+    WatermarkPosition:
+      type: string
+      pattern: '^(tile|(tl|tc|tr|ml|mc|mr|bl|bc|br)(,(tl|tc|tr|ml|mc|mr|bl|bc|br))*)$'
+      description: >
+        Точки кадра на сетке 3×3 через запятую, без повторов: первая буква —
+        строка (t верх, m середина, b низ), вторая — столбец (l, c, r);
+        например «tl,br». «tile» — знак повторяется по всему кадру. Не
+        задано — правый нижний угол. Смена знака альбома перерисовывает его
+        готовые фото в фоне.
 
     PublicTab:
       type: object

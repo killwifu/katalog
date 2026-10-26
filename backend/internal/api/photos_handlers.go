@@ -38,7 +38,7 @@ type photoResponse struct {
 	FailReason string            `json:"fail_reason,omitempty"`
 }
 
-func (a *API) toPhotoResponse(p db.Photo) photoResponse {
+func (a *API) toPhotoResponse(p db.Photo, rev int32) photoResponse {
 	resp := photoResponse{
 		ID:        p.ID.String(),
 		AlbumID:   p.AlbumID.String(),
@@ -49,7 +49,7 @@ func (a *API) toPhotoResponse(p db.Photo) photoResponse {
 		SortOrder: p.SortOrder,
 	}
 	if p.Status == db.PhotoStatusReady {
-		resp.Urls = a.mediaURLs(p.ShopID, p.ID)
+		resp.Urls = a.mediaURLs(rev, p.ShopID, p.ID)
 	}
 	// Причина провала — только продавцу и только для его фото: по ней он
 	// понимает, что чинить, вместо одинакового «ошибка файла» на всю пачку.
@@ -435,7 +435,7 @@ func (a *API) handleListPhotos(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]photoResponse, 0, len(photos))
 	for _, p := range photos {
-		out = append(out, a.toPhotoResponse(p))
+		out = append(out, a.toPhotoResponse(p, shopFromCtx(r).MediaRev))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"photos":   out,
@@ -490,7 +490,7 @@ func (a *API) handleUpdatePhoto(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, a.toPhotoResponse(updated))
+	writeJSON(w, http.StatusOK, a.toPhotoResponse(updated, shopFromCtx(r).MediaRev))
 }
 
 func (a *API) handleDeletePhoto(w http.ResponseWriter, r *http.Request) {

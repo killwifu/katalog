@@ -492,7 +492,7 @@ func (a *API) handleSetAlbumCategory(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "clear album categories", err)
 		return
 	}
-	resp := a.toAlbumResponse(album)
+	resp := a.toAlbumResponse(album, shopFromCtx(r).MediaRev)
 	if catID.Valid {
 		if _, err := a.addAlbumCategory(r.Context(), db.AddAlbumCategoryParams{
 			AlbumID: albumID, ShopID: shop.ID, CategoryID: catID.UUID,

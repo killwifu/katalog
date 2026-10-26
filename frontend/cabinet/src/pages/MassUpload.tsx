@@ -375,8 +375,7 @@ export function MassUpload({
                       {empty && <small className="text-danger" role="alert">Нет подходящих фото — альбом не создастся</small>}
                       {!empty && f.skipped > 0 && (
                         <small className="frow__warn">
-                          {f.skipped} {plural(f.skipped, 'файл пропущен', 'файла пропущены', 'файлов пропущено')}: не тот
-                          формат или слишком большой
+                          {f.skipped} {plural(f.skipped, 'файл пропущен', 'файла пропущены', 'файлов пропущено')}: {f.skipReason}
                         </small>
                       )}
                       {f.nested > 0 && <small className="frow__warn">Вложенные папки пропущены: {f.nested}</small>}

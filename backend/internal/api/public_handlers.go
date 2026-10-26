@@ -83,8 +83,10 @@ type publicPhotoResponse struct {
 }
 
 // mediaURLs — адреса деривативов. Префикс задаётся MEDIA_BASE_URL:
-// относительный "/media" локально, отдельный CDN-домен в проде.
-func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
+// относительный "/media" локально, отдельный CDN-домен в проде. rev —
+// shops.media_rev: после перерисовки знака адрес меняется, и кеш
+// (immutable на год) не отдаёт старую картинку.
+func (a *API) mediaURLs(rev int32, shopID, photoID uuid.UUID) map[string]string {
 	// Дефолт держим здесь, а не только в config.Load: API собирают и
 	// напрямую (тесты), и пустой префикс дал бы битые адреса всех картинок
 	// молча — ошибка вылезла бы только глазами на витрине.
@@ -95,6 +97,9 @@ func (a *API) mediaURLs(shopID, photoID uuid.UUID) map[string]string {
 	urls := make(map[string]string, len(imagingmeta.Derivatives))
 	for _, d := range imagingmeta.Derivatives {
 		urls[d.Name] = fmt.Sprintf("%s/%s/%s/%s.webp", base, shopID, photoID, d.Name)
+		if rev > 0 {
+			urls[d.Name] += fmt.Sprintf("?v=%d", rev)
+		}
 	}
 	return urls
 }
@@ -118,14 +123,14 @@ func toPublicShopResponse(s db.Shop) publicShopResponse {
 	}
 }
 
-func (a *API) toPublicPhotoResponse(p db.Photo) publicPhotoResponse {
+func (a *API) toPublicPhotoResponse(p db.Photo, rev int32) publicPhotoResponse {
 	return publicPhotoResponse{
 		ID:      p.ID.String(),
 		AlbumID: p.AlbumID.String(),
 		Caption: p.Caption,
 		Width:   p.Width,
 		Height:  p.Height,
-		Urls:    a.mediaURLs(p.ShopID, p.ID),
+		Urls:    a.mediaURLs(rev, p.ShopID, p.ID),
 	}
 }
 
@@ -226,7 +231,7 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 			cover = fallbackCover[al.ID]
 		}
 		if cover != uuid.Nil && !al.HasPassword {
-			resp.CoverUrls = a.mediaURLs(shop.ID, cover)
+			resp.CoverUrls = a.mediaURLs(shop.MediaRev, shop.ID, cover)
 		}
 		out = append(out, resp)
 	}
@@ -349,7 +354,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 
 	outPhotos := make([]publicPhotoResponse, 0, len(photos))
 	for _, p := range photos {
-		outPhotos = append(outPhotos, a.toPublicPhotoResponse(p))
+		outPhotos = append(outPhotos, a.toPublicPhotoResponse(p, shop.MediaRev))
 	}
 	albumOut := publicAlbumResponse{
 		ID:          album.ID.String(),
@@ -381,7 +386,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 			cover = a.firstReadyPhoto(r, ch.ID)
 		}
 		if cover != uuid.Nil && !ch.HasPassword {
-			child.CoverUrls = a.mediaURLs(shop.ID, cover)
+			child.CoverUrls = a.mediaURLs(shop.MediaRev, shop.ID, cover)
 		}
 		outChildren = append(outChildren, child)
 	}
@@ -441,7 +446,7 @@ func (a *API) handlePublicSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	photos := make([]publicPhotoResponse, 0, len(ftsRows))
 	for _, row := range ftsRows {
-		photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
+		photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height), shop.MediaRev))
 	}
 
 	if len(photos) == 0 {
@@ -455,7 +460,7 @@ func (a *API) handlePublicSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, row := range trgmRows {
-			photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height)))
+			photos = append(photos, a.toPublicPhotoResponse(searchRowToPhoto(row.ID, row.AlbumID, row.ShopID, row.Caption, row.Width, row.Height), shop.MediaRev))
 		}
 	}
 

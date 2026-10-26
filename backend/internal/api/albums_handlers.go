@@ -16,6 +16,7 @@ import (
 	"katalog/backend/internal/auth"
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imagingmeta"
+	"katalog/backend/internal/tasks"
 )
 
 type albumResponse struct {
@@ -70,14 +71,14 @@ func parseAlbumWatermark(w http.ResponseWriter, raw json.RawMessage) (value []by
 	}
 	if !imagingmeta.ValidWatermarkPosition(wm.Position) {
 		apiError(w, http.StatusBadRequest, "invalid_watermark",
-			"watermark.position must be one of "+strings.Join(imagingmeta.WatermarkPositions, ", "))
+			"watermark.position must be \"tile\" or comma-separated distinct cells of "+strings.Join(imagingmeta.WatermarkPositions, ", "))
 		return nil, false
 	}
 	value, _ = json.Marshal(wm)
 	return value, true
 }
 
-func (a *API) toAlbumResponse(al db.Album) albumResponse {
+func (a *API) toAlbumResponse(al db.Album, rev int32) albumResponse {
 	resp := albumResponse{
 		ID:          al.ID.String(),
 		Title:       al.Title,
@@ -110,7 +111,7 @@ func (a *API) toAlbumResponse(al db.Album) albumResponse {
 	if al.CoverPhotoID.Valid {
 		s := al.CoverPhotoID.UUID.String()
 		resp.CoverPhotoID = &s
-		resp.CoverUrls = a.mediaURLs(al.ShopID, al.CoverPhotoID.UUID)
+		resp.CoverUrls = a.mediaURLs(rev, al.ShopID, al.CoverPhotoID.UUID)
 	}
 	// Полный список категорий подставляет listAlbums; в ответах по одному
 	// альбому здесь хотя бы первая, чтобы поле не расходилось с category_id.
@@ -227,7 +228,7 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusCreated, a.toAlbumResponse(album))
+	writeJSON(w, http.StatusCreated, a.toAlbumResponse(album, shopFromCtx(r).MediaRev))
 }
 
 func (a *API) handleListAlbums(w http.ResponseWriter, r *http.Request) {
@@ -268,14 +269,14 @@ func (a *API) handleListAlbums(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]albumResponse, 0, len(albums))
 	for _, al := range albums {
-		resp := a.toAlbumResponse(al)
+		resp := a.toAlbumResponse(al, shopFromCtx(r).MediaRev)
 		if ids := categoriesOf[al.ID]; ids != nil {
 			resp.CategoryIDs = ids
 			resp.CategoryPos = posOf[al.ID]
 		}
 		if resp.CoverUrls == nil {
 			if pid, ok := fallbackCover[al.ID]; ok {
-				resp.CoverUrls = a.mediaURLs(shopID, pid)
+				resp.CoverUrls = a.mediaURLs(shopFromCtx(r).MediaRev, shopID, pid)
 			}
 		}
 		out = append(out, resp)
@@ -288,7 +289,7 @@ func (a *API) handleGetAlbum(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, a.toAlbumResponse(album))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(album, shopFromCtx(r).MediaRev))
 }
 
 type updateAlbumRequest struct {
@@ -510,6 +511,19 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 			a.internalError(w, "set album watermark", err)
 			return
 		}
+		// Знак «запечён» в уже готовые фото — перерисовываем их, иначе
+		// выключенный знак так и остаётся на картинках. Ставим при каждом
+		// сохранении знака, а не только при изменении: если постановка
+		// упала, продавец получит ошибку, и повтор того же значения должен
+		// всё-таки запустить перерисовку.
+		task, terr := tasks.NewAlbumRewatermark(album.ID)
+		if terr == nil {
+			_, terr = a.Tasks.EnqueueContext(r.Context(), task)
+		}
+		if terr != nil {
+			a.internalError(w, "enqueue rewatermark", terr)
+			return
+		}
 	}
 	if req.Password != nil {
 		updated, err = a.Q.SetAlbumPassword(r.Context(), db.SetAlbumPasswordParams{
@@ -523,7 +537,7 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, a.toAlbumResponse(updated))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(updated, shopFromCtx(r).MediaRev))
 }
 
 func (a *API) handleDeleteAlbum(w http.ResponseWriter, r *http.Request) {

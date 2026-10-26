@@ -64,7 +64,7 @@ func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]photoResponse, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, a.toPhotoResponse(p))
+		out = append(out, a.toPhotoResponse(p, shopFromCtx(r).MediaRev))
 	}
 	albums := []trashAlbumResponse{}
 	if page == 1 {
@@ -79,10 +79,10 @@ func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 				item.DeletedAt = al.DeletedAt.Time.Format(time.RFC3339)
 			}
 			if al.CoverPhotoID.Valid {
-				item.CoverUrls = a.mediaURLs(shop.ID, al.CoverPhotoID.UUID)
+				item.CoverUrls = a.mediaURLs(shop.MediaRev, shop.ID, al.CoverPhotoID.UUID)
 			} else if first, err := a.Q.FirstAlbumPhotoAny(r.Context(), al.ID); err == nil {
 				// Продавец узнаёт альбом по картинке, а не по названию.
-				item.CoverUrls = a.mediaURLs(shop.ID, first)
+				item.CoverUrls = a.mediaURLs(shop.MediaRev, shop.ID, first)
 			}
 			albums = append(albums, item)
 		}
@@ -116,7 +116,7 @@ func (a *API) handleRestorePhoto(w http.ResponseWriter, r *http.Request) {
 		a.Log.Error("restore: recount album photos failed", "error", err)
 	}
 	a.Revalidate.Shop(shop.Slug)
-	writeJSON(w, http.StatusOK, a.toPhotoResponse(photo))
+	writeJSON(w, http.StatusOK, a.toPhotoResponse(photo, shopFromCtx(r).MediaRev))
 }
 
 func (a *API) handlePurgePhoto(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +173,7 @@ func (a *API) handleRestoreAlbum(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "load restored album", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, a.toAlbumResponse(restored))
+	writeJSON(w, http.StatusOK, a.toAlbumResponse(restored, shopFromCtx(r).MediaRev))
 }
 
 // handlePurgeAlbum — окончательное удаление альбома из корзины: строки,

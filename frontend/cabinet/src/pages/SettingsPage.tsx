@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, ApiError, type ShopSettings, errorText } from '../api'
 import { Icon } from '../lib/icons'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
-import { WATERMARK_POSITIONS } from '../lib/watermark'
+import { WATERMARK_TILE, watermarkCells } from '../lib/watermark'
+import { WatermarkGrid } from './WatermarkControl'
 import { useShop } from './AppLayout'
 
 export function SettingsPage() {
@@ -206,30 +207,19 @@ export function SettingsPage() {
 
           <div className="field">
             <span>Положение на фото</span>
-            <div className="wmgrid" role="radiogroup" aria-label="Положение водяного знака" style={{ width: 'fit-content' }}>
-              {WATERMARK_POSITIONS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={(wm.position ?? 'br') === p.id}
-                  aria-label={p.label}
-                  title={p.label}
-                  disabled={!wm.enabled}
-                  onClick={() => patchWm({ position: p.id })}
-                />
-              ))}
-            </div>
+            <WatermarkGrid position={wm.position} disabled={!wm.enabled} onChange={(position) => patchWm({ position })} />
           </div>
 
           {/* Знак впекается при загрузке и на уже загруженных фото не меняется.
               Узнавать, что 55% — это много, на трёхстах снимках поздно. */}
           <div className="field !mb-0">
             <span>Как будет выглядеть</span>
-            <div className={`wmprev wmprev--${wm.position ?? 'br'}`}>
-              <span style={{ opacity: wm.enabled ? wm.opacity : 0.15 }}>
-                {wm.text || '@ваш_ник'}
-              </span>
+            <div className={`wmprev ${wm.position === WATERMARK_TILE ? 'wmprev--tile' : ''}`}>
+              {watermarkCells(wm.position).map((cell) => (
+                <span key={cell} className={`wmprev__at wmprev__at--${cell}`} style={{ opacity: wm.enabled ? wm.opacity : 0.15 }}>
+                  {wm.text || '@ваш_ник'}
+                </span>
+              ))}
             </div>
           </div>
         </section>

@@ -196,7 +196,7 @@ export function AppLayout() {
             «Мой профиль» и меню. */}
         <header className="app__bar" ref={bar}>
           <p className="app__shop">{shop.name}</p>
-          <a href={`/${shop.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn--ghost btn--sm">
+          <a href={`/${shop.slug}?from=cabinet`} target="_blank" rel="noopener noreferrer" className="btn btn--ghost btn--sm">
             Мой профиль
           </a>
           <button
@@ -228,7 +228,7 @@ export function AppLayout() {
               там выход лежит в выдвижном меню. */}
           <header className="app__top">
             <AccountMenu shop={shop} onLogout={() => void logout()} />
-            <a href={`/${shop.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn--ghost btn--sm">
+            <a href={`/${shop.slug}?from=cabinet`} target="_blank" rel="noopener noreferrer" className="btn btn--ghost btn--sm">
               Мой профиль
             </a>
           </header>

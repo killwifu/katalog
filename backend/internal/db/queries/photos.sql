@@ -231,3 +231,9 @@ ORDER BY created_at;
 -- name: AdjustPhotoDrvSize :exec
 UPDATE photos SET drv_size = greatest(drv_size + sqlc.arg(delta)::bigint, 0)
 WHERE id = sqlc.arg(id);
+
+-- Перерисовка деривативов после смены водяного знака альбома.
+-- name: ListReadyAlbumPhotoRefs :many
+SELECT id, shop_id FROM photos
+WHERE album_id = $1 AND status = 'ready'
+ORDER BY sort_order;

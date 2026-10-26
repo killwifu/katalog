@@ -1,4 +1,4 @@
-import { rejectReason } from './uploadRun'
+import { rejectReason, rejectSummary } from './uploadRun'
 
 // Папка с компьютера продавца, которая станет альбомом.
 export type PickedFolder = {
@@ -7,6 +7,8 @@ export type PickedFolder = {
   bytes: number
   // Файлы не того формата или размера: в альбом не попадут.
   skipped: number
+  // Почему пропущены — rejectSummary.
+  skipReason: string
   // Вложенные папки: их содержимое не загружается.
   nested: number
 }
@@ -61,6 +63,7 @@ function build(name: string, entries: Entry[], nested: number): PickedFolder {
     files,
     bytes: files.reduce((sum, f) => sum + f.size, 0),
     skipped: entries.length - files.length,
+    skipReason: rejectSummary(entries.flatMap((e) => (e.file ? [e.file] : []))),
     nested,
   }
 }

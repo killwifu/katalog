@@ -75,3 +75,6 @@ WHERE slug = $1 AND released_at > now() - make_interval(days => $2::int);
 -- Магазин занял адрес — бронь на него больше не нужна.
 -- name: DropSlugReservation :exec
 DELETE FROM released_slugs WHERE slug = $1;
+
+-- name: BumpShopMediaRev :exec
+UPDATE shops SET media_rev = media_rev + 1 WHERE id = $1;

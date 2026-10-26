@@ -13,6 +13,7 @@ import { LimitLink, useLimitExcess } from '../lib/limits'
 import { useDialogClose } from '../lib/useDialogClose'
 import { usePointerReorder } from '../lib/pointerReorder'
 import { ConfirmDialog } from './ConfirmDialog'
+import { CategoryPicker } from './CategoryPicker'
 import { Thumb } from './Thumb'
 import { useSingleFlight } from '../lib/singleFlight'
 import { Portal } from '../lib/Portal'
@@ -45,10 +46,13 @@ const PREVIEW_LIMIT = 48
 export function NewAlbumDialog({
   shopId,
   categories,
+  initialFiles = [],
   onClose,
 }: {
   shopId: string
   categories: Category[]
+  // Фото из окна «Загрузить фото», откуда продавец нажал «Создать альбом».
+  initialFiles?: File[]
   onClose: (created?: Album) => void
 }) {
   const queryClient = useQueryClient()
@@ -60,7 +64,11 @@ export function NewAlbumDialog({
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [status, setStatus] = useState<AlbumStatus>('published')
-  const [items, setItems] = useState<Item[]>([])
+  const [items, setItems] = useState<Item[]>(() =>
+    initialFiles.map((file) => ({ key: crypto.randomUUID(), file, reject: rejectReason(file) })),
+  )
+  // «и ещё N» раскрывает следующую порцию миниатюр.
+  const [previewLimit, setPreviewLimit] = useState(PREVIEW_LIMIT)
   const [menuKey, setMenuKey] = useState<string | null>(null)
   // «Изменить порядок» на тач-экране (макет 11 · Tablet/Mobile): ручки на
   // фото, меню по нажатию отключено, «Удалить все» скрыта.
@@ -276,7 +284,7 @@ export function NewAlbumDialog({
     }
   }
 
-  const shown = items.slice(0, PREVIEW_LIMIT)
+  const shown = items.slice(0, previewLimit)
   const coverKey = valid[0]?.key
   const locked = busy !== 'no' || album !== null
 
@@ -540,7 +548,10 @@ export function NewAlbumDialog({
                   )
                 })}
                 {items.length > shown.length && (
-                  <div className="uptile2 uptile2--more">и ещё {items.length - shown.length}</div>
+                  <button className="uptile2 uptile2--more" onClick={() => setPreviewLimit((n) => n + PREVIEW_LIMIT)}>
+                  и ещё {items.length - shown.length}
+                  <small>Показать</small>
+                </button>
                 )}
               </div>
               {items.length > 1 && !locked && (
@@ -600,17 +611,16 @@ export function NewAlbumDialog({
               />
             </label>
 
-            <label className="field">
+            <div className="field field--cat">
               <span>Категория</span>
-              <select className="inp" value={categoryId} disabled={locked} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">Без категории</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <CategoryPicker
+                single
+                categories={categories}
+                value={categoryId ? [categoryId] : []}
+                disabled={locked}
+                onChange={(ids) => setCategoryId(ids[0] ?? '')}
+              />
+            </div>
 
             <div className="field">
               <span>Доступ</span>
