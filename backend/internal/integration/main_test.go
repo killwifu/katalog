@@ -44,6 +44,9 @@ import (
 const (
 	testBucket           = "katalog"
 	testRevalidateSecret = "test-revalidate-secret"
+	// minio/minio с Docker Hub недоступен с 14.10.2026; тот же образ, что
+	// в deploy/docker-compose.yml.
+	minioImage = "cgr.dev/chainguard/minio:latest@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341"
 )
 
 var env struct {
@@ -97,7 +100,7 @@ func run(m *testing.M) int {
 	}
 	defer terminate(ctx, redisC)
 
-	minioC, err := tcminio.Run(ctx, "minio/minio:latest")
+	minioC, err := tcminio.Run(ctx, minioImage)
 	if err != nil {
 		log.Printf("start minio container: %v", err)
 		return 1

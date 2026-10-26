@@ -29,9 +29,16 @@ services:
       timeout: 3s
       retries: 12
 
+  # minio/minio и minio/mc с 14.10.2026 на Docker Hub недоступны (pull access
+  # denied) — образ Chainguard, пин по digest: бесплатно там есть только latest.
+  # В нём есть sh и mc, curl нет. Обновить: docker pull cgr.dev/chainguard/minio
+  # и взять новый digest из docker inspect.
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341
     command: server /data --console-address ":9001"
+    # Образ работает от uid 65532, а том miniodata у уже поднятых стендов
+    # создан от root — без этого MinIO не смог бы в него писать.
+    user: root
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -41,14 +48,15 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "MC_HOST_local=http://$${MINIO_ROOT_USER}:$${MINIO_ROOT_PASSWORD}@localhost:9000 mc ready local"]
       interval: 5s
       timeout: 3s
       retries: 12
 
-  # Одноразовый init: создаёт бакет при старте стека.
+  # Одноразовый init: создаёт бакет при старте стека. Тот же образ, что у
+  # minio: в отдельном minio-client от Chainguard нет shell.
   minio-init:
-    image: minio/mc:latest
+    image: cgr.dev/chainguard/minio:latest@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341
     depends_on:
       minio:
         condition: service_healthy
