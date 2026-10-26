@@ -28,14 +28,23 @@ func New(component string) (*slog.Logger, func()) {
 	if err := sentry.Init(sentry.ClientOptions{
 		Dsn:        dsn,
 		ServerName: component,
-		// IP, cookies и заголовки авторизации наружу не уходят.
-		SendDefaultPII: false,
+		// Ни user.* (IP), ни cookies, заголовков, тел и query-параметров
+		// запросов: паника хендлера уходит без данных продавца.
+		DataCollection: &sentry.DataCollection{
+			UserInfo:    sentry.Set(false),
+			Cookies:     off,
+			HTTPHeaders: &sentry.HeaderCollectionConfig{Request: off, Response: off},
+			HTTPBodies:  []sentry.BodyType{},
+			QueryParams: off,
+		},
 	}); err != nil {
 		logger.Error("sentry init failed, errors stay in logs only", "error", err)
 		return logger, func() {}
 	}
 	return slog.New(slog.NewMultiHandler(stdout, &handler{})), func() { sentry.Flush(2 * time.Second) }
 }
+
+var off = &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff}
 
 type handler struct{ attrs []slog.Attr }
 
