@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import '@fontsource-variable/inter'
 import './globals.css'
+import { ErrorReporter } from '@/components/ErrorReporter'
 
 const SITE_URL = process.env.SITE_URL ?? 'http://localhost'
 
@@ -18,7 +19,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ErrorReporter />
+      </body>
     </html>
   )
 }

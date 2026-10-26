@@ -143,6 +143,10 @@ jobs:
             context: .
             dockerfile: backend/Dockerfile
             target: migrate
+          - image: backup
+            context: deploy/backup
+            dockerfile: deploy/backup/Dockerfile
+            target: ""
           - image: storefront
             context: frontend/storefront
             dockerfile: frontend/storefront/Dockerfile
@@ -230,6 +234,7 @@ jobs:
           # Компоуз и Caddyfile лежат в том же репозитории, что и образы,
           # поэтому рабочая копия переключается на тот же коммит.
           git fetch --quiet origin main
+          PREV=$(git rev-parse HEAD)
           git checkout --quiet --detach "$SHA"
 
           # IMAGE_TAG из окружения перебивает значение из .env: катим ровно
@@ -252,6 +257,13 @@ jobs:
           if [ "$HOST_SUM" != "$CONT_SUM" ]; then
             echo "Caddyfile изменился — пересоздаём caddy"
             $COMPOSE up -d --force-recreate caddy
+          fi
+
+          # Конфиги мониторинга смонтированы каталогом и видны сразу, но
+          # Prometheus, Alertmanager и Grafana читают их только при старте.
+          if ! git diff --quiet "$PREV" "$SHA" -- deploy/monitoring; then
+            echo "deploy/monitoring изменился — перезапускаем мониторинг"
+            $COMPOSE restart prometheus alertmanager grafana
           fi
 
           docker logout ghcr.io

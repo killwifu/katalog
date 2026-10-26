@@ -17,6 +17,7 @@ import (
 	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/errreport"
 	"katalog/backend/internal/mail"
 	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
@@ -25,11 +26,15 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger, flush := errreport.New("worker")
 	slog.SetDefault(logger)
 
-	if err := run(logger); err != nil {
+	err := run(logger)
+	if err != nil {
 		logger.Error("worker exited with error", "error", err)
+	}
+	flush()
+	if err != nil {
 		os.Exit(1)
 	}
 }
@@ -85,7 +90,9 @@ func run(logger *slog.Logger) error {
 		Logger:      asynqLogger{logger},
 		Queues:      map[string]int{"default": 1},
 		ErrorHandler: asynq.ErrorHandlerFunc(func(_ context.Context, task *asynq.Task, err error) {
-			logger.Error("task failed", "type", task.Type(), "error", err)
+			// Тип задачи — в сообщении: по нему Sentry группирует Issues,
+			// иначе сбои обработки фото и отправки писем слились бы в одну.
+			logger.Error("task "+task.Type()+" failed", "type", task.Type(), "error", err)
 		}),
 	})
 

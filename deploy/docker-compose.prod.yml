@@ -9,10 +9,20 @@
 #   - Caddy слушает 80 и 443 и выпускает TLS сам.
 name: katalog
 
+# Логи контейнеров — в json-file без лимита по умолчанию: за месяцы они
+# съедают диск, и первой падает запись в Postgres. 5 файлов по 20 МБ на
+# сервис, `docker compose logs` работает как раньше.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER обязателен}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен}
@@ -28,6 +38,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *logging
     command: redis-server --save 60 1 --appendonly no
     volumes:
       - redisdata:/data
@@ -46,10 +57,12 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    logging: *logging
 
   api:
     image: ghcr.io/${GHCR_OWNER}/katalog-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
     environment:
       HTTP_ADDR: ":8080"
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
@@ -74,6 +87,10 @@ services:
       SITE_URL: https://${APP_DOMAIN}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       STOP_WORDS: ${STOP_WORDS:-}
+      # Ошибки API в Sentry; тот же DSN API отдаёт фронтам
+      # (/api/v1/public/config). Пусто — ошибки только в логах.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${IMAGE_TAG:-latest}
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,6 +107,7 @@ services:
   worker:
     image: ghcr.io/${GHCR_OWNER}/katalog-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
     environment:
       WORKER_HEALTH_ADDR: ":8081"
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
@@ -116,6 +134,8 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       TRAFFIC_ALERT_MULTIPLIER: ${TRAFFIC_ALERT_MULTIPLIER:-5}
       TRAFFIC_ALERT_MIN_VIEWS: ${TRAFFIC_ALERT_MIN_VIEWS:-1000}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${IMAGE_TAG:-latest}
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,9 +149,108 @@ services:
       timeout: 3s
       retries: 12
 
+  # Ежесуточный pg_dump в S3. По умолчанию — основной бакет, префикс
+  # backup/pg/ (аноним читает только drv/*). Надёжнее отдельный бакет
+  # с ключом без права удаления: deploy/s3/setup-backup.sh, BACKUP_S3_*.
+  # Восстановление — README «Бэкапы».
+  backup:
+    image: ghcr.io/${GHCR_OWNER}/katalog-backup:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-katalog}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_BUCKET: ${BACKUP_S3_BUCKET:-${S3_BUCKET}}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY:-${S3_ACCESS_KEY}}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY:-${S3_SECRET_KEY}}
+      AWS_DEFAULT_REGION: ${S3_REGION}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      # Heartbeat-монитор (healthchecks.io и т.п.): пинг после каждого
+      # успешного дампа. Пусто — бэкап работает, но его сбой никто не заметит.
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Мониторинг: метрики, алерты в Telegram, Grafana ----------------------
+  # Наружу ничего не публикуется; Grafana — только на 127.0.0.1 сервера,
+  # открывать через SSH-туннель (README «Метрики и алерты»). Лимиты памяти —
+  # чтобы мониторинг на VM в 2 ГБ не вытеснил сам продукт.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 300m
+    command:
+      - --config.file=/etc/katalog/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    # Каталогом, а не файлами: git checkout подменяет файл новым inode, и
+    # смонтированный по одному файл в контейнере остался бы старым (как было
+    # с Caddyfile). Деплой перезапускает мониторинг, если каталог изменился.
+    volumes:
+      - ./monitoring:/etc/katalog:ro
+      - promdata:/prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    entrypoint: ["/bin/sh", "/etc/katalog/alertmanager.sh"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./monitoring:/etc/katalog:ro
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    command: [--path.rootfs=/host]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    environment:
+      DATA_SOURCE_NAME: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-katalog}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 200m
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      # Не обязателен, чтобы деплой не упал на старом .env: Grafana слушает
+      # только 127.0.0.1, а make-env.sh предупреждает о пустом значении.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafanadata:/var/lib/grafana
+
   storefront:
     image: ghcr.io/${GHCR_OWNER}/katalog-storefront:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
     environment:
       API_URL: http://api:8080
       REDIS_URL: redis://redis:6379
@@ -146,6 +265,7 @@ services:
   cabinet:
     image: ghcr.io/${GHCR_OWNER}/katalog-cabinet:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    logging: *logging
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
       interval: 5s
@@ -155,6 +275,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN обязателен}
       ACME_EMAIL: ${ACME_EMAIL:?нужен email для Let's Encrypt}
@@ -185,3 +306,5 @@ volumes:
   redisdata:
   caddydata:
   caddyconfig:
+  promdata:
+  grafanadata:

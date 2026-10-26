@@ -41,6 +41,9 @@ type Config struct {
 	RevalidateSecret string
 	// SiteURL — публичный базовый URL (ссылки в письмах: сброс пароля и т.п.).
 	SiteURL string
+	// SentryDSN — куда фронты шлют свои ошибки (GET /api/v1/public/config).
+	// DSN публичен по устройству Sentry; бэкенд читает его сам в errreport.
+	SentryDSN string
 	// MediaBaseURL — префикс URL деривативов. По умолчанию относительный
 	// "/media" (его проксирует Caddy). В проде — отдельный CDN-домен:
 	// контент не должен отдаваться с домена приложения.
@@ -128,6 +131,7 @@ func Load() Config {
 		APIInternalURL:          getenv("API_INTERNAL_URL", "http://api:8080"),
 		RevalidateSecret:        os.Getenv("REVALIDATE_SECRET"),
 		SiteURL:                 getenv("SITE_URL", "http://localhost"),
+		SentryDSN:               os.Getenv("SENTRY_DSN"),
 		MediaBaseURL:            strings.TrimRight(getenv("MEDIA_BASE_URL", "/media"), "/"),
 		StopWords:               splitList(os.Getenv("STOP_WORDS")),
 		TrafficAlertMultiplier:  getenvFloat("TRAFFIC_ALERT_MULTIPLIER", 5),

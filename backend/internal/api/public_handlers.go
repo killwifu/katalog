@@ -603,3 +603,11 @@ func queryInt(r *http.Request, name string, def, minV, maxV int) int {
 	}
 	return n
 }
+
+// handlePublicConfig — настройки фронтов, известные только в рантайме.
+// Кабинет и витрина запрашивают его лишь при первой JS-ошибке, так что
+// обычный просмотр витрины лишнего запроса не делает.
+func (a *API) handlePublicConfig(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	writeJSON(w, http.StatusOK, map[string]string{"sentry_dsn": a.Cfg.SentryDSN})
+}
