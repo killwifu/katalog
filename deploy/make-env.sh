@@ -27,6 +27,7 @@ if [ ! -f .env ]; then
 	sed -i.bak \
 		-e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')|" \
 		-e "s|^REVALIDATE_SECRET=.*|REVALIDATE_SECRET=$(openssl rand -hex 32)|" \
+		-e "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '/+=')|" \
 		.env
 	rm -f .env.bak
 	chmod 600 .env
@@ -77,6 +78,11 @@ off=()
 [ -n "$(getval SMTP_HOST)" ] || off+=("SMTP_HOST — письма в лог воркера, сброс пароля недоступен")
 [ -n "$(getval YOOKASSA_SHOP_ID)" ] || off+=("YOOKASSA_* — оплата тарифов отдаёт 503, все магазины на free")
 [ -n "$(getval ADMIN_EMAIL)" ] || off+=("ADMIN_EMAIL — жалобы и алерты по трафику никуда не уходят")
+[ -n "$(getval BACKUP_PING_URL)" ] || off+=("BACKUP_PING_URL — бэкап базы идёт, но его сбой никто не заметит")
+[ -n "$(getval BACKUP_S3_BUCKET)" ] || off+=("BACKUP_S3_* — дампы в основном бакете: утечка ключа приложения позволит удалить и их")
+[ -n "$(getval TELEGRAM_BOT_TOKEN)" ] || off+=("TELEGRAM_* — алерты Prometheus никуда не уходят")
+[ -n "$(getval SENTRY_DSN)" ] || off+=("SENTRY_DSN — ошибки бэкенда и фронтов только в логах контейнеров")
+[ -n "$(getval GRAFANA_ADMIN_PASSWORD)" ] || off+=("GRAFANA_ADMIN_PASSWORD — у Grafana пароль admin")
 case "$(getval MEDIA_BASE_URL)" in
 	*storage.yandexcloud.net*) off+=("MEDIA_BASE_URL смотрит прямо в S3 — картинки без CDN-кеша") ;;
 esac

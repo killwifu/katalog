@@ -22,10 +22,10 @@ paths:
   /healthz:
     get:
       operationId: healthz
-      summary: Liveness probe
+      summary: Health probe — API, Postgres и Redis доступны
       responses:
         "200":
-          description: Сервис жив
+          description: Сервис жив, база и Redis отвечают
           content:
             application/json:
               schema:
@@ -35,6 +35,16 @@ paths:
                   status:
                     type: string
                     const: ok
+        "503":
+          description: Postgres или Redis недоступны
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
 
   /api/v1/auth/register:
     post:
@@ -1755,6 +1765,22 @@ paths:
                       properties:
                         slug: { type: string }
                         updated_at: { type: string, format: date-time }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/public/config:
+    get:
+      operationId: getPublicConfig
+      summary: Рантайм-настройки фронтов (DSN Sentry для отчётов об ошибках)
+      responses:
+        "200":
+          description: OK. Пустой sentry_dsn — отчёты об ошибках выключены
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sentry_dsn]
+                properties:
+                  sentry_dsn: { type: string }
         "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/public/complaints:

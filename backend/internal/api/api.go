@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/hibiken/asynq"
@@ -47,11 +48,12 @@ func (a *API) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	// Паника доходит до Sentry и летит дальше в Recoverer, который отвечает 500.
+	// Без SENTRY_DSN — no-op.
+	r.Use(sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle)
 	r.Use(rejectNUL)
 
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	r.Get("/healthz", a.handleHealthz)
 	// Бизнес-метрики Prometheus. Наружу через Caddy не проксируется.
 	r.Get("/metrics", a.handleMetrics)
 
@@ -73,6 +75,7 @@ func (a *API) Router() http.Handler {
 			r.Get("/shops/{slug}/categories/{categorySlug}", a.handlePublicCategory)
 			r.Post("/lead-click", a.handleLeadClick)
 			r.Get("/sitemap", a.handlePublicSitemap)
+			r.Get("/config", a.handlePublicConfig)
 			// Notice-and-takedown: жалоба правообладателя, без auth.
 			r.Post("/complaints", a.handleCreateComplaint)
 		})

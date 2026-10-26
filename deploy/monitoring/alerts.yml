@@ -1,0 +1,59 @@
+# Алерты уходят в Telegram через Alertmanager. Падение всей VM отсюда не
+# видно — его ловит внешний uptime-монитор (README «Мониторинг доступности»).
+groups:
+  - name: katalog
+    rules:
+      # Воркер, API или экспортёр не отвечает. Для воркера это единственный
+      # сигнал: его /healthz наружу не проксируется.
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        annotations:
+          summary: "{{ $labels.job }} не отвечает Prometheus 2 минуты"
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        annotations:
+          summary: "Postgres недоступен"
+
+      # Очередь растёт: воркер не успевает или завис. 300 фото — норма для
+      # одной пачки, поэтому порог выше и с выдержкой.
+      - alert: QueueBacklog
+        expr: katalog_queue_pending > 500
+        for: 15m
+        annotations:
+          summary: "В очереди {{ $value }} задач дольше 15 минут"
+
+      # Задача исчерпала ретраи — фото не обработано или письмо не ушло.
+      - alert: TasksFailed
+        expr: increase(katalog_queue_archived[1h]) > 0
+        annotations:
+          summary: "За час {{ $value | humanize }} задач упали окончательно (asynq archived)"
+
+      # Бюджет из CLAUDE.md: p95 публичного API < 200 мс.
+      - alert: PublicLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(katalog_public_request_seconds_bucket[5m]))) > 0.2
+        for: 10m
+        annotations:
+          summary: "p95 публичного API {{ $value | humanizeDuration }} (бюджет 200 мс)"
+
+      - alert: DiskAlmostFull
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.2
+        for: 5m
+        annotations:
+          summary: "На диске свободно {{ $value | humanizePercentage }}"
+
+      # Без метрики диска DiskAlmostFull молчал бы всегда — например, если
+      # node-exporter не видит корень хоста (/:/host в compose).
+      - alert: DiskMetricMissing
+        expr: absent(node_filesystem_avail_bytes{mountpoint="/"})
+        for: 10m
+        annotations:
+          summary: "node-exporter не отдаёт метрику диска / — DiskAlmostFull не сработает"
+
+      - alert: MemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 10m
+        annotations:
+          summary: "Свободной памяти {{ $value | humanizePercentage }}"

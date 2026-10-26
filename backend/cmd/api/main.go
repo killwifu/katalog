@@ -20,16 +20,21 @@ import (
 	"katalog/backend/internal/billing"
 	"katalog/backend/internal/config"
 	"katalog/backend/internal/db"
+	"katalog/backend/internal/errreport"
 	"katalog/backend/internal/revalidate"
 	"katalog/backend/internal/storage"
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger, flush := errreport.New("api")
 	slog.SetDefault(logger)
 
-	if err := run(logger); err != nil {
+	err := run(logger)
+	if err != nil {
 		logger.Error("api exited with error", "error", err)
+	}
+	flush()
+	if err != nil {
 		os.Exit(1)
 	}
 }

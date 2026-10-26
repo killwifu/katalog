@@ -1,11 +1,17 @@
 import { CircleAlert, Search } from 'lucide-react'
 import { Icon } from '../lib/icons'
 import { Link } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { reportError } from '../lib/errorReport'
 
 // Экран сбоя маршрута. Без него любая ошибка рендера — обрыв сети,
 // чанк, не доехавший после деплоя, неожиданный ответ API — оставляет
 // продавца перед пустой белой страницей без единой подсказки.
 export function ErrorPage({ error }: { error?: Error }) {
+  // Ошибку поймал роутер, до глобальных обработчиков она не дойдёт.
+  useEffect(() => {
+    if (error) reportError(error)
+  }, [error])
   return (
     <div className="emptybox">
       <div className="emptybox__ico" aria-hidden="true">

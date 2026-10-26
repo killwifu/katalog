@@ -11,6 +11,7 @@ import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { api } from './api'
 import { installModalFocusTrap } from './lib/focusTrap'
+import { installErrorReporting } from './lib/errorReport'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { TabsPage } from './pages/TabsPage'
@@ -233,6 +234,7 @@ declare module '@tanstack/react-router' {
 }
 
 installModalFocusTrap()
+installErrorReporting()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
