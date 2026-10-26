@@ -157,3 +157,95 @@ func TestWatermarkPosition(t *testing.T) {
 		})
 	}
 }
+
+// brightQuadrants — в каких четвертях кадра есть светлые пиксели (>90).
+func brightQuadrants(t *testing.T, webp []byte) map[[2]int]int {
+	t.Helper()
+	img, err := vips.NewImageFromBuffer(webp)
+	if err != nil {
+		t.Fatalf("decode derivative: %v", err)
+	}
+	defer img.Close()
+	pix, err := img.ToBytes()
+	if err != nil {
+		t.Fatalf("pixels: %v", err)
+	}
+	w, h, bands := img.Width(), img.Height(), img.Bands()
+	q := map[[2]int]int{}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if pix[(y*w+x)*bands] > 90 {
+				q[[2]int{x * 2 / w, y * 2 / h}]++
+			}
+		}
+	}
+	return q
+}
+
+// Несколько клеток и «по всему кадру» (правка 3 из списка 26.10).
+func TestWatermarkSeveralPlaces(t *testing.T) {
+	src := solidJPEG(t, 1200, 900)
+	for _, tc := range []struct {
+		pos  string
+		want [][2]int // четверти, где обязана быть подпись
+		none [][2]int // четверти, где её быть не должно
+	}{
+		{"tl,br", [][2]int{{0, 0}, {1, 1}}, [][2]int{{1, 0}, {0, 1}}},
+		{"tile", [][2]int{{0, 0}, {1, 0}, {0, 1}, {1, 1}}, nil},
+	} {
+		t.Run(tc.pos, func(t *testing.T) {
+			res, err := ProcessWithWatermark(src, Watermark{Text: "@shop", Opacity: 1, Position: tc.pos})
+			if err != nil {
+				t.Fatalf("process: %v", err)
+			}
+			if res.Width != 1200 || res.Height != 900 {
+				t.Fatalf("кадр стал %dx%d", res.Width, res.Height)
+			}
+			q := brightQuadrants(t, res.Derivatives[1600])
+			for _, c := range tc.want {
+				if q[c] < 300 {
+					t.Errorf("в четверти %v подписи нет (%d px)", c, q[c])
+				}
+			}
+			for _, c := range tc.none {
+				if q[c] > 0 {
+					t.Errorf("в четверти %v лишняя подпись (%d px)", c, q[c])
+				}
+			}
+		})
+	}
+}
+
+// На белом фоне белая подпись не видна — под ней тёмная тень.
+func TestWatermarkVisibleOnWhite(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1200, 900))
+	for i := range img.Pix {
+		img.Pix[i] = 255
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	res, err := ProcessWithWatermark(buf.Bytes(), Watermark{Text: "@shop", Opacity: 0.55})
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	out, err := vips.NewImageFromBuffer(res.Derivatives[1600])
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	defer out.Close()
+	pix, err := out.ToBytes()
+	if err != nil {
+		t.Fatalf("pixels: %v", err)
+	}
+	dark := 0
+	for i := 0; i < len(pix); i += out.Bands() {
+		if pix[i] < 200 {
+			dark++
+		}
+	}
+	if dark < 500 {
+		t.Errorf("на белом фоне знака не видно: тёмных пикселей %d", dark)
+	}
+}

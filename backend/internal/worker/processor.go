@@ -72,7 +72,13 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 		return fmt.Errorf("download original: %w", err)
 	}
 
-	res, err := imaging.ProcessWithWatermark(data, p.watermarkFor(ctx, photo.ShopID, photo.AlbumID))
+	wm := p.watermarkFor(ctx, photo.ShopID, photo.AlbumID)
+	res, err := imaging.ProcessWithWatermark(data, wm)
+	// Знак сменили, пока шла отрисовка: перерисовка альбома это фото не
+	// увидит (оно ещё не ready) — рисуем заново с новым знаком.
+	if now := p.watermarkFor(ctx, photo.ShopID, photo.AlbumID); err == nil && now != wm {
+		res, err = imaging.ProcessWithWatermark(data, now)
+	}
 	var vErr *imaging.ValidationError
 	if errors.As(err, &vErr) {
 		log.Warn("photo validation failed", "reason", vErr.Reason)

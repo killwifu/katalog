@@ -7,7 +7,7 @@ import { Icon } from '../lib/icons'
 import { setFlash } from '../lib/flash'
 import { plural } from '../lib/uploadRun'
 import { LimitLink, notUploaded, useLimitExcess } from '../lib/limits'
-import { ACCEPT_ATTR, rejectReason, uploadToAlbum } from '../lib/uploadRun'
+import { ACCEPT_ATTR, rejectReason, rejectSummary, uploadToAlbum } from '../lib/uploadRun'
 import { Thumb } from './Thumb'
 import { useShop } from './AppLayout'
 import { Toast } from './Toast'
@@ -113,7 +113,7 @@ export function AlbumPage() {
     const files = list.filter((f) => !rejectReason(f))
     const skipped = list.length - files.length
     if (files.length === 0) {
-      if (skipped) setUpError(`${notUploaded(skipped)}: формат не подходит или файл больше 10 МБ`)
+      if (skipped) setUpError(`${notUploaded(skipped)}: ${rejectSummary(list)}`)
       return
     }
     const excess = limitExcess(files.length, files.reduce((sum, f) => sum + f.size, 0))
@@ -121,7 +121,7 @@ export function AlbumPage() {
       setUpError(`${notUploaded(files.length)}: ${excess}. Выберите меньше фото, удалите ненужные или смените тариф.`)
       return
     }
-    setUpError(skipped ? `${notUploaded(skipped)}: формат не подходит или файл больше 10 МБ` : '')
+    setUpError(skipped ? `${notUploaded(skipped)}: ${rejectSummary(list)}` : '')
     const batch = files.map((file) => ({ key: crypto.randomUUID(), file, pct: 0 }))
     setPending((prev) => [...batch, ...prev])
     const result = await uploadToAlbum({
@@ -544,8 +544,7 @@ export function AlbumPage() {
           <Icon as={Upload} size={18} strokeWidth={2} />
           Загрузить фото
         </button>
-        {/* Макет 13: в шапке три кнопки и «⋯». Массовое редактирование
-            подписей в макете не нарисовано — живёт в этом меню. */}
+        {/* Макет 13: в шапке три кнопки и «⋯». */}
         <Popover open={menuOpen} onToggle={setMenuOpen} label="Ещё" title="Ещё действия" plain icon={<Icon as={Ellipsis} size={18} />}>
           <div className="popmenu" role="menu" onClick={() => setMenuOpen(false)}>
             <button role="menuitem" onClick={() => setAccess(true)} disabled={!album || album.blocked_by_moderator}>
@@ -556,10 +555,6 @@ export function AlbumPage() {
               <Icon as={Download} size={18} />
               Скачать все фото
             </button>
-            <Link to="/albums/$albumId/captions" params={{ albumId }} role="menuitem" className="popmenu__link">
-              <Icon as={Pen} size={18} />
-              Подписи ко всем фото
-            </Link>
             <hr className="popmenu__sep" />
             <button role="menuitem" onClick={() => setDeletingAlbum(true)} disabled={!album}>
               <Icon as={Trash2} size={18} />

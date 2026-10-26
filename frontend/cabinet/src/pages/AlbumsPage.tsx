@@ -79,6 +79,7 @@ export function AlbumsPage() {
   // Кнопка «Создать альбом» в приветствии «Обзора» вела просто на список —
   // нажимать приходилось второй раз.
   const [creating, setCreating] = useState(() => Boolean(search.create))
+  const [createFiles, setCreateFiles] = useState<File[]>([])
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortId>('new')
   const [filter, setFilter] = useState<Filter>(NO_FILTER)
@@ -392,8 +393,10 @@ export function AlbumsPage() {
         <NewAlbumDialog
           shopId={shop.id}
           categories={cats}
+          initialFiles={createFiles}
           onClose={(created) => {
             setCreating(false)
+            setCreateFiles([])
             if (search.create) void navigate({ to: '/albums', search: {}, replace: true })
             if (!created) return
             // Макет 11 · «Альбом создан»: уведомление с переходом в альбом.
@@ -418,8 +421,9 @@ export function AlbumsPage() {
           categories={cats}
           // Отмеченные в сетке альбомы — готовый ответ на «куда грузить».
           preselected={[...picked]}
-          onCreateAlbum={() => {
+          onCreateAlbum={(files) => {
             setUploading(false)
+            setCreateFiles(files)
             setCreating(true)
           }}
           onClose={(done) => {

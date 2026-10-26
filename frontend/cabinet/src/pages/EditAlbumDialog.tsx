@@ -11,6 +11,7 @@ import { PasswordControl, passwordError, type PasswordChoice } from './PasswordC
 import { useDialogClose } from '../lib/useDialogClose'
 import { usePointerReorder } from '../lib/pointerReorder'
 import { ConfirmDialog } from './ConfirmDialog'
+import { CategoryPicker } from './CategoryPicker'
 import { Thumb } from './Thumb'
 import { useSingleFlight } from '../lib/singleFlight'
 import { Portal } from '../lib/Portal'
@@ -201,7 +202,18 @@ export function EditAlbumDialog({
         if (passwordChanged) {
           await api.updateAlbum(shopId, album.id, { password: password.mode === 'set' ? password.value : '' })
         }
-        if (wmChanged) await api.updateAlbum(shopId, album.id, { watermark: wm })
+        if (wmChanged) {
+          await api.updateAlbum(shopId, album.id, { watermark: wm })
+          // Фото перерисовываются в фоне, и адреса картинок меняются, когда
+          // воркер закончит. Готового сигнала нет — перечитываем несколько раз.
+          // ponytail: опрос по таймеру; если альбомы в тысячи фото — событие от воркера.
+          for (const delay of [3000, 10000, 30000, 60000]) {
+            setTimeout(() => {
+              void queryClient.invalidateQueries({ queryKey: ['photos', shopId, album.id] })
+              void queryClient.invalidateQueries({ queryKey: ['albums', shopId] })
+            }, delay)
+          }
+        }
         // Новую обложку задаёт порядок (она уже стоит первой), а явно
         // выбранную раньше обложку снимаем — иначе она перекрыла бы порядок.
         const coverChanged = cover !== null && !removed.has(cover)
@@ -531,17 +543,16 @@ export function EditAlbumDialog({
               />
             </label>
 
-            <label className="field">
+            <div className="field field--cat">
               <span>Категория</span>
-              <select className="inp" value={categoryId} disabled={busy} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">Без категории</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <CategoryPicker
+                single
+                categories={categories}
+                value={categoryId ? [categoryId] : []}
+                disabled={busy}
+                onChange={(ids) => setCategoryId(ids[0] ?? '')}
+              />
+            </div>
 
             <div className="field">
               <span>Доступ</span>

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,7 +46,7 @@ func TestMediaURLs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &API{Cfg: config.Config{MediaBaseURL: tt.base}}
-			got := a.mediaURLs(shop, photo)
+			got := a.mediaURLs(0, shop, photo)
 			if got["small"] != tt.wantThumb {
 				t.Errorf("small = %q, want %q", got["small"], tt.wantThumb)
 			}
@@ -53,6 +54,15 @@ func TestMediaURLs(t *testing.T) {
 				t.Errorf("large = %q, want %q", got["large"], tt.wantLarge)
 			}
 		})
+	}
+}
+
+// После перерисовки знака адрес меняется, иначе кеш на год отдаёт старое.
+func TestMediaURLsRevision(t *testing.T) {
+	a := &API{}
+	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	if got := a.mediaURLs(3, id, id)["small"]; !strings.HasSuffix(got, "/small.webp?v=3") {
+		t.Errorf("small = %q, want suffix ?v=3", got)
 	}
 }
 

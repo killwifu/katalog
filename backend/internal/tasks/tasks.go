@@ -22,6 +22,7 @@ const (
 	TypeEmailSend        = "email:send"
 	TypeStatsDigest      = "stats:digest"
 	TypeTrafficAlert     = "stats:traffic-alert"
+	TypeAlbumRewatermark = "album:rewatermark"
 )
 
 // StatsDigestPayload — месяц дайджеста в формате YYYY-MM (UTC).
@@ -144,6 +145,24 @@ func NewPhotoProcess(photoID uuid.UUID) (*asynq.Task, error) {
 	return asynq.NewTask(TypePhotoProcess, payload,
 		asynq.MaxRetry(5),
 		asynq.Timeout(2*time.Minute),
+	), nil
+}
+
+type AlbumRewatermarkPayload struct {
+	AlbumID uuid.UUID `json:"album_id"`
+}
+
+// NewAlbumRewatermark — перерисовать готовые фото альбома с текущим
+// водяным знаком: продавец выключил или сдвинул знак и ждёт, что он
+// исчезнет и с уже загруженных фото.
+func NewAlbumRewatermark(albumID uuid.UUID) (*asynq.Task, error) {
+	payload, err := json.Marshal(AlbumRewatermarkPayload{AlbumID: albumID})
+	if err != nil {
+		return nil, fmt.Errorf("marshal album:rewatermark payload: %w", err)
+	}
+	return asynq.NewTask(TypeAlbumRewatermark, payload,
+		asynq.MaxRetry(5),
+		asynq.Timeout(30*time.Minute),
 	), nil
 }
 

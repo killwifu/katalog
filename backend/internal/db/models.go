@@ -686,6 +686,7 @@ type Shop struct {
 	BillingState  BillingState       `json:"billing_state"`
 	PaidUntil     pgtype.Timestamptz `json:"paid_until"`
 	SlugChangedAt pgtype.Timestamptz `json:"slug_changed_at"`
+	MediaRev      int32              `json:"media_rev"`
 }
 
 type Subscription struct {

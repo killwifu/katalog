@@ -474,6 +474,38 @@ func (q *Queries) ListPhotosByAlbum(ctx context.Context, arg ListPhotosByAlbumPa
 	return items, nil
 }
 
+const listReadyAlbumPhotoRefs = `-- name: ListReadyAlbumPhotoRefs :many
+SELECT id, shop_id FROM photos
+WHERE album_id = $1 AND status = 'ready'
+ORDER BY sort_order
+`
+
+type ListReadyAlbumPhotoRefsRow struct {
+	ID     uuid.UUID `json:"id"`
+	ShopID uuid.UUID `json:"shop_id"`
+}
+
+// Перерисовка деривативов после смены водяного знака альбома.
+func (q *Queries) ListReadyAlbumPhotoRefs(ctx context.Context, albumID uuid.UUID) ([]ListReadyAlbumPhotoRefsRow, error) {
+	rows, err := q.db.Query(ctx, listReadyAlbumPhotoRefs, albumID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReadyAlbumPhotoRefsRow
+	for rows.Next() {
+		var i ListReadyAlbumPhotoRefsRow
+		if err := rows.Scan(&i.ID, &i.ShopID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReadyPhotoRefs = `-- name: ListReadyPhotoRefs :many
 SELECT id, shop_id FROM photos
 WHERE status = 'ready' AND drv_size > 0

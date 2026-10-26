@@ -4,6 +4,7 @@
 package storage
 
 import (
+	"errors"
 	"bytes"
 	"context"
 	"fmt"
@@ -82,6 +83,12 @@ func (c *Client) PresignPut(ctx context.Context, key string, expiry time.Duratio
 		return "", fmt.Errorf("presign put %s: %w", key, err)
 	}
 	return u.String(), nil
+}
+
+// IsNotFound — объекта нет в бакете (ошибка Download и т.п.).
+func IsNotFound(err error) bool {
+	var resp minio.ErrorResponse
+	return errors.As(err, &resp) && (resp.Code == "NoSuchKey" || resp.StatusCode == 404)
 }
 
 // StatSize возвращает размер объекта; ok=false, если объект не существует.

@@ -1,8 +1,11 @@
 package integration
 
 import (
+	"bytes"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 // TestAlbumWatermark: у альбома свой знак (макет 11–13) — задаётся при
@@ -117,5 +120,68 @@ func TestAlbumWatermarkAppliedByWorker(t *testing.T) {
 	}
 	if string(read(a)) == string(read(b)) {
 		t.Fatal("derivatives are identical: album watermark override (enabled=false) was ignored")
+	}
+}
+
+// TestAlbumWatermarkRerendersReadyPhotos: знак «запекается» в деривативы,
+// поэтому выключение знака альбома перерисовывает уже готовые фото, а адрес
+// картинки меняется (?v=N) — иначе кеш на год показывал бы старый знак.
+// Заодно — несколько точек и «по всему кадру» проходят проверку.
+func TestAlbumWatermarkRerendersReadyPhotos(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID, map[string]any{"settings": map[string]any{
+		"watermark": map[string]any{"enabled": true, "text": "QA WATERMARK", "opacity": 1, "position": "tl,br"},
+	}}, http.StatusOK, nil)
+	album := createAlbum(c, shop.ID)
+	photo := uploadReadyPhoto(t, c, shop.ID, album.ID, makeJPEG(t, 1200, 900))
+	key := "drv/" + shop.ID + "/" + photo + "/large.webp"
+	before, err := env.store.Download(t.Context(), key)
+	if err != nil {
+		t.Fatalf("download: %v", err)
+	}
+
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID,
+		map[string]any{"watermark": map[string]any{"enabled": true, "position": "tile"}}, http.StatusOK, nil)
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID,
+		map[string]any{"watermark": map[string]any{"enabled": false, "position": "br"}}, http.StatusOK, nil)
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		var page struct {
+			Photos []struct {
+				Urls map[string]string `json:"urls"`
+			} `json:"photos"`
+		}
+		c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID+"/photos", nil, http.StatusOK, &page)
+		photos := page.Photos
+		after, err := env.store.Download(t.Context(), key)
+		if err != nil {
+			t.Fatalf("download: %v", err)
+		}
+		if len(photos) == 1 && strings.HasSuffix(photos[0].Urls["large"], "?v=2") && !bytes.Equal(before, after) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("photo not rerendered: url %v, derivative changed %v", photos, !bytes.Equal(before, after))
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	// Без знака дериватив совпадает с обработкой без знака вовсе.
+	off := createAlbum(c, shop.ID)
+	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+off.ID,
+		map[string]any{"watermark": map[string]any{"enabled": false, "position": "br"}}, http.StatusOK, nil)
+	plainID := uploadReadyPhoto(t, c, shop.ID, off.ID, makeJPEG(t, 1200, 900))
+	plain, _ := env.store.Download(t.Context(), "drv/"+shop.ID+"/"+plainID+"/large.webp")
+	after, _ := env.store.Download(t.Context(), key)
+	if !bytes.Equal(plain, after) {
+		t.Fatal("after disabling watermark the derivative still differs from an unmarked one")
+	}
+
+	if st, _ := c.do("PATCH", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID,
+		map[string]any{"watermark": map[string]any{"enabled": true, "position": "tl,tl"}}); st != http.StatusBadRequest {
+		t.Fatalf("duplicate cells: status %d, want 400", st)
 	}
 }

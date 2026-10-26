@@ -163,8 +163,8 @@ export type ShopSettings = {
   watermark?: { enabled: boolean; text: string; opacity: number; position?: WatermarkPosition }
 }
 
-// Точка кадра на сетке 3×3: строка (t/m/b) и столбец (l/c/r).
-export type WatermarkPosition = 'tl' | 'tc' | 'tr' | 'ml' | 'mc' | 'mr' | 'bl' | 'bc' | 'br'
+// Клетки сетки 3×3 через запятую («tl,br») или «tile» — см. lib/watermark.ts.
+export type WatermarkPosition = string
 
 export type AdminShop = {
   id: string

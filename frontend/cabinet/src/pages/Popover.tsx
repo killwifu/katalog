@@ -60,6 +60,11 @@ export function Popover({
       document.removeEventListener('keydown', escape, true)
     }
   }, [open, onToggle])
+  // Панель у нижнего края окна (категории последней папки в массовой
+  // загрузке) уходила за экран — докручиваем, чтобы она была видна целиком.
+  useEffect(() => {
+    if (open) box.current?.querySelector('.pop__panel')?.scrollIntoView({ block: 'nearest' })
+  }, [open])
   useMenuFocus(open, () => onToggle(false), box, '.pop__panel')
 
   return (

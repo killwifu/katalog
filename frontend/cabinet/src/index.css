@@ -64,7 +64,7 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
-body { min-height: 100vh; }
+body { min-height: calc(100vh / var(--zoom, 1)); }
 /* Названия без пробелов (артикулы, слитные слова, длинные ссылки)
    растягивали страницу вбок на телефоне — переносим где угодно. */
 h1, h2, h3, .alpage__crumbs span, .alpage__desc { overflow-wrap: anywhere; }
@@ -78,7 +78,7 @@ h1, h2, h3, .alpage__crumbs span, .alpage__desc { overflow-wrap: anywhere; }
 
 /* --- Оболочка ------------------------------------------------------------- */
 
-.app { min-height: 100vh; }
+.app { min-height: calc(100vh / var(--zoom, 1)); }
 .app__aside { display: none; }
 /* Выдвижное меню телефона скрывается ровно там, где появляется боковое.
    Было завязано на Tailwind-класс md:hidden — это 768px, а боковое меню
@@ -361,7 +361,7 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
 
 .ov { display: flex; flex-direction: column; gap: 28px; }
 .ov__row { display: grid; gap: 28px 40px; grid-template-columns: 1fr; }
-@media (min-width: 1100px) { .ov__row { grid-template-columns: 540px 1fr; } }
+@media (min-width: 1100px) { .ov__row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .ov__sep { height: 1px; background: var(--color-line); }
 .ov__head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .ov__head h2 { font-size: var(--text-h3); font-weight: 600; letter-spacing: -0.17px; }
@@ -633,10 +633,21 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
 .uptile2__msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; text-align: center; font-size: 11.5px; line-height: 14px; color: #D92D20; }
 .uptile2__msg b { font-weight: 500; }
 .uptile2__msg small { color: var(--color-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.uptile2--more { display: grid; place-items: center; font-size: var(--text-xs); color: var(--color-ink-3); }
+/* «и ещё N» — как плитка «Добавить» макета 10: пунктир #CFCCC4, r10, белая,
+   12.5/18 500 #90908A; «Показать» — ссылкой #2547CE. */
+.uptile2--more { display: grid; place-content: center; justify-items: center; gap: 2px; font-size: var(--text-xs); color: var(--color-ink-3); }
+/* Кнопка «и ещё N» (окна загрузки и создания) — только она кликабельна;
+   плитки «Загрузка…» и «ещё N — на странице альбома» остаются надписями. */
+button.uptile2--more { border: 1px dashed #CFCCC4; border-radius: 10px; background: #fff; font: inherit; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #90908A; cursor: pointer; }
+button.uptile2--more small { font-size: 12.5px; color: #2547CE; }
+button.uptile2--more:hover { border-color: #2547CE; }
 
 /* Папки массовой загрузки: строка = будущий альбом. */
 .frows { display: grid; gap: 8px; max-height: 420px; overflow: auto; padding: 0; border: 1px solid transparent; border-radius: 12px; list-style: none; }
+/* Открытый список категорий у папки срезался прокруткой списка папок
+   (правка 9 из списка 26.10): пока он открыт, под папками есть место, и
+   Popover докручивает список до панели — прокрутка не сбрасывается. */
+.frows:has(.pop__panel) { padding-bottom: 320px; }
 .frow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 12px; padding: 12px; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); }
 .frow--empty { background: var(--color-surface-alt); }
 .frow__ico { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: var(--color-brand-soft); color: var(--color-brand); }
@@ -714,7 +725,7 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
 .skel--inp { flex: 1; height: 40px; }
 .skel--line { height: 12px; margin-bottom: 8px; }
 .skel--short { width: 60%; }
-.alcard__cover.skel { border-radius: 0; }
+.alcard__cover.skel { border-radius: 11px 11px 0 0; }
 @keyframes skel { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 
@@ -832,10 +843,23 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
 
 /* Предпросмотр знака в настройках повторяет выбранное положение. */
 .wmprev { padding: 10px 14px; }
-.wmprev--tl, .wmprev--tc, .wmprev--tr { align-items: start; }
-.wmprev--bl, .wmprev--bc, .wmprev--br { align-items: end; }
-.wmprev--tl, .wmprev--ml, .wmprev--bl { justify-items: start; }
-.wmprev--tr, .wmprev--mr, .wmprev--br { justify-items: end; }
+/* Превью — та же сетка 3×3: копия подписи в каждой выбранной клетке. */
+.wmprev { grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; }
+.wmprev--tile span { font-size: 13px; }
+.wmprev__at--tl { grid-area: 1 / 1; align-self: start; justify-self: start; }
+.wmprev__at--tc { grid-area: 1 / 2; align-self: start; justify-self: center; }
+.wmprev__at--tr { grid-area: 1 / 3; align-self: start; justify-self: end; }
+.wmprev__at--ml { grid-area: 2 / 1; align-self: center; justify-self: start; }
+.wmprev__at--mc { grid-area: 2 / 2; align-self: center; justify-self: center; }
+.wmprev__at--mr { grid-area: 2 / 3; align-self: center; justify-self: end; }
+.wmprev__at--bl { grid-area: 3 / 1; align-self: end; justify-self: start; }
+.wmprev__at--bc { grid-area: 3 / 2; align-self: end; justify-self: center; }
+.wmprev__at--br { grid-area: 3 / 3; align-self: end; justify-self: end; }
+.wmpick { display: flex; flex-direction: column; gap: 8px; }
+.wmpick .wmgrid { width: fit-content; }
+/* «По всей области» — подписью как «Положение» в окнах макета 10–12: 12.5/18 #62615C. */
+.wmpick__tile { display: flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 18px; color: #62615C; white-space: nowrap; cursor: pointer; }
+.wmpick__tile input { width: 16px; height: 16px; margin: 0; accent-color: #2547CE; }
 
 /* Подсказка о перестановке — только там, где есть мышь: на телефоне
    перетаскивания плиток нет, и обещать его нельзя. */
@@ -939,12 +963,29 @@ button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 .uptile2__bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--color-brand); transition: width 0.2s; }
 
 /* Массовая загрузка · категории папки: поиск и дерево с галочками. */
-.catpick { width: 260px; padding: 10px; }
-.catpick > .inp { width: 100%; height: 36px; padding: 0 10px; font-size: var(--text-sm); }
-.catpick__list { max-height: 240px; margin-top: 8px; overflow-y: auto; }
-.catpick__list label { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; font-size: var(--text-sm); cursor: pointer; }
-.catpick__list label:hover { background: var(--color-surface-alt); }
-.catpick__list .catpick__sub { padding-left: 26px; }
+/* Список категорий — макет 10 · «Выбор категории у папки» (×1/1.38): панель
+   280, r12, обводка #E4E2DC, поля 8, шаг 6; поиск 36 r8 #F1F0EC с лупой;
+   строка 38 r8, категория 14/500 #1A1A18, подкатегория 14 #62615C с
+   отступом 38; выбранная — подложка #E9ECFB. */
+.catpick { display: flex; flex-direction: column; gap: 6px; width: 280px; padding: 8px; }
+.catpick__search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; background: #F1F0EC; color: #90908A; }
+.catpick__search input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: #1A1A18; outline: none; }
+.catpick__search:focus-within { box-shadow: 0 0 0 2px var(--color-brand); }
+.catpick__list { max-height: 260px; overflow-y: auto; }
+.catpick__row { display: flex; align-items: center; min-height: 38px; padding-left: 4px; border-radius: 8px; }
+.catpick__row:hover { background: #F6F5F3; }
+.catpick__row.is-on { background: #E9ECFB; }
+.catpick__row label { display: flex; flex: 1; align-items: center; gap: 10px; min-height: 38px; padding-right: 8px; font-size: 14px; font-weight: 500; color: #1A1A18; cursor: pointer; }
+.catpick__row input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-brand); }
+.catpick__sub { padding-left: 38px; }
+.catpick__sub label { font-weight: 400; color: #62615C; }
+.catpick__fold { display: grid; flex: none; place-items: center; width: 24px; height: 24px; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; color: #62615C; cursor: pointer; }
+/* Категория в окнах альбома — поле «select / Категория» макета 11: 44, r12,
+   #F6F5F3, обводка #CFCCC4, поля 14, текст 14 #1A1A18; список той же ширины. */
+.field--cat .pop__btn { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 44px; padding: 0 14px; border: 1px solid #CFCCC4; border-radius: 12px; background: #F6F5F3; font-size: 14px; font-weight: 400; color: #1A1A18; }
+.field--cat .pop__btn .lucide { color: #90908A; }
+.field--cat .pop__panel { left: 0; right: 0; }
+.field--cat .catpick { width: auto; }
 .catpick__empty { padding: 8px 4px; font-size: var(--text-sm); color: var(--color-ink-3); }
 .catpick__clear { width: 100%; margin-top: 6px; padding: 8px; border: 0; border-top: 1px solid var(--color-line); background: none; font: inherit; font-size: var(--text-xs); color: var(--color-ink-2); cursor: pointer; }
 .catpick__static { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--color-ink-2); }
@@ -1605,7 +1646,7 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
    ========================================================================== */
 @media (min-width: 860px) {
   .app { grid-template-columns: 184px minmax(0, 1fr); background: var(--color-surface); }
-  .app__aside.side { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 16px; overflow-y: auto; background: #F1F0EC; border-right: 1px solid #E4E2DC; }
+  .app__aside.side { position: sticky; top: 0; display: flex; flex-direction: column; height: calc(100vh / var(--zoom, 1)); padding: 16px; overflow-y: auto; background: #F1F0EC; border-right: 1px solid #E4E2DC; }
   .app__main { padding: 0; background: var(--color-surface); }
   .app__top { display: flex; justify-content: flex-end; align-items: center; gap: 16px; height: 64px; margin: 0; padding: 0 24px; border-bottom: 1px solid #E4E2DC; background: var(--color-surface); }
   .app__body { padding: 28px; }
@@ -1675,7 +1716,10 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .alcard__pick { left: 10px; top: 10px; }
 /* Обложка в макете 172×172 при карточке 172 с внутренней обводкой: шире содержимого на 2px
    (правый край срезается), высота карточки 266. Выбранная карточка обводку не меняет. */
-.alcard__cover { width: calc(100% + 2px); }
+/* Карточка не обрезает содержимое: иначе подсказка у замка срезалась краем
+   карточки (правка 12 из списка 26.10). Скругление держит сама обложка. */
+.alcard { overflow: visible; }
+.alcard__cover { overflow: hidden; border-radius: 11px 11px 0 0; }
 .alcard:has(input:checked) { border-color: #E4E2DC; }
 .alcard__edit { right: 10px; top: 10px; width: 20px; height: 20px; border: 1px solid #CFCCC4; border-radius: 6px; background: #fff; color: #62615C; }
 .alcard__edit .lucide { width: 12px; height: 12px; }
@@ -1711,7 +1755,7 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 @media (min-width: 1200px) {
   .app__body:has(.ovsec) { padding: 36px 48px; }
   .ov__row { gap: 40px; }
-  .ov__row--top { grid-template-columns: 540px 532px; }
+  .ov__row--top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .ovsec { display: flex; align-items: center; gap: 28px; }
   .ov__sep { margin: 0; }
 }
@@ -1889,7 +1933,10 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
    (4 вокруг и между, r12), вкладка 38 r9, активная — белая с тенью 0 1 3 /8%,
    14/20 600; поле альбомов 46 r10; зона 230; низ без границы, кнопки через 8. */
 @media (min-width: 641px) {
-  .modal.modal--upload { max-width: 760px; gap: 20px; padding: 24px 28px; }
+  /* Шире и выше макета (правка 9 из списка 26.10): в низком окне списку
+     категорий у папки было негде раскрыться. */
+  .modal.modal--upload { max-width: 920px; min-height: min(680px, calc(100vh / var(--zoom, 1) - 48px)); gap: 20px; padding: 24px 28px; }
+  .modal--upload .modal__foot { margin-top: auto; }
   .modal--upload .modal__head h2 { line-height: 28px; }
   .modal--upload .modal__head { align-items: center; }
   .modal--upload .modal__x { width: 28px; height: 28px; min-height: 0; }
@@ -2341,3 +2388,12 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .wm__info::after { content: ''; position: absolute; inset: -9px; }
 .app button.wm__info:not([class*="uppy"]):not(.hidden) { display: inline-grid; min-width: 0; min-height: 0; }
 .wm__tip { max-width: 260px; margin: -2px 0 8px; font-size: 12.5px; line-height: 18px; color: var(--color-ink-2); }
+
+/* vh под zoom масштабируется вместе со всем, и 100vh становится выше окна:
+   высоты от окна делим на --zoom. Координаты в JS — lib/zoom.ts. */
+/* Широкий монитор (правка 15 из списка 26.10): макет рассчитан на 1440, и на
+   2560 всё выглядело мелким и пустым. Масштабируем интерфейс целиком, а не
+   растягиваем колонки — пропорции макета сохраняются. */
+@media (min-width: 1800px) { html { zoom: 1.15; --zoom: 1.15; } }
+@media (min-width: 2200px) { html { zoom: 1.3; --zoom: 1.3; } }
+@media (min-width: 2800px) { html { zoom: 1.5; --zoom: 1.5; } }

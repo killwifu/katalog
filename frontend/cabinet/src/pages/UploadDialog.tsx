@@ -41,7 +41,8 @@ export function UploadDialog({
   albums: Album[]
   categories: Category[]
   preselected: string[]
-  onCreateAlbum: () => void
+  // files — фото, уже выбранные в окне: переезжают в новый альбом.
+  onCreateAlbum: (files: File[]) => void
   // done — текст для уведомления на экране альбомов; пусто, если окно
   // закрыли, ничего не загрузив.
   onClose: (done?: string) => void
@@ -127,7 +128,7 @@ function RegularUpload({
   albums: Album[]
   categories: Category[]
   preselected: string[]
-  onCreateAlbum: () => void
+  onCreateAlbum: (files: File[]) => void
   onClose: (done?: string) => void
   onLock: (locked: boolean) => void
   closeRef: React.MutableRefObject<() => void>
@@ -136,6 +137,8 @@ function RegularUpload({
   const fileInput = useRef<HTMLInputElement>(null)
   const [selected, setSelected] = useState<string[]>(preselected)
   const [items, setItems] = useState<Item[]>([])
+  // «и ещё N» раскрывает следующую порцию миниатюр.
+  const [previewLimit, setPreviewLimit] = useState(PREVIEW_LIMIT)
   const [menuKey, setMenuKey] = useState<string | null>(null)
   const [over, setOver] = useState(false)
   const [phase, setPhase] = useState<'pick' | 'uploading' | 'partial'>('pick')
@@ -276,7 +279,7 @@ function RegularUpload({
   const itemError = (key: string) => selected.map((a) => failed[pair(a, key)]).find(Boolean)
 
   const busy = phase === 'uploading'
-  const shown = items.slice(0, PREVIEW_LIMIT)
+  const shown = items.slice(0, previewLimit)
 
   let footText: string
   if (overLimit && phase === 'pick') footText = overLimit
@@ -306,7 +309,7 @@ function RegularUpload({
               setSelected(next)
               setNeedAlbum(false)
             }}
-            onCreateAlbum={onCreateAlbum}
+            onCreateAlbum={() => onCreateAlbum(items.map((i) => i.file))}
           />
           <WatermarkControl shop={shop} disabled={phase !== 'pick'} />
         </div>
@@ -425,7 +428,10 @@ function RegularUpload({
                 )
               })}
               {items.length > shown.length && (
-                <div className="uptile2 uptile2--more">и ещё {items.length - shown.length}</div>
+                <button className="uptile2 uptile2--more" onClick={() => setPreviewLimit((n) => n + PREVIEW_LIMIT)}>
+                  и ещё {items.length - shown.length}
+                  <small>Показать</small>
+                </button>
               )}
             </div>
           </div>

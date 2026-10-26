@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
+import { pageZoom } from './zoom'
 
 // Плавная перестановка (FLIP): после рендера сравниваем, где элементы были
 // и где оказались, и доводим их до нового места анимацией, а не прыжком.
@@ -14,6 +15,7 @@ export function useFlip(container: RefObject<HTMLElement | null>, attr: string) 
     // Относительно контейнера: прокрутка страницы между рендерами не должна
     // выглядеть как переезд.
     const base = root.getBoundingClientRect()
+    const z = pageZoom()
     for (const el of root.querySelectorAll<HTMLElement>(`[data-${attr}]`)) {
       const key = el.getAttribute(`data-${attr}`)
       if (!key) continue
@@ -21,7 +23,7 @@ export function useFlip(container: RefObject<HTMLElement | null>, attr: string) 
       // Посреди анимации прямоугольник включает её сдвиг: вычитаем его,
       // иначе повторный рендер (ответ сервера) перезапускал переезд рывком.
       const m = new DOMMatrixReadOnly(getComputedStyle(el).transform === 'none' ? undefined : getComputedStyle(el).transform)
-      const now = { x: r.left - base.left - m.m41, y: r.top - base.top - m.m42 }
+      const now = { x: (r.left - base.left) / z - m.m41, y: (r.top - base.top) / z - m.m42 }
       next.set(key, now)
       const was = last.current.get(key)
       if (!was || reduce || el.classList.contains('is-dragging') || el.hasAttribute('data-lifted')) continue

@@ -264,6 +264,7 @@ func run(m *testing.M) int {
 	}
 	env.processor = processor
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
+	mux.HandleFunc(tasks.TypeAlbumRewatermark, processor.HandleAlbumRewatermark)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	mux.HandleFunc(tasks.TypeBillingReconcile, processor.HandleBillingReconcile)
 	mux.HandleFunc(tasks.TypeEmailSend, processor.HandleEmailSend)

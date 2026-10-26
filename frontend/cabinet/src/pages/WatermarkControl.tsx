@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useId, useState } from 'react'
 import { api, type AlbumWatermark, type Shop, type WatermarkPosition } from '../api'
 import { Icon } from '../lib/icons'
-import { WATERMARK_POSITIONS as POSITIONS } from '../lib/watermark'
+import { WATERMARK_POSITIONS as POSITIONS, WATERMARK_TILE, toggleWatermarkCell, watermarkCells } from '../lib/watermark'
 
 // Водяной знак — настройка витрины, а не этой загрузки, поэтому
 // переключатель сохраняется сразу: оставь мы его «до нажатия Загрузить»,
@@ -69,7 +69,7 @@ export function WatermarkControl({
   }
 
   const tipText = onChange
-    ? 'Знак для фото этого альбома. Текст — подпись витрины из настроек. Накладывается на новые фото; уже загруженные не меняются.'
+    ? 'Знак для фото этого альбома. Текст — подпись витрины из настроек. После сохранения применяется и к уже загруженным фото альбома.'
     : 'Знаком служит название витрины — текст можно поменять в настройках. Накладывается на новые фото; уже загруженные не меняются.'
 
   return (
@@ -109,20 +109,50 @@ export function WatermarkControl({
       </div>
       <div>
         <span className="wm__label">Положение</span>
-        <div className="wmgrid" role="radiogroup" aria-label="Положение водяного знака">
-          {POSITIONS.map((p) => (
-            <button
-              key={p.id}
-              role="radio"
-              aria-checked={position === p.id}
-              aria-label={p.label}
-              title={p.label}
-              disabled={disabled || !enabled}
-              onClick={() => save({ enabled, position: p.id })}
-            />
-          ))}
-        </div>
+        <WatermarkGrid position={position} disabled={disabled || !enabled} onChange={(p) => save({ enabled, position: p })} />
       </div>
+    </div>
+  )
+}
+
+// Сетка положения знака: можно отметить несколько клеток или «По всей
+// области» (правка 3 из списка 26.10). Общая для окон и настроек витрины.
+export function WatermarkGrid({
+  position,
+  disabled,
+  onChange,
+}: {
+  position: WatermarkPosition | undefined
+  disabled: boolean
+  onChange: (next: WatermarkPosition) => void
+}) {
+  const tile = position === WATERMARK_TILE
+  const cells = watermarkCells(position)
+  return (
+    <div className="wmpick">
+      <div className="wmgrid" role="group" aria-label="Положение водяного знака">
+        {POSITIONS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            role="checkbox"
+            aria-checked={cells.includes(p.id)}
+            aria-label={p.label}
+            title={p.label}
+            disabled={disabled}
+            onClick={() => onChange(toggleWatermarkCell(position, p.id))}
+          />
+        ))}
+      </div>
+      <label className="wmpick__tile">
+        <input
+          type="checkbox"
+          checked={tile}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked ? WATERMARK_TILE : 'br')}
+        />
+        По всей области
+      </label>
     </div>
   )
 }

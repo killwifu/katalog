@@ -52,6 +52,7 @@ export function OverviewPage() {
 
   const photos = billing.data?.usage.photos
   const gbUsed = shop.storage_used / 1024 / 1024 / 1024
+  const mbUsed = shop.storage_used / 1024 / 1024
   const gbMax = shop.storage_max / 1024 / 1024 / 1024
   const num = (n: number) => n.toLocaleString('ru-RU')
 
@@ -318,8 +319,14 @@ export function OverviewPage() {
             </p>
           ) : (
             <p>
-              <b className="bignum">{gbUsed.toFixed(1).replace('.', ',')}</b>
-              <span>/ из {gbMax.toFixed(0)} ГБ</span>
+              {/* Меньше гигабайта — в мегабайтах: «0,0 / из 5 ГБ» выглядело
+                  так, будто объём не считается вовсе. */}
+              <b className="bignum">
+                {gbUsed >= 1 ? gbUsed.toFixed(1).replace('.', ',') : mbUsed < 10 ? mbUsed.toFixed(1).replace('.', ',') : num(Math.round(mbUsed))}
+              </b>
+              <span>
+                {gbUsed >= 1 ? 'ГБ' : 'МБ'} / из {gbMax.toFixed(0)} ГБ
+              </span>
             </p>
           )}
           {unit === 'photos' && photosNear && (
@@ -370,7 +377,7 @@ export function OverviewPage() {
           ) : (
             <p>
               <b className="bignum">{num(sum(week, 'views'))}</b>
-              <span>просмотров витрины</span>
+              <span>{plural(sum(week, 'views'), 'просмотр', 'просмотра', 'просмотров')} витрины</span>
             </p>
           )}
           <div className={`ov__metrics flex flex-wrap gap-x-5 gap-y-1 py-2 ${stats.isError || stats.isPending || fresh ? 'hidden' : ''}`}>

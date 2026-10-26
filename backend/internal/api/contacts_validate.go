@@ -63,7 +63,7 @@ func validateSettings(raw json.RawMessage) string {
 		return "watermark.opacity must be between 0 and 1"
 	}
 	if !imagingmeta.ValidWatermarkPosition(wm.Position) {
-		return "watermark.position must be one of " + strings.Join(imagingmeta.WatermarkPositions, ", ")
+		return "watermark.position must be \"tile\" or comma-separated distinct cells of " + strings.Join(imagingmeta.WatermarkPositions, ", ")
 	}
 	return ""
 }
