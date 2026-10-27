@@ -244,7 +244,7 @@ export function NewAlbumDialog({
         setError(
           e instanceof ApiError && e.code === 'album_limit'
             ? 'Достигнут предел числа альбомов — удалите ненужные, чтобы создать новый.'
-            : `Не удалось создать альбом: ${errorText(e)}. Проверьте интернет и попробуйте ещё раз.`,
+            : `Не удалось создать альбом: ${errorText(e)}`,
         )
         setBusy('no')
         return

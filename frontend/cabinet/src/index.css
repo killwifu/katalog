@@ -895,8 +895,6 @@ button.uptile2--more:hover { border-color: #2547CE; }
 .modal--form { max-width: 520px; }
 button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 .prog--full > span { background: var(--color-danger); }
-.side__usage--warn p + p { color: #8A5A00; font-weight: 500; }
-.side__usage--full p + p { color: var(--color-danger); font-weight: 500; }
 
 /* Категории · порядок альбомов: синяя линия показывает, куда встанет альбом. */
 .alcard[data-dropbefore] { position: relative; }
@@ -1439,7 +1437,7 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .popmenu__check { margin-left: auto; color: var(--color-brand) !important; }
 @media (max-width: 640px) {
   .pop__shade { display: block; position: fixed; inset: 0; z-index: 60; background: rgb(26 26 24 / 40%); }
-  .albar .pop__panel--sheet, .pop__panel--sheet { position: fixed; z-index: 61; left: 0; right: 0; top: auto; bottom: 0; max-height: 85vh; overflow-y: auto; min-width: 0; padding: 8px 8px calc(12px + env(safe-area-inset-bottom)); border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / 18%); }
+  .albar .pop__panel--sheet, .cattree__more .pop__panel--sheet, .pop__panel--sheet { position: fixed; z-index: 61; left: 0; right: 0; top: auto; bottom: 0; max-height: 85vh; overflow-y: auto; min-width: 0; padding: 8px 8px calc(12px + env(safe-area-inset-bottom)); border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / 18%); }
   .pop__panel--sheet::before { content: ''; display: block; width: 40px; height: 4px; margin: 0 auto 8px; border-radius: 2px; background: #D9D7D1; }
   .pop__sheethead { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px 12px; }
   .pop__sheethead b { font-size: 18px; font-weight: 600; }
@@ -1666,6 +1664,10 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .side__usage p, .side__usage p + p { margin: 0; font-size: 12.5px; line-height: 20px; color: #62615C; }
 .side__usage .prog { height: 6px; margin: 0; border-radius: 3px; background: #F1F0EC; }
 .side__usage .prog > span { border-radius: 3px; background: #2547CE; }
+.side__usage--warn p ~ p { color: #8A5A00; font-weight: 500; }
+.side__usage--full p ~ p { color: var(--color-danger); font-weight: 500; }
+.side__usage .prog--warn > span { background: #C8891A; }
+.side__usage .prog--full > span { background: var(--color-danger); }
 /* Шапка: переключатель аккаунта и «Мой профиль» (макет 09 · v2). */
 .app__top .acct__btn { gap: 8px; height: 40px; min-height: 40px; padding: 4px 10px 4px 4px; border-radius: 999px; font-size: 14px; line-height: 22px; font-weight: 500; color: #1A1A18; }
 .app__top .acct__btn i { width: 32px; height: 32px; font-size: 11px; line-height: 14px; font-weight: 600; background: #E9ECFB; color: #1B2F86; }
@@ -1999,7 +2001,8 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
   .algallery .photo__badge { left: 10px; bottom: 10px; padding: 2px 8px; border-radius: 999px; background: rgb(26 26 23 / 72%); font-size: 11.5px; line-height: 17px; font-weight: 500; }
   .algallery .photo__del { right: 10px; top: 10px; width: 24px; height: 24px; min-height: 0; box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
   .algallery .photo__del .lucide { width: 14px; height: 14px; }
-  .algallery .photo__setcover { display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 4px; background: rgb(26 26 23 / 72%); font-size: 12.5px; line-height: 18px; font-weight: 500; }
+  .algallery .group:hover > .photo__setcover, .algallery .photo__setcover:focus-visible { display: flex; }
+  .algallery .photo__setcover { display: none; align-items: center; justify-content: center; height: 32px; padding: 0 4px; background: rgb(26 26 23 / 72%); font-size: 12.5px; line-height: 18px; font-weight: 500; }
   .algallery .alcard__pick { left: 10px; top: 10px; }
 }
 @media (min-width: 1200px) {
@@ -2397,3 +2400,7 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 @media (min-width: 1800px) { html { zoom: 1.15; --zoom: 1.15; } }
 @media (min-width: 2200px) { html { zoom: 1.3; --zoom: 1.3; } }
 @media (min-width: 2800px) { html { zoom: 1.5; --zoom: 1.5; } }
+
+/* Ошибка всегда красная: .text-danger из слоя утилит проигрывал .hint и .modal__foot > .hint. */
+.text-danger { color: var(--color-danger) !important; }
+.hint--err { color: #D92D20 !important; }
