@@ -19,7 +19,6 @@ import { TrashPage } from './pages/TrashPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ContactsPage } from './pages/ContactsPage'
-import { DowngradePage } from './pages/DowngradePage'
 import { lazyPage } from './lib/lazyPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { AppLayout } from './pages/AppLayout'
@@ -173,12 +172,6 @@ const contactsRoute = createRoute({
   component: ContactsPage,
 })
 
-const downgradeRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/downgrade',
-  component: DowngradePage,
-})
-
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -220,7 +213,7 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
-    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, downgradeRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
+    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
   ]),
   basepath: '/app',
   defaultErrorComponent: ({ error }) => <ErrorPage error={error} />,

@@ -1,4 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { Lock } from 'lucide-react'
+import { Icon } from '../lib/icons'
 import { useState } from 'react'
 import {
   CartesianGrid,
@@ -32,12 +35,49 @@ const PERIODS = [
   { days: 90, label: '90 дней' },
 ]
 
+// Бесплатный тариф (макет 19 · «Бесплатный тариф»): содержимое размыто
+// и неактивно, поверх — карточка с замком и «Выбрать тариф».
+function StatsLock() {
+  return (
+    <div className="stlock">
+      <div className="stlock__ghost" aria-hidden="true">
+        <div className="stlock__row">
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} />
+          ))}
+        </div>
+        <span className="stlock__chart" />
+        <div className="stlock__row stlock__row--2">
+          <span />
+          <span />
+        </div>
+      </div>
+      <div className="stlock__card">
+        <span className="stlock__ico" aria-hidden="true">
+          <Icon as={Lock} size={22} />
+        </span>
+        <h2>Аналитика доступна на платных тарифах</h2>
+        <p>
+          Чтобы получить доступ к аналитике, перейдите на платный тариф: просмотры витрины, клики «Написать» по
+          каналам, популярные альбомы и фото.
+        </p>
+        <Link to="/billing" className="btn btn--primary btn--pill">
+          Выбрать тариф
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export function StatsPage() {
   const shop = useShop()
   const [days, setDays] = useState(30)
+  // Аналитика — только на платных тарифах (сервер на Бесплатном отвечает 403).
+  const free = shop.plan === 'free'
   const stats = useQuery({
     queryKey: ['stats', shop.id, days],
     queryFn: () => api.getStats(shop.id, days),
+    enabled: !free,
   })
 
   return (
@@ -51,6 +91,7 @@ export function StatsPage() {
             <button
               key={p.days}
               onClick={() => setDays(p.days)}
+              disabled={free}
               aria-pressed={days === p.days}
               className={`btn btn--sm ${days === p.days ? 'btn--primary' : 'btn--ghost'}`}
             >
@@ -66,7 +107,8 @@ export function StatsPage() {
         Просмотры обновляются раз в сутки, ночью: сегодняшние появятся завтра. Нажатия
         «Написать» учитываются сразу.
       </p>
-      {stats.isPending && <p className="text-ink-2">Загрузка…</p>}
+      {free && <StatsLock />}
+      {!free && stats.isPending && <p className="text-ink-2">Загрузка…</p>}
       {stats.isError && <p className="text-danger" role="alert">Не удалось загрузить статистику.</p>}
       {stats.data && <StatsBody stats={stats.data} days={days} />}
     </div>
