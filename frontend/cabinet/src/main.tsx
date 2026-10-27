@@ -27,7 +27,8 @@ import { AuthPage } from './pages/AuthPage'
 import { BillingPage } from './pages/BillingPage'
 import { CaptionsPage } from './pages/CaptionsPage'
 import { ErrorPage, NotFoundPage } from './pages/ErrorPage'
-import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
+import { CheckEmailPage, ConfirmEmailPage, ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from './pages/PasswordPages'
+import { captureIntent } from './lib/signupIntent'
 
 // Recharts тяжёлый — страница статистики грузится отдельным чанком.
 const StatsPage = lazyPage(() =>
@@ -43,10 +44,13 @@ const rootRoute = createRootRoute({ component: Outlet })
 
 // Куда вернуть после входа: продавец открывал ссылку из письма (жалоба →
 // /admin, оплата → /billing) и после входа оказывался на «Обзоре».
-const redirectSearch = (s: Record<string, unknown>): { redirect?: string } =>
-  typeof s.redirect === 'string' && s.redirect.startsWith('/') && !s.redirect.startsWith('//')
+// email — подставить почту («Войти» с регистрации и после смены пароля).
+const redirectSearch = (s: Record<string, unknown>): { redirect?: string; email?: string } => ({
+  ...(typeof s.redirect === 'string' && s.redirect.startsWith('/') && !s.redirect.startsWith('//')
     ? { redirect: s.redirect }
-    : {}
+    : {}),
+  ...(typeof s.email === 'string' ? { email: s.email } : {}),
+})
 
 // Уже вошедшему форма входа ни к чему. Спрашиваем сервер, только если есть
 // подсказка katalog_signed: иначе каждый аноним на форме входа получал
@@ -71,6 +75,13 @@ const loginRoute = createRoute({
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
+  // Тариф с лендинга (lib/signupIntent): ?trial=1 или ?plan=…&period=year.
+  // trial — числом: строку «1» роутер записал бы в адрес как %221%22.
+  validateSearch: (s: Record<string, unknown>): { plan?: string; period?: string; trial?: 1 } => ({
+    ...(typeof s.plan === 'string' ? { plan: s.plan } : {}),
+    ...(typeof s.period === 'string' ? { period: s.period } : {}),
+    ...(s.trial === 1 || s.trial === '1' ? { trial: 1 as const } : {}),
+  }),
   beforeLoad: skipIfSignedIn,
   component: () => <AuthPage mode="register" />,
 })
@@ -100,16 +111,38 @@ const verifyEmailRoute = createRoute({
   component: VerifyEmailPage,
 })
 
+const confirmEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/confirm-email',
+  validateSearch: tokenSearch,
+  component: ConfirmEmailPage,
+})
+
+// «Подтвердите почту» (макет 05) — только с сессией неподтверждённого аккаунта.
+const checkEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/check-email',
+  beforeLoad: async () => {
+    const me = await api.me().catch(() => null)
+    if (!me) throw redirect({ to: '/login' })
+    if (me.email_verified) throw redirect({ to: '/' })
+  },
+  component: CheckEmailPage,
+})
+
 // Все приватные экраны — под guard'ом сессии.
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   beforeLoad: async ({ location }) => {
+    let me
     try {
-      await api.me()
+      me = await api.me()
     } catch {
       throw redirect({ to: '/login', search: location.href === '/' ? {} : { redirect: location.href } })
     }
+    // В кабинет — только с подтверждённой почтой (макет 05).
+    if (!me.email_verified) throw redirect({ to: '/check-email' })
   },
   component: AppLayout,
 })
@@ -213,6 +246,8 @@ const router = createRouter({
     forgotPasswordRoute,
     resetPasswordRoute,
     verifyEmailRoute,
+    confirmEmailRoute,
+    checkEmailRoute,
     appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
   ]),
   basepath: '/app',
@@ -226,6 +261,9 @@ declare module '@tanstack/react-router' {
   }
 }
 
+// Тариф из адреса (регистрация с лендинга, ссылка из письма, возврат из
+// входа через Яндекс/VK) — до создания витрины.
+captureIntent()
 installModalFocusTrap()
 installErrorReporting()
 

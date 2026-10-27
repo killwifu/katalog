@@ -2,6 +2,7 @@ import { CircleCheck } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, ApiError, type ShopSettings, errorText } from '../api'
+import { EmailChange } from './EmailChange'
 import { Icon } from '../lib/icons'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { WATERMARK_TILE, watermarkCells } from '../lib/watermark'
@@ -269,7 +270,6 @@ export function SettingsPage() {
 // выйдя из кабинета и дождавшись письма. Отдельная форма: страница
 // выше — одна общая форма витрины.
 function AccountSection() {
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me })
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const change = useMutation({
@@ -289,7 +289,7 @@ function AccountSection() {
   return (
     <section ref={box} className="box mt-6 max-w-2xl" id="account">
       <h2>Аккаунт</h2>
-      {me.data?.email && <p className="mb-3 text-sm text-ink-2">Почта для входа: {me.data.email}</p>}
+      <EmailChange />
       <form
         onSubmit={(e) => {
           e.preventDefault()
