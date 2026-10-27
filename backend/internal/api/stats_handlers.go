@@ -58,6 +58,9 @@ type statsTopPhoto struct {
 // handleShopStats — GET /shops/{shopID}/stats?days=7|30|90.
 func (a *API) handleShopStats(w http.ResponseWriter, r *http.Request) {
 	shop := shopFromCtx(r)
+	if !requirePaidPlan(w, shop, "analytics_plan_required", "analytics is not available on the free plan") {
+		return
+	}
 	days := queryInt(r, "days", 30, 1, 365)
 
 	now := time.Now().UTC()
@@ -175,6 +178,9 @@ func (a *API) handleAlbumStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	shop := shopFromCtx(r)
+	if !requirePaidPlan(w, shop, "analytics_plan_required", "analytics is not available on the free plan") {
+		return
+	}
 	views, err := a.Q.GetAlbumWeekViews(r.Context(), db.GetAlbumWeekViewsParams{
 		ShopID:  shop.ID,
 		AlbumID: uuid.NullUUID{UUID: album.ID, Valid: true},

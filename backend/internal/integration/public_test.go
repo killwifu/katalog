@@ -314,6 +314,7 @@ func TestReplyTimeVisibility(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
+	makePaid(t, shop.ID)
 
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID, map[string]any{
 		"settings": map[string]any{

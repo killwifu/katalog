@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 import { api, type AlbumWatermark, type Shop, type WatermarkPosition } from '../api'
 import { Icon } from '../lib/icons'
@@ -19,7 +20,7 @@ export function shopWatermark(shop: Shop): AlbumWatermark {
 // Без них — общий знак магазина, сохраняется сразу (окно загрузки).
 export function WatermarkControl({
   shop,
-  disabled,
+  disabled: busy,
   value,
   onChange,
 }: {
@@ -28,6 +29,11 @@ export function WatermarkControl({
   value?: AlbumWatermark
   onChange?: (next: AlbumWatermark) => void
 }) {
+  // На Бесплатном знак недоступен (макеты 10–12, 17 · «Free-тариф»):
+  // переключатель неактивен, под блоком — подсказка со сменой тарифа.
+  // Знак, включённый на платном, продолжает работать.
+  const free = shop.plan === 'free'
+  const disabled = busy || free
   const queryClient = useQueryClient()
   const saved = shop.settings.watermark
   const [ownEnabled, setEnabled] = useState(Boolean(saved?.enabled && saved.text))
@@ -73,6 +79,7 @@ export function WatermarkControl({
     : 'Знаком служит название витрины — текст можно поменять в настройках. Накладывается на новые фото; уже загруженные не меняются.'
 
   return (
+    <>
     <div className="wm">
       <div>
         <span className="wm__label">
@@ -112,6 +119,21 @@ export function WatermarkControl({
         <WatermarkGrid position={position} disabled={disabled || !enabled} onChange={(p) => save({ enabled, position: p })} />
       </div>
     </div>
+    {free && <WatermarkPaidHint />}
+    </>
+  )
+}
+
+export function WatermarkPaidHint() {
+  return (
+    <p className="hint hint--i">
+      <span>
+        Водяной знак доступен на платных тарифах.{' '}
+        <Link to="/billing" className="font-medium text-brand">
+          Сменить тариф
+        </Link>
+      </span>
+    </p>
   )
 }
 

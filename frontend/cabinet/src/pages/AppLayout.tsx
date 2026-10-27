@@ -235,7 +235,9 @@ export function AppLayout() {
           {/* Ориентир «основное содержимое» для чтения с экрана — только тело
               страницы, без шапки с аккаунтом. */}
           <main className="app__body">
-          {shop.status === 'suspended' ? (
+          {/* Окончание оплаты витрину не скрывает (аккаунт переходит на
+              Бесплатный) — общего баннера про подписку больше нет. */}
+          {shop.status === 'suspended' && (
             <div className="alert alert--danger">
               <span className="flex-1">
                 Магазин заблокирован модератором: витрина скрыта, загрузка
@@ -243,8 +245,6 @@ export function AppLayout() {
                 блокировку ошибкой — напишите в поддержку.
               </span>
             </div>
-          ) : (
-            <BillingBanner state={shop.billing_state} />
           )}
           <UploadsBanner />
           <Outlet />
@@ -267,24 +267,6 @@ function UploadsBanner() {
       <span className="flex-1">
         Загружается {n} фото — не закрывайте вкладку, пока загрузка не закончится.
       </span>
-    </div>
-  )
-}
-
-// BillingBanner — статус подписки виден на всех экранах кабинета.
-function BillingBanner({ state }: { state: Shop['billing_state'] }) {
-  if (state === 'ok') return null
-  const grace = state === 'grace'
-  return (
-    <div className={`alert ${grace ? 'alert--warn' : 'alert--danger'}`}>
-      <span className="flex-1">
-        {grace
-          ? 'Подписка не оплачена: загрузка фото заблокирована. Витрина будет скрыта после окончания льготного периода.'
-          : 'Подписка не оплачена: витрина скрыта. Фотографии сохранены и вернутся после оплаты.'}
-      </span>
-      <Link to="/billing" className="shrink-0 font-medium underline">
-        Оплатить
-      </Link>
     </div>
   )
 }

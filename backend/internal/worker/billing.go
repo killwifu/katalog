@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -13,56 +12,27 @@ import (
 	"katalog/backend/internal/mail"
 )
 
-// HandleBillingLifecycle — ежедневные переходы биллинговых состояний:
-// оплата истекла -> grace (загрузка заблокирована, витрина работает),
-// grace дольше GraceDays -> suspended (витрина скрыта). Контент не удаляется.
-// Идемпотентен: повторный запуск не находит магазинов для перевода.
+// HandleBillingLifecycle — окончание оплаты или пробного периода: аккаунт
+// переходит на Бесплатный, витрина работает, контент не трогается
+// (макет 18 · «Платный тариф закончился»). Идемпотентен: повторный запуск
+// не находит магазинов для перевода.
 func (p *Processor) HandleBillingLifecycle(ctx context.Context, _ *asynq.Task) error {
-	graced, err := p.Q.ShopsEnterGrace(ctx)
+	ended, err := p.Q.ExpirePaidShops(ctx)
 	if err != nil {
-		return fmt.Errorf("shops enter grace: %w", err)
+		return fmt.Errorf("expire paid shops: %w", err)
 	}
-	suspended, err := p.Q.ShopsEnterSuspended(ctx, int32(p.Cfg.Billing.GraceDays))
-	if err != nil {
-		return fmt.Errorf("shops enter suspended: %w", err)
+	if err := p.Q.ExpireSubscriptions(ctx); err != nil {
+		return fmt.Errorf("expire subscriptions: %w", err)
 	}
-	// Статусы подписок приводятся к финальным состояниям магазинов.
-	if err := p.Q.MarkSubscriptionsPastDue(ctx); err != nil {
-		return fmt.Errorf("mark subscriptions past_due: %w", err)
-	}
-	if err := p.Q.MarkSubscriptionsExpired(ctx); err != nil {
-		return fmt.Errorf("mark subscriptions expired: %w", err)
-	}
-	// Скрытые витрины ревалидируются (ISR перестанет отдавать страницу).
-	for _, s := range suspended {
-		p.Revalidate.Shop(s.Slug)
-	}
-
-	// Письма — после смены состояний: продавец узнаёт о переходе один раз,
-	// в момент, когда он уже произошёл. Сбой отправки не откатывает биллинг.
-	for _, s := range graced {
-		views, leads := p.shopMonthTotals(ctx, s.ID)
-		p.mailOwner(ctx, s.OwnerID, mail.GraceStarted(
-			s.Name, p.Cfg.SiteURL, s.Slug, views, leads, p.Cfg.Billing.GraceDays))
-	}
-	for _, s := range suspended {
-		p.mailOwner(ctx, s.OwnerID, mail.ShopHidden(s.Name, p.Cfg.SiteURL, s.Slug, contentKeepMonths))
+	// Письмо — после смены тарифа. Сбой отправки не откатывает биллинг.
+	for _, s := range ended {
+		p.mailOwner(ctx, s.OwnerID, mail.PlanEnded(s.Name, p.Cfg.SiteURL, s.Slug))
 	}
 	p.notifyStorageLimits(ctx)
 
-	p.Log.Info("billing lifecycle done", "graced", len(graced), "suspended", len(suspended))
+	p.Log.Info("billing lifecycle done", "ended", len(ended))
 	return nil
 }
-
-// contentKeepMonths — сколько храним фото после скрытия витрины. Значение
-// обещано покупателю в письме, поэтому живёт рядом с ним, а не в env:
-// менять его молча нельзя.
-const contentKeepMonths = 3
-
-// pendingPaymentBlockHours — сколько незакрытый платёж блокирует новое
-// списание по той же подписке. Сутки: за это время ЮKassa доводит платёж
-// до финального статуса и успевает исчерпать ретраи уведомления.
-const pendingPaymentBlockHours = 24
 
 // mailOwner отправляет письмо владельцу магазина. Письмо — не критичный
 // путь: сбой логируем и идём дальше, иначе одна недоставка остановит
@@ -85,28 +55,11 @@ func (p *Processor) mailOwner(ctx context.Context, ownerID uuid.UUID, tpl mail.T
 	}
 }
 
-// shopMonthTotals — просмотры и переходы за последний месяц для письма
-// о неоплате. Нули не беда: шаблон опускает блок с цифрами.
-func (p *Processor) shopMonthTotals(ctx context.Context, shopID uuid.UUID) (int64, int64) {
-	to := time.Now().UTC()
-	rows, err := p.shopsStatsRange(ctx, to.AddDate(0, -1, 0), to)
-	if err != nil {
-		p.Log.Error("month totals for email", "shop_id", shopID, "error", err)
-		return 0, 0
-	}
-	for _, row := range rows {
-		if row.ShopID == shopID {
-			return row.Views, row.LeadClicks
-		}
-	}
-	return 0, 0
-}
-
 // notifyStorageLimits предупреждает о заканчивающемся месте один раз за
 // прогон, а не на каждую загрузку: письмо на каждый файл — верный способ
 // научить продавца не читать наши письма.
 func (p *Processor) notifyStorageLimits(ctx context.Context) {
-	for _, plan := range []string{"basic", "pro"} {
+	for _, plan := range []string{"standard", "pro", "business"} {
 		limits := p.Cfg.Billing.Limits(plan)
 		if limits.MaxStorage <= 0 {
 			continue
@@ -131,44 +84,49 @@ func (p *Processor) notifyStorageLimits(ctx context.Context) {
 // HandleBillingRenew — рекуррентные списания: по каждой активной подписке
 // с сохранённым способом оплаты, истекающей в ближайшие сутки, создаётся
 // автосписание в ЮKassa. Продление произойдёт по вебхуку payment.succeeded.
-// Дубли исключены: подписка с незавершённым рекуррентным платежом
-// не выбирается, idempotence-key = id нашей записи платежа.
+// Одна попытка на период (повторов нет — см. ListSubscriptionsToRenew),
+// idempotence-key = id нашей записи платежа. Запланированный переход ниже
+// (next_plan/next_period) применяется здесь: списывается цена нового тарифа.
 func (p *Processor) HandleBillingRenew(ctx context.Context, _ *asynq.Task) error {
 	if !p.Billing.Enabled() {
 		return nil
 	}
-	// Незакрытый платёж блокирует повторное списание только сутки: дольше
-	// он всё равно не завершится, а вечная блокировка замораживала продления.
-	subs, err := p.Q.ListSubscriptionsToRenew(ctx, pendingPaymentBlockHours)
+	subs, err := p.Q.ListSubscriptionsToRenew(ctx)
 	if err != nil {
 		return fmt.Errorf("list subscriptions to renew: %w", err)
 	}
 	var charged int
 	for _, sub := range subs {
-		limits := p.Cfg.Billing.Limits(string(sub.Plan))
-		if limits.PriceKopecks <= 0 {
-			p.Log.Warn("skip renew: plan has no price", "shop_id", sub.ShopID, "plan", sub.Plan)
+		plan, period := sub.Plan, sub.Period
+		if sub.NextPlan.Valid {
+			plan, period = sub.NextPlan.ShopPlan, sub.NextPeriod.BillingPeriod
+		}
+		price := p.Cfg.Billing.Price(string(plan), period == db.BillingPeriodYear)
+		if price <= 0 {
+			p.Log.Warn("skip renew: plan has no price", "shop_id", sub.ShopID, "plan", plan)
 			continue
 		}
 		pay, err := p.Q.CreatePayment(ctx, db.CreatePaymentParams{
 			ShopID:    sub.ShopID,
-			Plan:      sub.Plan,
-			Amount:    limits.PriceKopecks,
+			Plan:      plan,
+			Amount:    price,
 			Currency:  "RUB",
 			Recurring: true,
+			Period:    period,
+			Kind:      "period",
 		})
 		if err != nil {
 			return fmt.Errorf("create payment for shop %s: %w", sub.ShopID, err)
 		}
 		yk, err := p.Billing.CreatePayment(ctx, pay.ID.String(), billing.CreatePaymentRequest{
-			Amount:          billing.Amount{Value: billing.FormatKopecks(limits.PriceKopecks), Currency: "RUB"},
+			Amount:          billing.Amount{Value: billing.FormatKopecks(price), Currency: "RUB"},
 			Capture:         true,
-			Description:     fmt.Sprintf("Katalog: продление тарифа %s", sub.Plan),
+			Description:     fmt.Sprintf("Продление тарифа «%s»", mail.PlanName(string(plan))),
 			PaymentMethodID: *sub.PaymentMethodID,
 			Metadata:        map[string]string{"payment_id": pay.ID.String()},
 		})
 		if err != nil {
-			// Платёж закрывается, следующий запуск джоба попробует снова.
+			// Платёж закрывается; повторов нет — тариф закончится в срок.
 			if serr := p.Q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{
 				ID:     pay.ID,
 				Status: db.PaymentStatusCanceled,
@@ -177,10 +135,10 @@ func (p *Processor) HandleBillingRenew(ctx context.Context, _ *asynq.Task) error
 			}
 			p.Log.Error("renew: yookassa charge failed", "shop_id", sub.ShopID, "error", err)
 			// Продавцу нужно действие, а не диагноз: письмо говорит, что
-			// делать, и сколько ещё работает витрина.
+			// делать и до какого числа действует тариф.
 			if shop, serr := p.Q.GetShopByID(ctx, sub.ShopID); serr == nil {
 				p.mailOwner(ctx, shop.OwnerID,
-					mail.ChargeFailed(shop.Name, p.Cfg.SiteURL, p.Cfg.Billing.GraceDays))
+					mail.ChargeFailed(shop.Name, p.Cfg.SiteURL, sub.PeriodEnd.Time.Format("02.01.2006")))
 			}
 			continue
 		}

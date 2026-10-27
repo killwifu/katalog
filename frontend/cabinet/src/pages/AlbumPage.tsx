@@ -16,6 +16,7 @@ import { EditAlbumDialog } from './EditAlbumDialog'
 import { Popover } from './Popover'
 import { SelectAll } from './SelectAll'
 import { shopWatermark } from './WatermarkControl'
+import { PaidLock } from '../lib/plans'
 import { ShareDialog } from './ShareDialog'
 import { Portal } from '../lib/Portal'
 import { useFlip } from '../lib/flip'
@@ -183,9 +184,11 @@ export function AlbumPage() {
     queryKey: ['categories', shop.id],
     queryFn: () => api.listCategories(shop.id),
   })
+  // На Бесплатном статистика альбома закрыта (сервер ответит 403).
   const stats = useQuery({
     queryKey: ['album-stats', shop.id, albumId],
     queryFn: () => api.getAlbumStats(shop.id, albumId),
+    enabled: shop.plan !== 'free',
   })
 
   const [editing, setEditing] = useState(false)
@@ -599,6 +602,11 @@ export function AlbumPage() {
         </div>
       )}
 
+      {/* Бесплатный (макет 13 · «Бесплатный тариф»): вместо статистики
+          и блока «Водяной знак» — заглушка со ссылкой на тарифы. */}
+      {shop.plan === 'free' ? (
+        <PaidLock />
+      ) : (
       <div className="alstats">
         <div className="alstat">
           <span>Просмотры за 7 дней</span>
@@ -638,6 +646,7 @@ export function AlbumPage() {
           </button>
         </div>
       </div>
+      )}
 
       <input
         ref={fileInput}

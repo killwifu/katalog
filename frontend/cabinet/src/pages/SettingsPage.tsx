@@ -5,7 +5,7 @@ import { api, ApiError, type ShopSettings, errorText } from '../api'
 import { Icon } from '../lib/icons'
 import { useUnsavedGuard } from '../lib/useUnsavedGuard'
 import { WATERMARK_TILE, watermarkCells } from '../lib/watermark'
-import { WatermarkGrid } from './WatermarkControl'
+import { WatermarkGrid, WatermarkPaidHint } from './WatermarkControl'
 import { useShop } from './AppLayout'
 
 export function SettingsPage() {
@@ -166,10 +166,14 @@ export function SettingsPage() {
 
         <section className="box" id="watermark">
           <h2>Водяной знак</h2>
+          {/* Бесплатный (макет 17 · «Free-тариф»): блок неактивен, под
+              заголовком — подсказка со сменой тарифа. */}
+          {shop.plan === 'free' && <WatermarkPaidHint />}
           <p className="hint !mt-0 mb-3">
             Накладывается при загрузке. Уже загруженные фотографии не меняются — чтобы
             применить знак к ним, их нужно загрузить заново.
           </p>
+          <fieldset disabled={shop.plan === 'free'} className="contents">
 
           <label className="mb-3 flex items-center gap-2 text-sm">
             <input
@@ -222,6 +226,7 @@ export function SettingsPage() {
               ))}
             </div>
           </div>
+          </fieldset>
         </section>
 
         <section className="box">

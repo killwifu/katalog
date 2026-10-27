@@ -8,7 +8,7 @@ import styles from './pricing.module.css'
 // Мобильная версия таблицы сравнения: те же MATRIX и PLANS,
 // но по одному тарифу за раз — таблица со всеми колонками на телефон не влезает.
 export function PlanTabs() {
-  const [active, setActive] = useState<Plan['id']>('basic')
+  const [active, setActive] = useState<Plan['id']>('pro')
   const plan = PLANS.find((p) => p.id === active) ?? PLANS[0]
 
   return (

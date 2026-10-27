@@ -185,6 +185,9 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		if wmValue, ok = parseAlbumWatermark(w, req.Watermark); !ok {
 			return
 		}
+		if watermarkTurnOnForbidden(w, shop, nil, wmValue, false) {
+			return
+		}
 	}
 
 	// Подсчёт и вставка — под замком магазина: иначе параллельная пачка у
@@ -485,6 +488,9 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	if len(req.Watermark) > 0 {
 		var ok bool
 		if wmValue, ok = parseAlbumWatermark(w, req.Watermark); !ok {
+			return
+		}
+		if watermarkTurnOnForbidden(w, shop, album.Watermark, wmValue, false) {
 			return
 		}
 	}

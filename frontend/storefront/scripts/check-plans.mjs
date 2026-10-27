@@ -14,20 +14,20 @@ const tsSrc = readFileSync(
   'utf8',
 )
 
-// getenvInt64("PLAN_BASIC_MAX_STORAGE_MB", 10*1024) -> 10240
+// getenvInt64("PLAN_STANDARD_MAX_STORAGE_MB", 5*1024) -> 5120
 function goDefault(name) {
   const m = goSrc.match(new RegExp(`"${name}",\\s*([0-9*\\s]+)\\)`))
   if (!m) throw new Error(`не найден дефолт ${name} в config.go`)
   return m[1].split('*').reduce((a, b) => a * Number(b.trim()), 1)
 }
 
-// Тарифы витрины: id -> цена ₽/мес.
-const tsPrices = new Map(
-  [...tsSrc.matchAll(/id: '(\w+)',\s*\n\s*name: '[^']*',\s*\n\s*price: (\d+),/g)].map((m) => [
-    m[1],
-    Number(m[2]),
-  ]),
+// Тарифы витрины: id -> [цена ₽/мес, цена ₽/год].
+const tsPlans = new Map(
+  [...tsSrc.matchAll(/id: '(\w+)',\s*\n\s*name: '[^']*',\s*\n\s*price: (\d+),\s*\n\s*priceYear: (\d+),/g)].map(
+    (m) => [m[1], [Number(m[2]), Number(m[3])]],
+  ),
 )
+const tsPrices = new Map([...tsPlans].map(([id, [month]]) => [id, month]))
 
 // Строка матрицы: значения по тарифам, пробелы-разделители разрядов долой.
 function matrixRow(label) {
@@ -49,8 +49,9 @@ function eq(what, actual, expected) {
 
 for (const [id, envPrefix] of [
   ['free', 'FREE'],
-  ['basic', 'BASIC'],
+  ['standard', 'STANDARD'],
   ['pro', 'PRO'],
+  ['business', 'BUSINESS'],
 ]) {
   if (!tsPrices.has(id)) {
     errors.push(`тариф «${id}» есть в config.go, но не показан на витрине`)
@@ -59,11 +60,13 @@ for (const [id, envPrefix] of [
   // У бесплатного тарифа цены в конфиге нет — на витрине это 0 ₽.
   const price = envPrefix === 'FREE' ? 0 : goDefault(`PLAN_${envPrefix}_PRICE_RUB`)
   eq(`цена «${id}»`, tsPrices.get(id), price)
+  // Год — 12 месяцев со скидкой 25% (config.go, BillingConfig.Price).
+  eq(`цена за год «${id}»`, tsPlans.get(id)[1], (price * 12 * 3) / 4)
   eq(`фото «${id}»`, tsPhotos.get(id), goDefault(`PLAN_${envPrefix}_MAX_PHOTOS`))
   eq(`хранилище «${id}»`, tsStorage.get(id), `${goDefault(`PLAN_${envPrefix}_MAX_STORAGE_MB`) / 1024}ГБ`)
 }
 for (const id of tsPrices.keys()) {
-  if (!['free', 'basic', 'pro'].includes(id)) {
+  if (!['free', 'standard', 'pro', 'business'].includes(id)) {
     errors.push(`тариф «${id}» показан на витрине, но система его не знает`)
   }
 }

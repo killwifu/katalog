@@ -15,6 +15,7 @@ func TestAlbumWatermark(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
+	makePaid(t, shop.ID)
 
 	type wm struct {
 		Enabled  bool   `json:"enabled"`
@@ -93,6 +94,7 @@ func TestAlbumWatermarkAppliedByWorker(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
+	makePaid(t, shop.ID)
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID, map[string]any{"settings": map[string]any{
 		"watermark": map[string]any{"enabled": true, "text": "QA WATERMARK", "opacity": 1, "position": "br"},
 	}}, http.StatusOK, nil)
@@ -131,6 +133,7 @@ func TestAlbumWatermarkRerendersReadyPhotos(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
+	makePaid(t, shop.ID)
 	c.mustJSON("PATCH", "/api/v1/shops/"+shop.ID, map[string]any{"settings": map[string]any{
 		"watermark": map[string]any{"enabled": true, "text": "QA WATERMARK", "opacity": 1, "position": "tl,br"},
 	}}, http.StatusOK, nil)

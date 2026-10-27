@@ -19,11 +19,14 @@ export const API_ERRORS: Record<string, string> = {
   invalid_description: 'Описание слишком длинное',
   photo_quota_exceeded: 'Достигнут лимит фотографий на тарифе',
   quota_exceeded: 'Закончилось место в хранилище',
-  subscription_inactive: 'Подписка неактивна',
   album_limit: 'Достигнут предел числа альбомов',
   album_empty: 'В альбоме нет готовых фото',
   invalid_password: 'Пароль: от 4 до 64 символов',
   password_plan_required: 'На бесплатном тарифе пароль на альбом недоступен',
+  watermark_plan_required: 'Водяной знак доступен на платных тарифах',
+  analytics_plan_required: 'Аналитика доступна на платных тарифах',
+  trial_unavailable: 'Пробный период уже использован',
+  resume_unavailable: 'Автопродление не включить: нет сохранённой карты — оплатите тариф заново',
   not_found: 'Не найдено',
   billing_unavailable: 'Оплата тарифов пока недоступна — платёжный провайдер не подключён',
   payment_provider_error: 'Платёжный сервис не ответил. Попробуйте через несколько минут',
@@ -122,7 +125,8 @@ export type FlaggedPhoto = {
   fail_reason?: string
 }
 
-export type Plan = 'free' | 'basic' | 'pro'
+export type Plan = 'free' | 'standard' | 'pro' | 'business'
+export type BillingPeriod = 'month' | 'year'
 export type BillingState = 'ok' | 'grace' | 'suspended'
 
 export type Shop = {
@@ -179,43 +183,64 @@ export type AdminShop = {
   complaints: number
 }
 
-export type DowngradeAlbum = {
-  id: string
-  title: string
-  photo_count: number
-  views: number
-  hidden_by_plan: boolean
-}
-
-export type DowngradeState = {
-  plan: Plan
-  max_photos: number
-  total_photos: number
-  visible_photos: number
-  over_limit: boolean
-  albums: DowngradeAlbum[]
-}
-
 export type PlanInfo = {
   id: Plan
   max_photos: number
   max_storage: number
   price_rub: number
+  // За год со скидкой 25%.
+  price_year_rub: number
 }
 
 export type Billing = {
   plan: Plan
   billing_state: BillingState
   paid_until: string | null
-  usage: { photos: number; storage_used: number }
+  // Пробный «Про»: когда кончится (кончился); null — не брали.
+  trial_ends_at: string | null
+  trial_available: boolean
+  usage: { photos: number; storage_used: number; trash_photos: number; trash_bytes: number }
   limits: PlanInfo
   subscription: {
     plan: Plan
     status: 'active' | 'past_due' | 'canceled' | 'expired'
+    period: BillingPeriod
     period_end: string
     auto_renew: boolean
+    // Переход ниже, запланированный на конец периода.
+    next_plan: Plan | null
+    next_period: BillingPeriod | null
   } | null
   plans: PlanInfo[]
+  // Последняя оплата не прошла — плашка «Оплата не прошла».
+  failed_payment: { plan: Plan; period: BillingPeriod } | null
+}
+
+// Что произойдёт при выборе тарифа: оплата (с суммой), переход ниже
+// с конца периода или это уже текущий тариф. Считает сервер.
+export type BillingQuote = {
+  action: 'pay' | 'schedule' | 'current'
+  kind?: 'period' | 'upgrade' | 'switch'
+  plan: Plan
+  period: BillingPeriod
+  from_plan?: Plan
+  amount_rub: number
+  days: number
+  period_end: string
+}
+
+export type Payment = {
+  id: string
+  created_at: string
+  plan: Plan
+  from_plan: Plan | null
+  kind: 'period' | 'upgrade' | 'switch'
+  period: BillingPeriod
+  amount_rub: number
+  status: 'succeeded' | 'canceled'
+  recurring: boolean
+  period_start: string | null
+  period_end: string | null
 }
 
 // Свой знак альбома; null — как у магазина (settings.watermark).
@@ -498,25 +523,25 @@ export const api = {
     request<Photo>('PATCH', `/photos/${photoId}`, { caption }),
   deletePhoto: (photoId: string) => request<void>('DELETE', `/photos/${photoId}`),
 
-  getDowngrade: (shopId: string) =>
-    request<DowngradeState>('GET', `/shops/${shopId}/downgrade`),
-  // Видимыми остаются перечисленные альбомы, остальные скрываются.
-  // Ничего не удаляется.
-  applyDowngrade: (shopId: string, albumIds: string[]) =>
-    request<void>('PUT', `/shops/${shopId}/downgrade`, { album_ids: albumIds }),
-
   getStats: (shopId: string, days: number) =>
     request<ShopStats>('GET', `/shops/${shopId}/stats?days=${days}`),
 
   getBilling: (shopId: string) => request<Billing>('GET', `/shops/${shopId}/billing`),
-  subscribe: (shopId: string, plan: Plan) =>
-    request<{ payment_id: string; confirmation_url: string }>(
+  quote: (shopId: string, plan: Plan, period: BillingPeriod) =>
+    request<BillingQuote>('GET', `/shops/${shopId}/billing/quote?plan=${plan}&period=${period}`),
+  subscribe: (shopId: string, plan: Plan, period: BillingPeriod) =>
+    request<{ payment_id?: string; confirmation_url?: string; scheduled: boolean }>(
       'POST',
       `/shops/${shopId}/billing/subscribe`,
-      { plan },
+      { plan, period },
     ),
   cancelSubscription: (shopId: string) =>
     request<void>('POST', `/shops/${shopId}/billing/cancel`),
+  resumeSubscription: (shopId: string) =>
+    request<void>('POST', `/shops/${shopId}/billing/resume`),
+  startTrial: (shopId: string) => request<void>('POST', `/shops/${shopId}/billing/trial`),
+  listPayments: (shopId: string) =>
+    request<{ payments: Payment[] }>('GET', `/shops/${shopId}/billing/payments`),
 
   // Админ-зона (role=admin).
   adminOverview: () =>

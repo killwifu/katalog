@@ -7,7 +7,7 @@ import { useSegThumb } from '../lib/useSegThumb'
 import { api } from '../api'
 import { ChartIcon, Icon } from '../lib/icons'
 import { InlineError } from '../lib/InlineError'
-import { PLAN_NAMES } from '../lib/plans'
+import { PaidLock, PLAN_NAMES } from '../lib/plans'
 import { plural } from '../lib/uploadRun'
 import { useShop } from './AppLayout'
 import { ShareDialog } from './ShareDialog'
@@ -21,13 +21,15 @@ export function OverviewPage() {
   const shop = useShop()
   // Берём 14 дней и делим пополам: так дельта к прошлой неделе считается
   // из одного ответа, без второго запроса и без правок бэкенда.
+  // На Бесплатном аналитика закрыта (сервер ответит 403) — не спрашиваем.
+  const free = shop.plan === 'free'
   const stats = useQuery({
     queryKey: ['stats', shop.id, 14],
     queryFn: () => api.getStats(shop.id, 14),
+    enabled: !free,
   })
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const billing = useQuery({ queryKey: ['billing', shop.id], queryFn: () => api.getBilling(shop.id) })
-  const downgrade = useQuery({ queryKey: ['downgrade', shop.id], queryFn: () => api.getDowngrade(shop.id) })
   // Корзина в блоке хранилища: удалённое продолжает занимать место, и без
   // этой строки продавец у лимита не понимает, куда оно делось.
   const trash = useQuery({ queryKey: ['trash', shop.id, 1], queryFn: () => api.listTrash(shop.id) })
@@ -71,11 +73,14 @@ export function OverviewPage() {
       ? `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} ГБ`
       : `${Math.max(1, Math.round(bytes / 1024 / 1024))} МБ`
 
-  // «Тариф скоро закончится»: предупреждаем за неделю.
+  // «Тариф скоро закончится» (макет 09/18): за 5 дней и только если
+  // автопродление отключено — иначе тариф продлится сам.
   // «Сейчас» фиксируется при открытии страницы: счёт идёт на дни.
   const [now] = useState(() => Date.now())
   const daysLeft = shop.paid_until ? Math.ceil((new Date(shop.paid_until).getTime() - now) / 86_400_000) : null
-  const endingSoon = shop.plan !== 'free' && shop.billing_state === 'ok' && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7
+  const endingSoon =
+    !free && billing.data !== undefined && !billing.data.subscription?.auto_renew &&
+    daysLeft !== null && daysLeft >= 0 && daysLeft <= 5
 
   // Новый аккаунт: альбомов ещё нет, цифры ни о чём не говорят.
   const fresh = albums.data?.length === 0
@@ -109,29 +114,6 @@ export function OverviewPage() {
 
   return (
     <div className="ov">
-      {/* Предложение выбрать видимое висит в кабинете, пока фотографий больше
-          лимита: если продавец не выберет, мы всё равно ничего не удаляем. */}
-      {downgrade.data?.over_limit && (
-        <div className="alert alert--warn">
-          {/* После сохранения выбора «Выберите…» звучало так, будто он
-              не применился. */}
-          {downgrade.data.visible_photos <= downgrade.data.max_photos ? (
-            <span className="flex-1">
-              Покупатели видят {downgrade.data.visible_photos} из {downgrade.data.total_photos}{' '}
-              фото — остальные скрыты по тарифу и вернутся после продления.
-            </span>
-          ) : (
-            <span className="flex-1">
-              Фотографий больше, чем помещается в тариф: {downgrade.data.total_photos} из{' '}
-              {downgrade.data.max_photos}. Выберите, что останется видимым покупателям.
-            </span>
-          )}
-          <Link to="/downgrade" className="shrink-0 font-medium underline">
-            {downgrade.data.visible_photos <= downgrade.data.max_photos ? 'Изменить' : 'Выбрать'}
-          </Link>
-        </div>
-      )}
-
       {fresh && (
         <div className="alert alert--info">
           <div className="alert__body">
@@ -157,8 +139,9 @@ export function OverviewPage() {
               — {new Date(shop.paid_until!).toLocaleDateString('ru-RU')}
             </b>
             <p>
-              Если не продлить, загрузка новых фото остановится, а позже витрина будет скрыта от покупателей.
-              Фотографии при этом сохранятся.
+              После перехода на бесплатный тариф аналитика станет недоступна, лимит — 250 фото и 1 ГБ: если
+              загружено больше, новые фото добавить не получится. Ставить пароли на альбомы будет нельзя, а те, что
+              уже стоят, сохранятся, но изменить или снять их не получится.
             </p>
             <div className="alert__actions">
               <Link to="/billing" className="btn btn--primary btn--pill">
@@ -361,12 +344,16 @@ export function OverviewPage() {
 
         <section>
           <div className="ov__head">
-            <h2>За последние 7 дней</h2>
-            <Link to="/stats">Вся статистика</Link>
+            {/* Бесплатный (макет 09 · «Free-тариф»): заголовок «Аналитика»
+                и замок вместо цифр. */}
+            <h2>{free ? 'Аналитика' : 'За последние 7 дней'}</h2>
+            {!free && <Link to="/stats">Вся статистика</Link>}
           </div>
           {/* Молчаливые нули при отказе статистики продавец читает как
               «витрину никто не смотрит» и идёт разбираться не туда. */}
-          {stats.isError ? (
+          {free ? (
+            <PaidLock text="Чтобы получить доступ к аналитике, перейдите на платный тариф." />
+          ) : stats.isError ? (
             <InlineError text="Не удалось загрузить статистику" onRetry={() => void stats.refetch()} />
           ) : stats.isPending ? (
             <p aria-busy="true">{skel('h-8 w-40')}</p>
@@ -380,7 +367,7 @@ export function OverviewPage() {
               <span>{plural(sum(week, 'views'), 'просмотр', 'просмотра', 'просмотров')} витрины</span>
             </p>
           )}
-          <div className={`ov__metrics flex flex-wrap gap-x-5 gap-y-1 py-2 ${stats.isError || stats.isPending || fresh ? 'hidden' : ''}`}>
+          <div className={`ov__metrics flex flex-wrap gap-x-5 gap-y-1 py-2 ${free || stats.isError || stats.isPending || fresh ? 'hidden' : ''}`}>
             {delta(sum(week, 'views'), sum(prevWeek, 'views')).label && (
               <p className={delta(sum(week, 'views'), sum(prevWeek, 'views')).up ? 'text-[#1B6B3A]' : 'text-ink-3'}>
                 <b className="font-semibold">{delta(sum(week, 'views'), sum(prevWeek, 'views')).label}</b>
@@ -455,7 +442,7 @@ export function OverviewPage() {
 
       {/* Популярные альбомы: скелетон, пока грузятся, и своя ошибка с
           «Повторить» — остальной обзор при этом работает (макет 09). */}
-      {!fresh && (stats.isPending || stats.isError) && (
+      {!free && !fresh && (stats.isPending || stats.isError) && (
         <>
           <div className="ov__sep" />
           <section>

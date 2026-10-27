@@ -45,6 +45,7 @@ func TestShopStatsDashboard(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
+	makePaid(t, shop.ID)
 	album := createAlbum(c, shop.ID)
 	var album2 albumJSON
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
@@ -254,7 +255,7 @@ func TestRetentionPurge(t *testing.T) {
 		       ($1, current_date - 10, 20, 7, 2)`, shop.ID)
 	// Платёж и запись модерации — их уборка обязана оставить.
 	mustExec(t, `INSERT INTO payments (shop_id, plan, amount, currency, status, created_at)
-		VALUES ($1, 'basic', 49000, 'RUB', 'canceled', now() - interval '900 days')`, shop.ID)
+		VALUES ($1, 'standard', 49000, 'RUB', 'canceled', now() - interval '900 days')`, shop.ID)
 	admin := newClient(t)
 	adminUser := registerUser(admin)
 	mustExec(t, `INSERT INTO moderation_log (shop_id, admin_id, action, note, created_at)

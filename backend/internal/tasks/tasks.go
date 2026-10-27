@@ -98,8 +98,8 @@ func NewStatsAggregate(date string) (*asynq.Task, error) {
 	), nil
 }
 
-// NewBillingLifecycle — ежедневные переходы биллинговых состояний магазинов
-// (ok -> grace -> suspended). Без payload, идемпотентна.
+// NewBillingLifecycle — окончание оплаты и пробного периода: переход
+// на Бесплатный. Без payload, идемпотентна.
 func NewBillingLifecycle() *asynq.Task {
 	return asynq.NewTask(TypeBillingLifecycle, nil,
 		asynq.MaxRetry(3),

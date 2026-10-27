@@ -78,6 +78,7 @@ func TestAlbumDownload(t *testing.T) {
 	stranger := newClient(t)
 	registerUser(stranger)
 	their := createShop(stranger)
+	makePaid(t, shop.ID)
 	statsPath := "/api/v1/shops/" + shop.ID + "/albums/" + album.ID + "/stats"
 	var stats struct {
 		ViewsWeek  int64 `json:"views_week"`

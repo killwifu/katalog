@@ -309,6 +309,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Shop"
         "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Недоступно на Бесплатном тарифе (error=watermark_plan_required — включение водяного знака)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
@@ -359,6 +364,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShopStats"
+        "403":
+          description: Недоступно на Бесплатном тарифе (error=analytics_plan_required)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -367,11 +377,14 @@ paths:
       - $ref: "#/components/parameters/ShopID"
     post:
       operationId: subscribe
-      summary: Начать оплату платного тарифа через ЮKassa
+      summary: Сменить тариф (оплата через ЮKassa или переход ниже)
       description: >
-        Создаёт платёж ЮKassa (с сохранением способа оплаты для рекуррентных
-        списаний) и возвращает confirmation_url для redirect. Тариф
-        активируется только после вебхука payment.succeeded.
+        Сумма и вид платежа — как в GET /billing/quote. Для оплаты создаёт
+        платёж ЮKassa (с сохранением способа оплаты для рекуррентных
+        списаний) и возвращает confirmation_url; return_url получает
+        ?payment={payment_id}. Тариф активируется только после вебхука
+        payment.succeeded. Переход ниже (в т.ч. на free) не требует оплаты:
+        scheduled=true, вступает в силу с конца оплаченного периода.
       requestBody:
         required: true
         content:
@@ -381,19 +394,26 @@ paths:
               additionalProperties: false
               required: [plan]
               properties:
-                plan: { type: string, enum: [basic, pro] }
+                plan: { $ref: "#/components/schemas/PlanID" }
+                period: { $ref: "#/components/schemas/BillingPeriod" }
       responses:
         "200":
-          description: Платёж создан
+          description: Платёж создан или переход ниже запланирован
           content:
             application/json:
               schema:
                 type: object
-                required: [payment_id, confirmation_url]
+                required: [scheduled]
                 properties:
                   payment_id: { type: string, format: uuid }
                   confirmation_url: { type: string, format: uri }
+                  scheduled: { type: boolean }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Этот тариф уже текущий (error=plan_is_current)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "502":
@@ -415,10 +435,95 @@ paths:
       operationId: cancelSubscription
       summary: Отключить автопродление подписки
       description: >
-        Тариф действует до конца оплаченного периода, затем магазин проходит
-        grace period и скрытие витрины. Идемпотентен.
+        Тариф действует до конца оплаченного периода, затем аккаунт переходит
+        на Бесплатный (витрина работает). Запланированный переход ниже
+        отменяется. Идемпотентен.
       responses:
         "204": { description: Автопродление отключено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/billing/resume:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: resumeSubscription
+      summary: Включить автопродление обратно (без оплаты)
+      responses:
+        "204": { description: Автопродление включено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            Нечего включать: период закончился или нет сохранённого способа
+            оплаты (error=resume_unavailable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/shops/{shopID}/billing/trial:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: startTrial
+      summary: Включить пробный «Про» на 7 дней без карты
+      description: >
+        Один раз на аккаунт, только на Бесплатном и только если платного
+        тарифа не было. По окончании, если не оплачено, — Бесплатный.
+        Регистрация «с пробным периодом» вызывает его сразу после создания магазина.
+      responses:
+        "204": { description: Пробный период включён }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Пробный период недоступен (error=trial_unavailable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/shops/{shopID}/billing/quote:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: quoteBilling
+      summary: Предпросмотр смены тарифа — сумма, дни, даты
+      parameters:
+        - name: plan
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/PlanID" }
+        - name: period
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/BillingPeriod" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BillingQuote" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/billing/payments:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: listPayments
+      summary: История платежей, новые сверху (до 100)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payments]
+                properties:
+                  payments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Payment" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -727,6 +832,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Album"
         "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Недоступно на Бесплатном тарифе (error=watermark_plan_required)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
@@ -804,6 +914,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Album"
         "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: Недоступно на Бесплатном тарифе (error=watermark_plan_required / password_plan_required)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
@@ -892,8 +1007,9 @@ paths:
         "403":
           description: >
             Мягкий отказ: квота тарифа исчерпана (error=quota_exceeded —
-            хранилище, error=photo_quota_exceeded — число фото) или подписка
-            неактивна (error=subscription_inactive, состояние grace/suspended).
+            хранилище, error=photo_quota_exceeded — число фото). После перехода
+            на Бесплатный загруженное сверх лимита остаётся, но новые фото не
+            загрузить, пока не удалить лишние.
           content:
             application/json:
               schema:
@@ -1004,72 +1120,6 @@ paths:
   # ---- Публичный неймспейс витрины (без сессии, отдельные схемы ответов:
   # ---- приватные поля наружу не отдаются никогда) ----
 
-  /api/v1/shops/{shopID}/downgrade:
-    get:
-      operationId: getDowngrade
-      summary: Состояние понижения тарифа — что помещается и из чего выбирать
-      description: >
-        Экран показывается, пока фотографий больше лимита тарифа, независимо
-        от события биллинга. Признак over_limit считает сервер: вычислять его
-        на клиенте — разойтись при первой смене лимитов.
-      parameters:
-        - $ref: "#/components/parameters/ShopID"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [plan, max_photos, total_photos, visible_photos, over_limit, albums]
-                properties:
-                  plan: { $ref: "#/components/schemas/PlanID" }
-                  max_photos: { type: integer }
-        slug_changeable_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: >
-            Когда адрес можно сменить снова; null — можно сейчас. Смена рвёт
-            разосланные ссылки, поэтому ограничена: не чаще раза в полгода.
-                  total_photos: { type: integer }
-                  visible_photos: { type: integer }
-                  over_limit: { type: boolean }
-                  albums:
-                    type: array
-                    items: { $ref: "#/components/schemas/DowngradeAlbum" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-    put:
-      operationId: applyDowngrade
-      summary: Сохранить выбор видимых альбомов
-      description: >
-        Перечисленные альбомы остаются видимыми, остальные скрываются.
-        Ничего не удаляется; оплата подписки возвращает всё автоматически.
-        Чужие id в списке ни на что не влияют — запрос ограничен shop_id.
-        Суммарное число фотографий в выбранных альбомах не должно превышать
-        лимит тарифа, иначе 400 (over_limit).
-      parameters:
-        - $ref: "#/components/parameters/ShopID"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [album_ids]
-              properties:
-                album_ids:
-                  type: array
-                  items: { type: string, format: uuid }
-      responses:
-        "204": { description: No Content }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
   /api/v1/shops/{shopID}/tabs:
     get:
       operationId: listTabs
@@ -1138,6 +1188,11 @@ paths:
                   views_week: { type: integer }
                   views_prev_week: { type: integer }
                   lead_clicks: { type: integer }
+        "403":
+          description: Недоступно на Бесплатном тарифе (error=analytics_plan_required)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -2320,50 +2375,122 @@ components:
 
     PlanID:
       type: string
-      enum: [free, basic, pro]
+      description: >
+        Тарифы по возрастанию: free «Бесплатный», standard «Стандарт», pro «Про»,
+        business «Бизнес». На free закрыты аналитика, водяной знак и пароли альбомов
+        (403 analytics_plan_required / watermark_plan_required / password_plan_required).
+      enum: [free, standard, pro, business]
+
+    BillingPeriod:
+      type: string
+      description: Период оплаты; год — 12 месяцев со скидкой 25%.
+      enum: [month, year]
 
     BillingState:
       type: string
       description: >
-        Биллинговое состояние: ok — всё работает; grace — оплата просрочена,
-        загрузка заблокирована, витрина работает; suspended — витрина скрыта,
-        контент сохраняется.
+        Устаревшее: по окончании оплаты аккаунт переходит на Бесплатный, витрина
+        работает. Новые значения кроме ok не выставляются.
       enum: [ok, grace, suspended]
 
     PlanInfo:
       type: object
-      required: [id, max_photos, max_storage, price_rub]
+      required: [id, max_photos, max_storage, price_rub, price_year_rub]
       properties:
         id: { $ref: "#/components/schemas/PlanID" }
         max_photos: { type: integer }
         max_storage: { type: integer, description: Байты }
-        price_rub: { type: integer, description: Цена за период, рубли (0 = бесплатно) }
+        price_rub: { type: integer, description: "Цена за месяц, рубли (0 = бесплатно)" }
+        price_year_rub: { type: integer, description: "Цена за год со скидкой 25%, рубли" }
 
     Billing:
       type: object
-      required: [plan, billing_state, paid_until, usage, limits, subscription, plans]
+      required: [plan, billing_state, paid_until, trial_ends_at, trial_available, usage, limits, subscription, plans, failed_payment]
       properties:
         plan: { $ref: "#/components/schemas/PlanID" }
         billing_state: { $ref: "#/components/schemas/BillingState" }
         paid_until: { type: [string, "null"], format: date-time }
+        trial_ends_at:
+          type: [string, "null"]
+          format: date-time
+          description: Когда кончится (или кончился) пробный «Про»; null — не брали.
+        trial_available:
+          type: boolean
+          description: Пробный «Про» ещё можно включить (один раз, не после платного тарифа).
         usage:
           type: object
-          required: [photos, storage_used]
+          required: [photos, storage_used, trash_photos, trash_bytes]
           properties:
             photos: { type: integer }
             storage_used: { type: integer }
+            trash_photos: { type: integer, description: Фото в «Удаленном» }
+            trash_bytes: { type: integer, description: Их объём, байты }
         limits: { $ref: "#/components/schemas/PlanInfo" }
         subscription:
           type: [object, "null"]
-          required: [plan, status, period_end, auto_renew]
+          required: [plan, status, period, period_end, auto_renew, next_plan, next_period]
           properties:
             plan: { $ref: "#/components/schemas/PlanID" }
             status: { type: string, enum: [active, past_due, canceled, expired] }
+            period: { $ref: "#/components/schemas/BillingPeriod" }
             period_end: { type: string, format: date-time }
             auto_renew: { type: boolean }
+            next_plan:
+              description: Переход ниже, запланированный на конец периода.
+              oneOf: [{ $ref: "#/components/schemas/PlanID" }, { type: "null" }]
+            next_period:
+              oneOf: [{ $ref: "#/components/schemas/BillingPeriod" }, { type: "null" }]
         plans:
           type: array
           items: { $ref: "#/components/schemas/PlanInfo" }
+        failed_payment:
+          type: [object, "null"]
+          description: Последняя оплата продавца не прошла (в течение суток) — плашка «Оплата не прошла».
+          required: [plan, period]
+          properties:
+            plan: { $ref: "#/components/schemas/PlanID" }
+            period: { $ref: "#/components/schemas/BillingPeriod" }
+
+    BillingQuote:
+      type: object
+      required: [action, plan, period, amount_rub, days, period_end]
+      properties:
+        action:
+          type: string
+          enum: [pay, schedule, current]
+          description: >
+            pay — нужна оплата; schedule — переход ниже с конца оплаченного
+            периода, без оплаты; current — это текущий тариф.
+        kind:
+          type: string
+          enum: [period, upgrade, switch]
+          description: >
+            period — оплата периода; upgrade — доплата разницы до конца периода
+            по дням (дата списания не меняется); switch — переход на год,
+            период начинается сразу, остаток месяца засчитан.
+        plan: { $ref: "#/components/schemas/PlanID" }
+        period: { $ref: "#/components/schemas/BillingPeriod" }
+        from_plan: { $ref: "#/components/schemas/PlanID" }
+        amount_rub: { type: integer }
+        days: { type: integer, description: Дни доплаты (upgrade) или зачёта (switch) }
+        period_end: { type: string, format: date-time }
+
+    Payment:
+      type: object
+      required: [id, created_at, plan, from_plan, kind, period, amount_rub, status, recurring, period_start, period_end]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        plan: { $ref: "#/components/schemas/PlanID" }
+        from_plan:
+          oneOf: [{ $ref: "#/components/schemas/PlanID" }, { type: "null" }]
+        kind: { type: string, enum: [period, upgrade, switch] }
+        period: { $ref: "#/components/schemas/BillingPeriod" }
+        amount_rub: { type: integer }
+        status: { type: string, enum: [succeeded, canceled] }
+        recurring: { type: boolean, description: Автосписание }
+        period_start: { type: [string, "null"], format: date-time }
+        period_end: { type: [string, "null"], format: date-time }
 
     Album:
       type: object
@@ -2448,18 +2575,6 @@ components:
         published — виден на витрине и в списках;
         unlisted — «по ссылке»: нет в списках, прямая ссылка работает;
         draft — не виден покупателю нигде.
-
-    DowngradeAlbum:
-      type: object
-      required: [id, title, photo_count, views, hidden_by_plan]
-      properties:
-        id: { type: string, format: uuid }
-        title: { type: string }
-        photo_count: { type: integer }
-        views: { type: integer, description: просмотры за 30 дней }
-        hidden_by_plan:
-          type: boolean
-          description: скрыт понижением тарифа; вернётся при оплате
 
     Tab:
       type: object

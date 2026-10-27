@@ -55,8 +55,12 @@ func (f *fakeYooKassa) handle(w http.ResponseWriter, r *http.Request) {
 			Metadata: req.Metadata,
 		}
 		if req.PaymentMethodID != "" {
-			// Автосписание по сохранённому способу оплаты проходит сразу.
+			// Автосписание по сохранённому способу оплаты проходит сразу,
+			// кроме карты «pm-fail…» — по ней банк отказывает.
 			p.Status = billing.StatusSucceeded
+			if strings.HasPrefix(req.PaymentMethodID, "pm-fail") {
+				p.Status = billing.StatusCanceled
+			}
 			p.PaymentMethod = &billing.PaymentMethod{ID: req.PaymentMethodID, Saved: true}
 		} else {
 			p.Confirmation = &billing.Confirmation{
@@ -136,10 +140,15 @@ func postWebhook(c *client, body map[string]any, wantStatus int) {
 }
 
 type billingJSON struct {
-	Plan         string  `json:"plan"`
-	BillingState string  `json:"billing_state"`
-	PaidUntil    *string `json:"paid_until"`
-	Usage        struct {
+	Plan           string  `json:"plan"`
+	BillingState   string  `json:"billing_state"`
+	PaidUntil      *string `json:"paid_until"`
+	TrialEndsAt    *string `json:"trial_ends_at"`
+	TrialAvailable bool    `json:"trial_available"`
+	FailedPayment  *struct {
+		Plan string `json:"plan"`
+	} `json:"failed_payment"`
+	Usage struct {
 		Photos      int64 `json:"photos"`
 		StorageUsed int64 `json:"storage_used"`
 	} `json:"usage"`
@@ -150,8 +159,10 @@ type billingJSON struct {
 	Subscription *struct {
 		Plan      string    `json:"plan"`
 		Status    string    `json:"status"`
+		Period    string    `json:"period"`
 		PeriodEnd time.Time `json:"period_end"`
 		AutoRenew bool      `json:"auto_renew"`
+		NextPlan  *string   `json:"next_plan"`
 	} `json:"subscription"`
 	Plans []struct {
 		ID       string `json:"id"`
@@ -177,7 +188,7 @@ func TestSubscribeAndWebhook(t *testing.T) {
 	if free.Plan != "free" || free.BillingState != "ok" || free.Subscription != nil {
 		t.Fatalf("fresh shop billing: %+v", free)
 	}
-	if len(free.Plans) != 3 {
+	if len(free.Plans) != 4 {
 		t.Fatalf("plans list: %+v", free.Plans)
 	}
 
@@ -186,7 +197,7 @@ func TestSubscribeAndWebhook(t *testing.T) {
 		ConfirmationURL string `json:"confirmation_url"`
 	}
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
-		map[string]string{"plan": "basic"}, http.StatusOK, &sub)
+		map[string]string{"plan": "standard"}, http.StatusOK, &sub)
 	if sub.ConfirmationURL == "" {
 		t.Fatal("subscribe: empty confirmation_url")
 	}
@@ -196,7 +207,7 @@ func TestSubscribeAndWebhook(t *testing.T) {
 	postWebhook(c, ykNotification("payment.succeeded", p), http.StatusOK)
 
 	paid := getBilling(c, shop.ID)
-	if paid.Plan != "basic" || paid.BillingState != "ok" || paid.PaidUntil == nil {
+	if paid.Plan != "standard" || paid.BillingState != "ok" || paid.PaidUntil == nil {
 		t.Fatalf("after payment: %+v", paid)
 	}
 	if paid.Subscription == nil || paid.Subscription.Status != "active" || !paid.Subscription.AutoRenew {
@@ -224,7 +235,7 @@ func TestSubscribeAndWebhook(t *testing.T) {
 	if canceled.Subscription.Status != "canceled" || canceled.Subscription.AutoRenew {
 		t.Fatalf("after cancel: %+v", canceled.Subscription)
 	}
-	if canceled.Plan != "basic" || canceled.BillingState != "ok" {
+	if canceled.Plan != "standard" || canceled.BillingState != "ok" {
 		t.Fatalf("cancel must not drop the plan immediately: %+v", canceled)
 	}
 }
@@ -241,8 +252,12 @@ func TestBillingTenantIsolation(t *testing.T) {
 		{"GET", "/api/v1/shops/" + shop.ID + "/billing"},
 		{"POST", "/api/v1/shops/" + shop.ID + "/billing/subscribe"},
 		{"POST", "/api/v1/shops/" + shop.ID + "/billing/cancel"},
+		{"POST", "/api/v1/shops/" + shop.ID + "/billing/resume"},
+		{"POST", "/api/v1/shops/" + shop.ID + "/billing/trial"},
+		{"GET", "/api/v1/shops/" + shop.ID + "/billing/quote?plan=pro"},
+		{"GET", "/api/v1/shops/" + shop.ID + "/billing/payments"},
 	} {
-		status, body := stranger.do(probe.method, probe.path, map[string]string{"plan": "basic"})
+		status, body := stranger.do(probe.method, probe.path, map[string]string{"plan": "standard"})
 		if status != http.StatusNotFound {
 			t.Fatalf("%s %s: status %d, want 404; body: %s", probe.method, probe.path, status, body)
 		}
@@ -270,29 +285,8 @@ func TestPhotoQuotaExceeded(t *testing.T) {
 	}
 }
 
-// TestUploadBlockedWhenSubscriptionInactive: в grace и suspended загрузка
-// заблокирована мягким 403 с понятным кодом ошибки.
-func TestUploadBlockedWhenSubscriptionInactive(t *testing.T) {
-	c := newClient(t)
-	registerUser(c)
-	shop := createShop(c)
-	album := createAlbum(c, shop.ID)
-
-	for _, state := range []string{"grace", "suspended"} {
-		if _, err := env.pool.Exec(context.Background(),
-			"UPDATE shops SET billing_state = $2 WHERE id = $1", shop.ID, state); err != nil {
-			t.Fatalf("set billing_state %s: %v", state, err)
-		}
-		status, body := c.do("POST", "/api/v1/uploads/presign",
-			map[string]any{"shop_id": shop.ID, "album_id": album.ID, "size": 1000})
-		if status != http.StatusForbidden || !strings.Contains(string(body), "subscription_inactive") {
-			t.Fatalf("presign in %s: status %d, body %s", state, status, body)
-		}
-	}
-}
-
-// TestBillingLifecycle: активна -> grace (витрина работает, загрузка
-// заблокирована) -> suspended (витрина скрыта). Контент не удаляется.
+// TestBillingLifecycle: оплата истекла -> аккаунт на Бесплатном, витрина
+// работает, контент на месте (макет 18 · «Платный тариф закончился»).
 func TestBillingLifecycle(t *testing.T) {
 	ctx := context.Background()
 	c := newClient(t)
@@ -302,70 +296,48 @@ func TestBillingLifecycle(t *testing.T) {
 	photoID := uploadPhoto(c, shop.ID, album.ID, makeJPEG(t, 320, 240))
 	waitPhotoStatus(c, shop.ID, album.ID, photoID, "ready", 60*time.Second)
 
-	// Оплаченный basic, срок истёк час назад.
-	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() - interval '1 hour' WHERE id = $1", shop.ID)
+	// Оплаченный standard, срок истёк час назад.
+	mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() - interval '1 hour' WHERE id = $1", shop.ID)
 	mustExec(t, `INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end)
-		VALUES ($1, 'basic', 'active', now() - interval '30 days', now() - interval '1 hour')`, shop.ID)
+		VALUES ($1, 'standard', 'canceled', now() - interval '30 days', now() - interval '1 hour')`, shop.ID)
 
-	if err := env.processor.HandleBillingLifecycle(ctx, tasks.NewBillingLifecycle()); err != nil {
-		t.Fatalf("lifecycle run 1: %v", err)
+	for run := 1; run <= 2; run++ { // второй запуск ничего не меняет
+		if err := env.processor.HandleBillingLifecycle(ctx, tasks.NewBillingLifecycle()); err != nil {
+			t.Fatalf("lifecycle run %d: %v", run, err)
+		}
+		b := getBilling(c, shop.ID)
+		if b.Plan != "free" || b.BillingState != "ok" || b.PaidUntil != nil || b.Subscription.Status != "expired" {
+			t.Fatalf("after run %d: %+v / sub %+v", run, b, b.Subscription)
+		}
 	}
-	b := getBilling(c, shop.ID)
-	if b.BillingState != "grace" || b.Subscription.Status != "past_due" {
-		t.Fatalf("after run 1: state %s, sub %+v", b.BillingState, b.Subscription)
-	}
-	// В grace витрина продолжает работать.
+	// Витрина работает, фото на месте.
 	if status, _ := c.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusOK {
-		t.Fatalf("public shop in grace: status %d, want 200", status)
+		t.Fatalf("public shop after plan ended: status %d, want 200", status)
 	}
-
-	// Повторный запуск ничего не меняет (идемпотентность).
-	if err := env.processor.HandleBillingLifecycle(ctx, tasks.NewBillingLifecycle()); err != nil {
-		t.Fatalf("lifecycle run 2: %v", err)
-	}
-	if b := getBilling(c, shop.ID); b.BillingState != "grace" {
-		t.Fatalf("lifecycle not idempotent: state %s", b.BillingState)
-	}
-
-	// Grace истёк (14 дней в тестовом конфиге) -> витрина скрывается.
-	mustExec(t, "UPDATE shops SET paid_until = now() - interval '15 days' WHERE id = $1", shop.ID)
-	if err := env.processor.HandleBillingLifecycle(ctx, tasks.NewBillingLifecycle()); err != nil {
-		t.Fatalf("lifecycle run 3: %v", err)
-	}
-	b = getBilling(c, shop.ID)
-	if b.BillingState != "suspended" || b.Subscription.Status != "expired" {
-		t.Fatalf("after run 3: state %s, sub %+v", b.BillingState, b.Subscription)
-	}
-	// 410, а не 404: витрина скрыта, но покупатель должен получить контакты
-	// продавца и суметь написать — подробнее в TestShopUnavailable.
-	if status, _ := c.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusGone {
-		t.Fatalf("public shop when suspended: status %d, want 410", status)
-	}
-
-	// Контент не удалён: фото на месте, кабинет работает.
 	var photoPage struct {
 		Photos []photoJSON `json:"photos"`
 	}
 	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums/"+album.ID+"/photos", nil, http.StatusOK, &photoPage)
-	photos := photoPage.Photos
-	if len(photos) != 1 || photos[0].Status != "ready" {
-		t.Fatalf("content after suspension: %+v", photos)
+	if len(photoPage.Photos) != 1 || photoPage.Photos[0].Status != "ready" {
+		t.Fatalf("content after plan ended: %+v", photoPage.Photos)
 	}
-
-	// Оплата возвращает магазин в строй: subscribe -> вебхук -> ok + витрина.
+	// Пробный период после платного не предлагается.
+	if b := getBilling(c, shop.ID); b.TrialAvailable {
+		t.Fatal("trial offered after a paid plan")
+	}
+	// «Продлить» — оплата того же тарифа, период начинается сейчас.
 	var sub struct {
 		PaymentID string `json:"payment_id"`
 	}
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
-		map[string]string{"plan": "basic"}, http.StatusOK, &sub)
-	p := env.yk.succeedByOurID(t, sub.PaymentID)
-	postWebhook(c, ykNotification("payment.succeeded", p), http.StatusOK)
-	b = getBilling(c, shop.ID)
-	if b.BillingState != "ok" || b.Plan != "basic" {
+		map[string]string{"plan": "standard"}, http.StatusOK, &sub)
+	postWebhook(c, ykNotification("payment.succeeded", env.yk.succeedByOurID(t, sub.PaymentID)), http.StatusOK)
+	b := getBilling(c, shop.ID)
+	if b.Plan != "standard" || b.Subscription.Status != "active" {
 		t.Fatalf("after repayment: %+v", b)
 	}
-	if status, _ := c.do("GET", "/api/v1/public/shops/"+shop.Slug, nil); status != http.StatusOK {
-		t.Fatalf("public shop after repayment: status %d, want 200", status)
+	if d := time.Until(b.Subscription.PeriodEnd) - 30*24*time.Hour; d < -time.Hour || d > time.Hour {
+		t.Fatalf("repaid period_end %s, want ~now+30d", b.Subscription.PeriodEnd)
 	}
 }
 
@@ -378,9 +350,9 @@ func TestRecurringRenewal(t *testing.T) {
 	shop := createShop(c)
 
 	// Активная подписка с сохранённым способом оплаты, истекает через час.
-	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
 	mustExec(t, `INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end, payment_method_id)
-		VALUES ($1, 'basic', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-saved-1')`, shop.ID)
+		VALUES ($1, 'standard', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-saved-1')`, shop.ID)
 
 	if err := env.processor.HandleBillingRenew(ctx, tasks.NewBillingRenew()); err != nil {
 		t.Fatalf("renew run: %v", err)
@@ -397,8 +369,8 @@ func TestRecurringRenewal(t *testing.T) {
 	if p.Status != billing.StatusSucceeded || p.PaymentMethod == nil || p.PaymentMethod.ID != "pm-saved-1" {
 		t.Fatalf("recurring yookassa payment: %+v", p)
 	}
-	if p.Amount.Value != "490.00" {
-		t.Fatalf("recurring amount: %s, want 490.00", p.Amount.Value)
+	if p.Amount.Value != "390.00" {
+		t.Fatalf("recurring amount: %s, want 390.00", p.Amount.Value)
 	}
 
 	// Повторный запуск джоба не создаёт второго списания (pending-платёж уже есть).
@@ -476,7 +448,7 @@ func TestWebhookUnknownPayment(t *testing.T) {
 	ghost := &billing.Payment{
 		ID:     fmt.Sprintf("yk-ghost-%d", env.yk.seq),
 		Status: billing.StatusSucceeded,
-		Amount: billing.Amount{Value: "490.00", Currency: "RUB"},
+		Amount: billing.Amount{Value: "390.00", Currency: "RUB"},
 	}
 	env.yk.payments[ghost.ID] = ghost
 	env.yk.mu.Unlock()
@@ -563,7 +535,7 @@ func TestReconcileStuckPayments(t *testing.T) {
 			PaymentID string `json:"payment_id"`
 		}
 		c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
-			map[string]string{"plan": "basic"}, http.StatusOK, &sub)
+			map[string]string{"plan": "standard"}, http.StatusOK, &sub)
 		env.yk.cancelByOurID(t, sub.PaymentID)
 		mustExec(t, "UPDATE payments SET created_at = now() - interval '1 hour' WHERE id = $1", sub.PaymentID)
 
@@ -588,12 +560,12 @@ func TestReconcileStuckPayments(t *testing.T) {
 		registerUser(c)
 		shop := createShop(c)
 
-		mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
+		mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() + interval '1 hour' WHERE id = $1", shop.ID)
 		mustExec(t, `INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end, payment_method_id)
-			VALUES ($1, 'basic', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-stuck-1')`, shop.ID)
+			VALUES ($1, 'standard', 'active', now() - interval '29 days', now() + interval '1 hour', 'pm-stuck-1')`, shop.ID)
 		// Платёж, зависший двое суток назад: ЮKassa о нём давно забыла.
 		mustExec(t, `INSERT INTO payments (shop_id, plan, amount, currency, status, recurring, created_at)
-			VALUES ($1, 'basic', 49000, 'RUB', 'pending', true, now() - interval '2 days')`, shop.ID)
+			VALUES ($1, 'standard', 49000, 'RUB', 'pending', true, now() - interval '2 days')`, shop.ID)
 
 		if err := env.processor.HandleBillingRenew(ctx, tasks.NewBillingRenew()); err != nil {
 			t.Fatalf("renew: %v", err)

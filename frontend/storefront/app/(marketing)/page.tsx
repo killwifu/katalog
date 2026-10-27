@@ -68,9 +68,10 @@ const STEPS = [
 // Короткие подписи для главной: на странице тарифов у тех же планов
 // развёрнутые списки возможностей.
 const PLAN_SUMMARY: Record<string, string> = {
-  free: '500 фото, 1 ГБ',
-  basic: '5 000 фото, 10 ГБ',
-  pro: '20 000 фото, 20 ГБ',
+  free: '250 фото, 1 ГБ',
+  standard: '2 000 фото, 5 ГБ',
+  pro: '20 000 фото, 40 ГБ',
+  business: '70 000 фото, 120 ГБ',
 }
 
 export default function HomePage() {

@@ -39,7 +39,7 @@ func TestAlbumPassword(t *testing.T) {
 		!strings.Contains(string(body), "password_plan_required") {
 		t.Fatalf("free plan: status %d, body %s", status, body)
 	}
-	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
 
 	// --- мусорные пароли ---
 	for _, bad := range []string{"abc", strings.Repeat("x", 65)} {
@@ -153,7 +153,7 @@ func TestAlbumPassword(t *testing.T) {
 	c.mustJSON("PATCH", albumPath, map[string]any{"title": "Каталог 2"}, http.StatusOK, nil)
 
 	// --- платный тариф: снять пароль можно ---
-	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
 	status, body = c.do("PATCH", albumPath, map[string]any{"password": ""})
 	if status != http.StatusOK || !strings.Contains(string(body), `"has_password":false`) {
 		t.Fatalf("снятие пароля: status %d, body %s", status, body)
@@ -170,12 +170,12 @@ func TestAlbumPasswordTenantIsolation(t *testing.T) {
 	registerUser(owner)
 	shop := createShop(owner)
 	album := createAlbum(owner, shop.ID)
-	mustExec(t, "UPDATE shops SET plan = 'basic' WHERE id = $1", shop.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard' WHERE id = $1", shop.ID)
 
 	stranger := newClient(t)
 	registerUser(stranger)
 	their := createShop(stranger)
-	mustExec(t, "UPDATE shops SET plan = 'basic' WHERE id = $1", their.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard' WHERE id = $1", their.ID)
 
 	for _, path := range []string{
 		"/api/v1/shops/" + shop.ID + "/albums/" + album.ID,

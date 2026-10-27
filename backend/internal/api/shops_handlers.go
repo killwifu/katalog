@@ -323,6 +323,9 @@ func (a *API) handleUpdateShop(w http.ResponseWriter, r *http.Request) {
 			apiError(w, http.StatusBadRequest, "invalid_settings", msg)
 			return
 		}
+		if watermarkTurnOnForbidden(w, shop, shop.Settings, *req.Settings, true) {
+			return
+		}
 		settings = *req.Settings
 	}
 

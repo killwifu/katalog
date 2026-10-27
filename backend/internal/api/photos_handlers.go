@@ -109,13 +109,6 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 			"shop is suspended by moderation: uploads are disabled")
 		return
 	}
-	// Мягкий отказ по подписке: в grace/suspended загрузка заблокирована,
-	// контент и витрина (в grace) продолжают работать.
-	if shop.BillingState != db.BillingStateOk {
-		apiError(w, http.StatusForbidden, "subscription_inactive",
-			"subscription is inactive: uploads are disabled until the plan is renewed")
-		return
-	}
 	limits := a.Cfg.Billing.Limits(string(shop.Plan))
 	if shop.StorageUsed+req.Size > limits.MaxStorage {
 		apiError(w, http.StatusForbidden, "quota_exceeded",

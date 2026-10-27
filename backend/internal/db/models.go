@@ -55,6 +55,48 @@ func (ns NullAlbumStatus) Value() (driver.Value, error) {
 	return string(ns.AlbumStatus), nil
 }
 
+type BillingPeriod string
+
+const (
+	BillingPeriodMonth BillingPeriod = "month"
+	BillingPeriodYear  BillingPeriod = "year"
+)
+
+func (e *BillingPeriod) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BillingPeriod(s)
+	case string:
+		*e = BillingPeriod(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BillingPeriod: %T", src)
+	}
+	return nil
+}
+
+type NullBillingPeriod struct {
+	BillingPeriod BillingPeriod `json:"billing_period"`
+	Valid         bool          `json:"valid"` // Valid is true if BillingPeriod is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBillingPeriod) Scan(value interface{}) error {
+	if value == nil {
+		ns.BillingPeriod, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BillingPeriod.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBillingPeriod) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BillingPeriod), nil
+}
+
 type BillingState string
 
 const (
@@ -364,9 +406,10 @@ func (ns NullPhotoStatus) Value() (driver.Value, error) {
 type ShopPlan string
 
 const (
-	ShopPlanFree  ShopPlan = "free"
-	ShopPlanBasic ShopPlan = "basic"
-	ShopPlanPro   ShopPlan = "pro"
+	ShopPlanFree     ShopPlan = "free"
+	ShopPlanStandard ShopPlan = "standard"
+	ShopPlanPro      ShopPlan = "pro"
+	ShopPlanBusiness ShopPlan = "business"
 )
 
 func (e *ShopPlan) Scan(src interface{}) error {
@@ -633,6 +676,11 @@ type Payment struct {
 	Recurring         bool               `json:"recurring"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Period            BillingPeriod      `json:"period"`
+	Kind              string             `json:"kind"`
+	FromPlan          NullShopPlan       `json:"from_plan"`
+	PeriodStart       pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd         pgtype.Timestamptz `json:"period_end"`
 }
 
 type Photo struct {
@@ -687,6 +735,7 @@ type Shop struct {
 	PaidUntil     pgtype.Timestamptz `json:"paid_until"`
 	SlugChangedAt pgtype.Timestamptz `json:"slug_changed_at"`
 	MediaRev      int32              `json:"media_rev"`
+	TrialEndsAt   pgtype.Timestamptz `json:"trial_ends_at"`
 }
 
 type Subscription struct {
@@ -699,6 +748,9 @@ type Subscription struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	PaymentMethodID *string            `json:"payment_method_id"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Period          BillingPeriod      `json:"period"`
+	NextPlan        NullShopPlan       `json:"next_plan"`
+	NextPeriod      NullBillingPeriod  `json:"next_period"`
 }
 
 type Tab struct {
