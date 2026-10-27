@@ -61,6 +61,8 @@ var env struct {
 	yk *fakeYooKassa
 	// mail — перехватчик писем (вместо SMTP), наполняется воркером.
 	mail *captureMail
+	// oauth — фейковые Яндекс ID и VK ID (обмен кода, профиль).
+	oauth *fakeOAuth
 	// revalidated — слаги магазинов, полученные фейковой витриной
 	// через вебхук ревалидации.
 	revalidated chan string
@@ -197,6 +199,8 @@ func run(m *testing.M) int {
 	ykClient := billing.New(env.yk.srv.URL, "test-yk-shop", "test-yk-key")
 
 	env.mail = newCaptureMail()
+	env.oauth = newFakeOAuth()
+	defer env.oauth.srv.Close()
 
 	cfg := config.Config{
 		SessionTTL:      time.Hour,
@@ -205,6 +209,7 @@ func run(m *testing.M) int {
 		SiteURL:         "http://katalog.test",
 		StopWords:       []string{"контрафакт", "запрещёнка"},
 		Mail:            config.MailConfig{AdminEmail: "moderator@test.local"},
+		OAuth:           env.oauth.providers(),
 		// Низкий порог, чтобы тест алерта не создавал тысячи просмотров.
 		TrafficAlertMultiplier: 5,
 		TrafficAlertMinViews:   100,

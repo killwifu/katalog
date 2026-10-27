@@ -63,11 +63,12 @@ type EmailSendPayload struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Text    string `json:"text"`
+	HTML    string `json:"html,omitempty"`
 }
 
 // NewEmailSend — асинхронная отправка письма воркером (ретраи бесплатно).
-func NewEmailSend(to, subject, text string) (*asynq.Task, error) {
-	payload, err := json.Marshal(EmailSendPayload{To: to, Subject: subject, Text: text})
+func NewEmailSend(to, subject, text, html string) (*asynq.Task, error) {
+	payload, err := json.Marshal(EmailSendPayload{To: to, Subject: subject, Text: text, HTML: html})
 	if err != nil {
 		return nil, fmt.Errorf("marshal email:send payload: %w", err)
 	}

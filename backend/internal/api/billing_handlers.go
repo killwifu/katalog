@@ -666,9 +666,9 @@ func (a *API) settlePaymentSucceeded(ctx context.Context, p billing.Payment) err
 	// Письмо только после коммита: подтверждать оплату, которая
 	// откатилась, хуже, чем не подтвердить её вовсе.
 	if user, uerr := a.Q.GetUserByID(ctx, shop.OwnerID); uerr == nil && user.Email != nil {
-		tpl := mail.PaymentSucceeded(shop.Name, mail.PlanName(string(pay.Plan)), pay.Amount,
+		tpl := mail.PaymentSucceeded(a.Cfg.SiteURL, shop.Name, mail.PlanName(string(pay.Plan)), pay.Amount,
 			sub2.PeriodEnd.Time.Format("02.01.2006"))
-		a.sendEmail(ctx, *user.Email, tpl.Subject, tpl.Text)
+		a.sendTemplate(ctx, *user.Email, tpl)
 	}
 	a.Log.Info("payment succeeded", "shop_id", pay.ShopID, "plan", pay.Plan,
 		"kind", pay.Kind, "paid_until", sub2.PeriodEnd.Time)

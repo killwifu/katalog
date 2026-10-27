@@ -146,6 +146,9 @@ func registerUser(c *client) userJSON {
 	c.mustJSON("POST", "/api/v1/auth/register",
 		map[string]string{"email": uniqueEmail(), "password": "password123"},
 		http.StatusCreated, &u)
+	// Витрину создаёт только подтвердивший почту — тестам, которым нужен
+	// магазин, переход по ссылке из письма не важен.
+	mustExec(c.t, "UPDATE users SET email_verified_at = now() WHERE id = $1", u.ID)
 	return u
 }
 

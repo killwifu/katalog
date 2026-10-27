@@ -774,3 +774,10 @@ type User struct {
 	Role            UserRole           `json:"role"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
 }
+
+type UserIdentity struct {
+	Provider  string             `json:"provider"`
+	Subject   string             `json:"subject"`
+	UserID    uuid.UUID          `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}

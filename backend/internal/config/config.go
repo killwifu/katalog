@@ -53,6 +53,9 @@ type Config struct {
 	StopWords []string
 	Billing   BillingConfig
 	Mail      MailConfig
+	// OAuth — вход через внешних провайдеров (yandex, vk). Провайдер без
+	// ClientID выключен: его кнопки на экранах входа нет.
+	OAuth map[string]OAuthProvider
 	// TrafficAlertMultiplier — во сколько раз дневные просмотры магазина
 	// должны превысить средненедельные, чтобы уйдало письмо админу.
 	TrafficAlertMultiplier float64
@@ -76,10 +79,22 @@ type MailConfig struct {
 	SMTPPort int
 	SMTPUser string
 	SMTPPass string
-	// From — адрес отправителя писем.
-	From string
+	// From — адрес отправителя писем, FromName — имя отправителя («ВУАД»).
+	From     string
+	FromName string
 	// AdminEmail — куда уходят уведомления о новых жалобах (пусто = не слать).
 	AdminEmail string
+}
+
+// OAuthProvider — настройки OAuth 2.0 провайдера. Адреса — константы
+// провайдера; переопределяются только в тестах (фейковый провайдер).
+type OAuthProvider struct {
+	ClientID     string
+	ClientSecret string
+	AuthURL      string
+	TokenURL     string
+	UserInfoURL  string
+	Scope        string
 }
 
 // PlanLimits — лимиты и цена тарифа. PriceKopecks 0 = бесплатный тариф.
@@ -163,7 +178,28 @@ func Load() Config {
 			SMTPUser:   os.Getenv("SMTP_USER"),
 			SMTPPass:   os.Getenv("SMTP_PASS"),
 			From:       getenv("MAIL_FROM", "noreply@localhost"),
+			FromName:   getenv("MAIL_FROM_NAME", "ВУАД"),
 			AdminEmail: os.Getenv("ADMIN_EMAIL"),
+		},
+		OAuth: map[string]OAuthProvider{
+			// Яндекс ID: https://yandex.ru/dev/id/doc/ru/ (PKCE поддерживается).
+			"yandex": {
+				ClientID:     os.Getenv("OAUTH_YANDEX_CLIENT_ID"),
+				ClientSecret: os.Getenv("OAUTH_YANDEX_CLIENT_SECRET"),
+				AuthURL:      "https://oauth.yandex.ru/authorize",
+				TokenURL:     "https://oauth.yandex.ru/token",
+				UserInfoURL:  "https://login.yandex.ru/info?format=json",
+				Scope:        "login:email login:info",
+			},
+			// VK ID (OAuth 2.1, PKCE обязателен, секрет не нужен):
+			// https://id.vk.com/about/business/go/docs/ru/vkid/latest/vk-id/connection/api-integration/realization
+			"vk": {
+				ClientID:    os.Getenv("OAUTH_VK_CLIENT_ID"),
+				AuthURL:     "https://id.vk.com/authorize",
+				TokenURL:    "https://id.vk.com/oauth2/auth",
+				UserInfoURL: "https://id.vk.com/oauth2/user_info",
+				Scope:       "email",
+			},
 		},
 		Billing: BillingConfig{
 			Plans: map[string]PlanLimits{

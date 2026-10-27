@@ -111,6 +111,10 @@ services:
       BILLING_RETURN_URL: ${BILLING_RETURN_URL:-http://localhost/app/billing}
       SITE_URL: ${SITE_URL:-http://localhost}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # Вход через Яндекс / VK: без ключей кнопки провайдера нет.
+      OAUTH_YANDEX_CLIENT_ID: ${OAUTH_YANDEX_CLIENT_ID:-}
+      OAUTH_YANDEX_CLIENT_SECRET: ${OAUTH_YANDEX_CLIENT_SECRET:-}
+      OAUTH_VK_CLIENT_ID: ${OAUTH_VK_CLIENT_ID:-}
       STOP_WORDS: ${STOP_WORDS:-}
       AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-20}
       PUBLIC_RATE_LIMIT: ${PUBLIC_RATE_LIMIT:-300}
@@ -168,6 +172,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-noreply@localhost}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-ВУАД}
       SITE_URL: ${SITE_URL:-http://localhost}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       TRAFFIC_ALERT_MULTIPLIER: ${TRAFFIC_ALERT_MULTIPLIER:-5}

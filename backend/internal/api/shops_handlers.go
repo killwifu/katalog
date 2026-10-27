@@ -442,3 +442,59 @@ func (a *API) purgeStorage(r *http.Request, shopID uuid.UUID, photoIDs []uuid.UU
 		a.Log.Error("purge: enqueue failed", "shop_id", shopID, "error", err)
 	}
 }
+
+// handleSlugCheck — проверка адреса витрины при вводе (макет 08 · «Адрес
+// свободен» / «Адрес занят»). Тот же разбор, что при создании и смене
+// адреса; собственный адрес и собственная бронь — свободны.
+func (a *API) handleSlugCheck(w http.ResponseWriter, r *http.Request) {
+	slug := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("slug")))
+	if code, _ := validateSlug(slug); code != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "error": code})
+		return
+	}
+	taken := func(owner uuid.UUID) {
+		if owner == userID(r) {
+			writeJSON(w, http.StatusOK, map[string]any{"available": true})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"available": false, "error": "slug_taken"})
+	}
+	if shop, err := a.Q.GetShopBySlugAny(r.Context(), slug); err == nil {
+		taken(shop.OwnerID)
+		return
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		a.internalError(w, "check slug", err)
+		return
+	}
+	res, err := a.Q.GetSlugReservation(r.Context(), db.GetSlugReservationParams{Slug: slug, Column2: slugReservationDays})
+	if err == nil {
+		shop, serr := a.Q.GetShopByID(r.Context(), res.ShopID)
+		if serr != nil {
+			taken(uuid.Nil)
+			return
+		}
+		taken(shop.OwnerID)
+		return
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		a.internalError(w, "check slug reservation", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"available": true})
+}
+
+// requireVerifiedEmail — создать витрину можно только с подтверждённой
+// почтой (макет 05: «в кабинет — после перехода по ссылке»).
+func (a *API) requireVerifiedEmail(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, err := a.Q.GetUserByID(r.Context(), userID(r))
+		if err != nil {
+			a.internalError(w, "load user", err)
+			return
+		}
+		if !user.EmailVerifiedAt.Valid {
+			apiError(w, http.StatusForbidden, "email_not_verified", "confirm your email first")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -17,11 +19,22 @@ type credentialsRequest struct {
 	Password string `json:"password"`
 }
 
+type registerRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	signupIntent
+}
+
 type userResponse struct {
 	ID            string  `json:"id"`
 	Email         *string `json:"email"`
 	Role          string  `json:"role"`
 	EmailVerified bool    `json:"email_verified"`
+	// PendingEmail — новая почта из «Настроек», ждущая подтверждения по ссылке.
+	PendingEmail *string `json:"pending_email"`
+	// HasPassword — false у аккаунта, созданного входом через Яндекс/VK:
+	// смена почты и пароля у него не спрашивает текущий пароль.
+	HasPassword bool `json:"has_password"`
 }
 
 func toUserResponse(u db.User) userResponse {
@@ -30,7 +43,61 @@ func toUserResponse(u db.User) userResponse {
 		Email:         u.Email,
 		Role:          string(u.Role),
 		EmailVerified: u.EmailVerifiedAt.Valid,
+		HasPassword:   u.PasswordHash != nil,
 	}
+}
+
+func (a *API) userResponse(ctx context.Context, u db.User) userResponse {
+	resp := toUserResponse(u)
+	if p, err := a.RDB.Get(ctx, emailPendingKey(u.ID)).Result(); err == nil && p != "" {
+		resp.PendingEmail = &p
+	}
+	return resp
+}
+
+// parseNewEmail — разбор почты для регистрации и смены почты. Сверх
+// ParseAddress требует точку в домене: «seoulwear@mail» формально адрес,
+// но письмо до него не дойдёт (макет 04 · «Ошибки в полях»).
+func parseNewEmail(raw string) (string, bool) {
+	email := normalizeEmail(raw)
+	_, domain, _ := strings.Cut(email, "@")
+	if email == "" || !strings.Contains(domain, ".") || strings.HasSuffix(domain, ".") || strings.HasPrefix(domain, ".") {
+		return "", false
+	}
+	return email, true
+}
+
+// Блокировка входа (макет 06 · «Слишком много попыток»): после 5 неверных
+// паролей подряд вход на эту почту закрыт на 15 минут — и для верного пароля
+// тоже. Считается по почте, а не по IP: перебор идёт с многих адресов.
+const (
+	loginMaxFails = 5
+	loginLockTTL  = 15 * time.Minute
+)
+
+func loginFailKey(email string) string { return "loginfail:" + email }
+func loginLockKey(email string) string { return "loginlock:" + email }
+
+// loginFailed учитывает неверную попытку; true — почта только что заблокирована.
+func (a *API) loginFailed(ctx context.Context, email string) bool {
+	n, err := a.RDB.Incr(ctx, loginFailKey(email)).Result()
+	if err != nil {
+		a.Log.Error("login fail counter failed", "error", err)
+		return false
+	}
+	if n == 1 {
+		a.RDB.Expire(ctx, loginFailKey(email), loginLockTTL)
+	}
+	if n < loginMaxFails {
+		return false
+	}
+	a.RDB.Set(ctx, loginLockKey(email), 1, loginLockTTL)
+	a.RDB.Del(ctx, loginFailKey(email))
+	return true
+}
+
+func loginLocked(w http.ResponseWriter) {
+	apiError(w, http.StatusTooManyRequests, "login_locked", "too many failed attempts, try again in 15 minutes")
 }
 
 // normalizeEmail приводит адрес к тому виду, в котором он лежит в базе:
@@ -75,21 +142,19 @@ func validNewPassword(w http.ResponseWriter, password string) bool {
 }
 
 func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
-	var req credentialsRequest
+	var req registerRequest
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
 	// Берём разобранный адрес, а не строку как есть: ParseAddress принимает
 	// и форму «Имя <a@b>». Такая строка уезжала в базу целиком — письма
 	// потом не уходили (RCPT TO принимает только голый адрес), а один и тот
 	// же ящик мог зарегистрироваться дважды в разных формах.
-	addr, err := mail.ParseAddress(email)
-	if err != nil {
+	email, ok := parseNewEmail(req.Email)
+	if !ok {
 		apiError(w, http.StatusBadRequest, "invalid_email", "invalid email address")
 		return
 	}
-	email = strings.ToLower(addr.Address)
 	if !validNewPassword(w, req.Password) {
 		return
 	}
@@ -124,7 +189,9 @@ func (a *API) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if !a.startSession(w, r, user) {
 		return
 	}
-	a.sendVerificationEmail(r.Context(), user)
+	// Первое письмо открывает минутный интервал до «Отправить ещё раз».
+	a.resendAllowed(r.Context(), "verify:"+user.ID.String())
+	a.sendVerificationEmail(r.Context(), user, req.signupIntent)
 	writeJSON(w, http.StatusCreated, toUserResponse(user))
 }
 
@@ -136,9 +203,21 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Тот же разбор, что и при регистрации: иначе форма «Имя <a@b>»
 	// не совпадёт с сохранённым голым адресом.
 	email := normalizeEmail(req.Email)
+	if n, _ := a.RDB.Exists(r.Context(), loginLockKey(email)).Result(); n > 0 {
+		loginLocked(w)
+		return
+	}
+	// Неверная попытка: 401, а пятая подряд — блокировка.
+	fail := func() {
+		if a.loginFailed(r.Context(), email) {
+			loginLocked(w)
+			return
+		}
+		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+	}
 	// Слишком длинный пароль заведомо не подходит — не хешируем его.
 	if len([]rune(req.Password)) > maxAccountPassword {
-		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+		fail()
 		return
 	}
 	user, err := a.Q.GetUserByEmail(r.Context(), &email)
@@ -146,7 +225,7 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// Тот же argon2, что и для существующего адреса: иначе по времени
 		// ответа (2 мс против 35 мс) видно, зарегистрирован ли email.
 		_, _ = auth.VerifyPassword(req.Password, dummyPasswordHash)
-		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+		fail()
 		return
 	}
 	if err != nil {
@@ -154,7 +233,7 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user.PasswordHash == nil {
-		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+		fail()
 		return
 	}
 	ok, err := auth.VerifyPassword(req.Password, *user.PasswordHash)
@@ -163,11 +242,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		apiError(w, http.StatusUnauthorized, "invalid_credentials", "wrong email or password")
+		fail()
 		return
 	}
+	a.RDB.Del(r.Context(), loginFailKey(email))
 	if !a.startSession(w, r, user) {
 		return
+	}
+	// Почта не подтверждена — кабинет покажет «Подтвердите почту» (макет 05)
+	// с таймером, поэтому свежее письмо уходит сразу: прежнее могло истечь.
+	if !user.EmailVerifiedAt.Valid && a.resendAllowed(r.Context(), "verify:"+user.ID.String()) {
+		a.sendVerificationEmail(r.Context(), user, signupIntent{})
 	}
 	writeJSON(w, http.StatusOK, toUserResponse(user))
 }
@@ -189,7 +274,7 @@ func (a *API) handleMe(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "load current user", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toUserResponse(user))
+	writeJSON(w, http.StatusOK, a.userResponse(r.Context(), user))
 }
 
 func (a *API) startSession(w http.ResponseWriter, r *http.Request, user db.User) bool {

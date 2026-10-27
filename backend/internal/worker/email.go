@@ -22,6 +22,7 @@ func (p *Processor) HandleEmailSend(ctx context.Context, t *asynq.Task) error {
 		To:      payload.To,
 		Subject: payload.Subject,
 		Text:    payload.Text,
+		HTML:    payload.HTML,
 	}); err != nil {
 		return fmt.Errorf("send email: %w", err)
 	}
