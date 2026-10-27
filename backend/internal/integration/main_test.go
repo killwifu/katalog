@@ -215,11 +215,11 @@ func run(m *testing.M) int {
 		Billing: config.BillingConfig{
 			// Маленький лимит фото на free — для теста квоты.
 			Plans: map[string]config.PlanLimits{
-				"free":  {MaxPhotos: 8, MaxStorage: 1 << 30},
-				"basic": {MaxPhotos: 100, MaxStorage: 10 << 30, PriceKopecks: 49000},
-				"pro":   {MaxPhotos: 200, MaxStorage: 20 << 30, PriceKopecks: 99000},
+				"free":     {MaxPhotos: 8, MaxStorage: 1 << 30},
+				"standard": {MaxPhotos: 100, MaxStorage: 10 << 30, PriceKopecks: 39000},
+				"pro":      {MaxPhotos: 200, MaxStorage: 20 << 30, PriceKopecks: 89000},
+				"business": {MaxPhotos: 300, MaxStorage: 30 << 30, PriceKopecks: 169000},
 			},
-			GraceDays:  14,
 			PeriodDays: 30,
 			ReturnURL:  "http://localhost/app/billing",
 		},

@@ -18,7 +18,7 @@ func TestWebhookAcceptsFullYooKassaPayload(t *testing.T) {
 		PaymentID string `json:"payment_id"`
 	}
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/billing/subscribe",
-		map[string]string{"plan": "basic"}, http.StatusOK, &sub)
+		map[string]string{"plan": "standard"}, http.StatusOK, &sub)
 	p := env.yk.succeedByOurID(t, sub.PaymentID)
 
 	body := map[string]any{
@@ -53,7 +53,7 @@ func TestWebhookAcceptsFullYooKassaPayload(t *testing.T) {
 	}
 	postWebhook(c, body, http.StatusOK)
 
-	if b := getBilling(c, shop.ID); b.Plan != "basic" || b.PaidUntil == nil {
+	if b := getBilling(c, shop.ID); b.Plan != "standard" || b.PaidUntil == nil {
 		t.Fatalf("after real-format webhook: plan=%s paid_until=%v", b.Plan, b.PaidUntil)
 	}
 }

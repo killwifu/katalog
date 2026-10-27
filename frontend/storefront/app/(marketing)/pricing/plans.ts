@@ -9,10 +9,14 @@
 // на сайте и строка в кабинете не могли разъехаться незаметно.
 
 export type Plan = {
-  id: 'free' | 'basic' | 'pro'
+  id: 'free' | 'standard' | 'pro' | 'business'
   name: string
   /** ₽ в месяц; 0 — бесплатный тариф. */
   price: number
+  /** ₽ за год со скидкой 25% (как в кабинете: 12 × цена × 0,75). */
+  priceYear: number
+  /** Подпись под ценой (макет 08: «Для небольшого каталога»). */
+  tagline: string
   cta: string
   featured: boolean
   bullets: string[]
@@ -23,35 +27,41 @@ export const PLANS: Plan[] = [
     id: 'free',
     name: 'Бесплатный',
     price: 0,
-    cta: 'Начать',
+    priceYear: 0,
+    tagline: 'Попробовать витрину',
+    cta: 'Начать бесплатно',
     featured: false,
-    bullets: ['500 фото', '1 ГБ хранилища', 'Все возможности витрины', 'Без карты и без срока'],
+    bullets: ['250 фото', '1 ГБ хранилища'],
   },
   {
-    id: 'basic',
-    name: 'Базовый',
-    price: 490,
-    cta: 'Выбрать',
-    featured: true,
-    bullets: [
-      '5 000 фото',
-      '10 ГБ хранилища',
-      'Все возможности витрины',
-      'Оплата картой или через СБП',
-    ],
+    id: 'standard',
+    name: 'Стандарт',
+    price: 390,
+    priceYear: 3510,
+    tagline: 'Для небольшого каталога',
+    cta: 'Выбрать «Стандарт»',
+    featured: false,
+    bullets: ['2 000 фото', '5 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
   },
   {
     id: 'pro',
     name: 'Про',
-    price: 990,
-    cta: 'Выбрать',
+    price: 890,
+    priceYear: 8010,
+    tagline: 'Для активных продаж',
+    cta: 'Пробный период',
+    featured: true,
+    bullets: ['20 000 фото', '40 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
+  },
+  {
+    id: 'business',
+    name: 'Бизнес',
+    price: 1690,
+    priceYear: 15210,
+    tagline: 'Для больших каталогов',
+    cta: 'Выбрать «Бизнес»',
     featured: false,
-    bullets: [
-      '20 000 фото',
-      '20 ГБ хранилища',
-      'Все возможности витрины',
-      'Оплата картой или через СБП',
-    ],
+    bullets: ['70 000 фото', '120 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
   },
 ]
 
@@ -63,45 +73,43 @@ export type MatrixGroup = {
   rows: { label: string; values: Record<Plan['id'], Cell> }[]
 }
 
-// Тарифы различаются только объёмом — возможности одинаковые на всех.
-// Строки, одинаковые во всех колонках, страница приглушает сама.
+const all = (v: Cell): Record<Plan['id'], Cell> => ({ free: v, standard: v, pro: v, business: v })
+const paid = (v: Cell): Record<Plan['id'], Cell> => ({ free: false, standard: v, pro: v, business: v })
+
+// Сравнение тарифов — по макету 08 · «Лендинг · Тарифы». На Бесплатном
+// закрыты пароли альбомов, водяной знак и аналитика.
 export const MATRIX: MatrixGroup[] = [
   {
-    title: 'Объём',
+    title: 'Лимиты',
     rows: [
-      { label: 'Фотографии', values: { free: '500', basic: '5 000', pro: '20 000' } },
-      { label: 'Хранилище', values: { free: '1 ГБ', basic: '10 ГБ', pro: '20 ГБ' } },
-      { label: 'Альбомы', values: { free: 'до 1 000', basic: 'до 1 000', pro: 'до 1 000' } },
-      {
-        label: 'Просмотры витрины',
-        values: { free: 'не ограничены', basic: 'не ограничены', pro: 'не ограничены' },
-      },
+      { label: 'Фотографии', values: { free: '250', standard: '2 000', pro: '20 000', business: '70 000' } },
+      { label: 'Хранилище', values: { free: '1 ГБ', standard: '5 ГБ', pro: '40 ГБ', business: '120 ГБ' } },
+      { label: 'Размер одного фото', values: all('до 10 МБ') },
+      { label: 'Форматы фото', values: all('JPEG, PNG, HEIC') },
+      { label: 'Альбомы', values: all('Без ограничений') },
     ],
   },
   {
-    title: 'Витрина',
+    title: 'Загрузка и каталог',
     rows: [
-      { label: 'Альбомы и категории, 2 уровня', values: { free: true, basic: true, pro: true } },
-      { label: 'Свои вкладки и разделы', values: { free: true, basic: true, pro: true } },
-      { label: 'Поиск по подписям', values: { free: true, basic: true, pro: true } },
-      { label: 'Переход в мессенджер продавца', values: { free: true, basic: true, pro: true } },
-      { label: 'Скрытые альбомы', values: { free: true, basic: true, pro: true } },
+      { label: 'Массовая загрузка папками', values: all(true) },
+      { label: 'Категории и подкатегории', values: all(true) },
+      { label: 'Сортировка альбомов', values: all(true) },
+      { label: 'Скрытие альбомов с витрины', values: all(true) },
     ],
   },
   {
-    title: 'Работа с фото',
+    title: 'Защита фото',
     rows: [
-      { label: 'Массовая загрузка с телефона', values: { free: true, basic: true, pro: true } },
-      { label: 'Водяной знак', values: { free: true, basic: true, pro: true } },
+      { label: 'Пароли на альбомы', values: paid(true) },
+      { label: 'Водяной знак', values: paid(true) },
     ],
   },
   {
-    title: 'Дополнительно',
+    title: 'Продажи и аналитика',
     rows: [
-      {
-        label: 'Статистика: просмотры, посетители, переходы',
-        values: { free: true, basic: true, pro: true },
-      },
+      { label: 'Кнопки «Написать» в Telegram, WhatsApp, VK, MAX и Авито', values: all(true) },
+      { label: 'Аналитика посещений', values: paid('за 30 дней') },
     ],
   },
 ]

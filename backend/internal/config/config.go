@@ -90,12 +90,9 @@ type PlanLimits struct {
 }
 
 type BillingConfig struct {
-	// Plans — лимиты по имени тарифа (free/basic/pro).
+	// Plans — лимиты по имени тарифа (free/standard/pro/business).
 	Plans map[string]PlanLimits
-	// GraceDays — длительность grace-периода после окончания оплаты
-	// (загрузка заблокирована, витрина работает; затем витрина скрывается).
-	GraceDays int
-	// PeriodDays — длительность оплаченного периода подписки.
+	// PeriodDays — длительность оплаченного месяца подписки (год — 365 дней).
 	PeriodDays int
 	// ЮKassa. Пустой YooKassaShopID = платежи выключены (subscribe вернёт 503).
 	YooKassaShopID    string
@@ -109,6 +106,27 @@ type BillingConfig struct {
 // (safe default: загрузка будет запрещена).
 func (b BillingConfig) Limits(plan string) PlanLimits {
 	return b.Plans[plan]
+}
+
+// YearDays — длительность годового периода подписки.
+const YearDays = 365
+
+// Price — цена тарифа за период в копейках. Год — 12 месяцев со скидкой
+// 25% (макет 18 · «Оплата за год»: 390 -> 3 510, 890 -> 8 010, 1 690 -> 15 210).
+func (b BillingConfig) Price(plan string, year bool) int64 {
+	p := b.Plans[plan].PriceKopecks
+	if year {
+		return p * 12 * 3 / 4
+	}
+	return p
+}
+
+// Days — длительность периода в днях.
+func (b BillingConfig) Days(year bool) int {
+	if year {
+		return YearDays
+	}
+	return b.PeriodDays
 }
 
 func Load() Config {
@@ -150,21 +168,25 @@ func Load() Config {
 		Billing: BillingConfig{
 			Plans: map[string]PlanLimits{
 				"free": {
-					MaxPhotos:  getenvInt64("PLAN_FREE_MAX_PHOTOS", 500),
+					MaxPhotos:  getenvInt64("PLAN_FREE_MAX_PHOTOS", 250),
 					MaxStorage: getenvInt64("PLAN_FREE_MAX_STORAGE_MB", 1024) << 20,
 				},
-				"basic": {
-					MaxPhotos:    getenvInt64("PLAN_BASIC_MAX_PHOTOS", 5000),
-					MaxStorage:   getenvInt64("PLAN_BASIC_MAX_STORAGE_MB", 10*1024) << 20,
-					PriceKopecks: getenvInt64("PLAN_BASIC_PRICE_RUB", 490) * 100,
+				"standard": {
+					MaxPhotos:    getenvInt64("PLAN_STANDARD_MAX_PHOTOS", 2000),
+					MaxStorage:   getenvInt64("PLAN_STANDARD_MAX_STORAGE_MB", 5*1024) << 20,
+					PriceKopecks: getenvInt64("PLAN_STANDARD_PRICE_RUB", 390) * 100,
 				},
 				"pro": {
 					MaxPhotos:    getenvInt64("PLAN_PRO_MAX_PHOTOS", 20000),
-					MaxStorage:   getenvInt64("PLAN_PRO_MAX_STORAGE_MB", 20*1024) << 20,
-					PriceKopecks: getenvInt64("PLAN_PRO_PRICE_RUB", 990) * 100,
+					MaxStorage:   getenvInt64("PLAN_PRO_MAX_STORAGE_MB", 40*1024) << 20,
+					PriceKopecks: getenvInt64("PLAN_PRO_PRICE_RUB", 890) * 100,
+				},
+				"business": {
+					MaxPhotos:    getenvInt64("PLAN_BUSINESS_MAX_PHOTOS", 70000),
+					MaxStorage:   getenvInt64("PLAN_BUSINESS_MAX_STORAGE_MB", 120*1024) << 20,
+					PriceKopecks: getenvInt64("PLAN_BUSINESS_PRICE_RUB", 1690) * 100,
 				},
 			},
-			GraceDays:         int(getenvInt64("BILLING_GRACE_DAYS", 14)),
 			PeriodDays:        int(getenvInt64("BILLING_PERIOD_DAYS", 30)),
 			YooKassaShopID:    os.Getenv("YOOKASSA_SHOP_ID"),
 			YooKassaSecretKey: os.Getenv("YOOKASSA_SECRET_KEY"),

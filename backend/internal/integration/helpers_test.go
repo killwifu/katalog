@@ -310,3 +310,10 @@ func uploadReadyPhoto(t *testing.T, c *client, shopID, albumID string, data []by
 	waitPhotoStatus(c, shopID, albumID, id, "ready", 60*time.Second)
 	return id
 }
+
+// makePaid переводит магазин на платный тариф: аналитика, водяной знак
+// и пароли альбомов на Бесплатном закрыты.
+func makePaid(t *testing.T, shopID string) {
+	t.Helper()
+	mustExec(t, "UPDATE shops SET plan = 'pro', paid_until = now() + interval '30 days' WHERE id = $1", shopID)
+}

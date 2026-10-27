@@ -63,7 +63,7 @@ func TestSubAlbumLockedByParentPassword(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
-	mustExec(t, "UPDATE shops SET plan = 'basic', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
+	mustExec(t, "UPDATE shops SET plan = 'standard', paid_until = now() + interval '30 days' WHERE id = $1", shop.ID)
 	parent := createAlbum(c, shop.ID)
 	var child albumJSON
 	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",

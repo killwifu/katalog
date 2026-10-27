@@ -12,40 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const applyPlanVisibility = `-- name: ApplyPlanVisibility :exec
-UPDATE albums
-SET hidden_by_plan = NOT (id = ANY($2::uuid[])),
-    updated_at     = now()
-WHERE shop_id = $1
-`
-
-type ApplyPlanVisibilityParams struct {
-	ShopID  uuid.UUID   `json:"shop_id"`
-	Column2 []uuid.UUID `json:"column_2"`
-}
-
-// Применение выбора: видимыми остаются только перечисленные альбомы.
-// Ничего не удаляется — снимается лишь видимость на витрине.
-func (q *Queries) ApplyPlanVisibility(ctx context.Context, arg ApplyPlanVisibilityParams) error {
-	_, err := q.db.Exec(ctx, applyPlanVisibility, arg.ShopID, arg.Column2)
-	return err
-}
-
-const clearPlanVisibility = `-- name: ClearPlanVisibility :execrows
-UPDATE albums
-SET hidden_by_plan = false, updated_at = now()
-WHERE shop_id = $1 AND hidden_by_plan
-`
-
-// Возврат после оплаты: скрытое тарифом возвращается целиком и сразу.
-func (q *Queries) ClearPlanVisibility(ctx context.Context, shopID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, clearPlanVisibility, shopID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countAlbumChildren = `-- name: CountAlbumChildren :one
 SELECT count(*) FROM albums WHERE parent_id = $1 AND deleted_at IS NULL
 `
@@ -263,56 +229,6 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.BlockedByModerator,
 			&i.DeletedAt,
 			&i.Watermark,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAlbumsForDowngrade = `-- name: ListAlbumsForDowngrade :many
-SELECT a.id, a.title, a.photo_count, a.hidden_by_plan, a.created_at,
-       coalesce(sum(d.views), 0)::bigint AS views
-FROM albums a
-LEFT JOIN daily_stats d
-       ON d.album_id = a.id AND d.date >= (current_date - 30)
-WHERE a.shop_id = $1 AND a.deleted_at IS NULL
-GROUP BY a.id
-ORDER BY views DESC, a.created_at DESC
-`
-
-type ListAlbumsForDowngradeRow struct {
-	ID           uuid.UUID          `json:"id"`
-	Title        string             `json:"title"`
-	PhotoCount   int32              `json:"photo_count"`
-	HiddenByPlan bool               `json:"hidden_by_plan"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	Views        int64              `json:"views"`
-}
-
-// Экран понижения тарифа: альбомы с числом фото и просмотрами за 30 дней.
-// Просмотры нужны для варианта «самые просматриваемые» — он предзаполнен,
-// потому что чаще всего это и есть правильный выбор.
-func (q *Queries) ListAlbumsForDowngrade(ctx context.Context, shopID uuid.UUID) ([]ListAlbumsForDowngradeRow, error) {
-	rows, err := q.db.Query(ctx, listAlbumsForDowngrade, shopID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAlbumsForDowngradeRow
-	for rows.Next() {
-		var i ListAlbumsForDowngradeRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.PhotoCount,
-			&i.HiddenByPlan,
-			&i.CreatedAt,
-			&i.Views,
 		); err != nil {
 			return nil, err
 		}

@@ -174,7 +174,7 @@ const adminSuspendShop = `-- name: AdminSuspendShop :one
 UPDATE shops
 SET status = 'suspended', updated_at = now()
 WHERE id = $1
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at
 `
 
 func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, error) {
@@ -197,6 +197,7 @@ func (q *Queries) AdminSuspendShop(ctx context.Context, id uuid.UUID) (Shop, err
 		&i.PaidUntil,
 		&i.SlugChangedAt,
 		&i.MediaRev,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }
@@ -272,7 +273,7 @@ const adminUnsuspendShop = `-- name: AdminUnsuspendShop :one
 UPDATE shops
 SET status = 'active', updated_at = now()
 WHERE id = $1 AND status = 'suspended'
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at
 `
 
 func (q *Queries) AdminUnsuspendShop(ctx context.Context, id uuid.UUID) (Shop, error) {
@@ -295,6 +296,7 @@ func (q *Queries) AdminUnsuspendShop(ctx context.Context, id uuid.UUID) (Shop, e
 		&i.PaidUntil,
 		&i.SlugChangedAt,
 		&i.MediaRev,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }
@@ -406,7 +408,7 @@ func (q *Queries) GetComplaint(ctx context.Context, id uuid.UUID) (Complaint, er
 }
 
 const getShopBySlugAny = `-- name: GetShopBySlugAny :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at FROM shops
 WHERE slug = $1
 `
 
@@ -431,6 +433,7 @@ func (q *Queries) GetShopBySlugAny(ctx context.Context, slug string) (Shop, erro
 		&i.PaidUntil,
 		&i.SlugChangedAt,
 		&i.MediaRev,
+		&i.TrialEndsAt,
 	)
 	return i, err
 }

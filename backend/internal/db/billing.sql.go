@@ -14,11 +14,12 @@ import (
 
 const cancelSubscription = `-- name: CancelSubscription :execrows
 UPDATE subscriptions
-SET status = 'canceled', updated_at = now()
+SET status = 'canceled', next_plan = NULL, next_period = NULL, updated_at = now()
 WHERE shop_id = $1 AND status = 'active'
 `
 
-// Отмена автопродления: подписка живёт до конца оплаченного периода.
+// Отмена автопродления: подписка живёт до конца оплаченного периода,
+// запланированный переход ниже тоже отменяется — дальше будет Бесплатный.
 func (q *Queries) CancelSubscription(ctx context.Context, shopID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, cancelSubscription, shopID)
 	if err != nil {
@@ -41,17 +42,21 @@ func (q *Queries) CountShopPhotos(ctx context.Context, shopID uuid.UUID) (int64,
 }
 
 const createPayment = `-- name: CreatePayment :one
-INSERT INTO payments (shop_id, plan, amount, currency, recurring)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at
+INSERT INTO payments (shop_id, plan, amount, currency, recurring, period, kind, from_plan, period_end)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at, period, kind, from_plan, period_start, period_end
 `
 
 type CreatePaymentParams struct {
-	ShopID    uuid.UUID `json:"shop_id"`
-	Plan      ShopPlan  `json:"plan"`
-	Amount    int64     `json:"amount"`
-	Currency  string    `json:"currency"`
-	Recurring bool      `json:"recurring"`
+	ShopID    uuid.UUID          `json:"shop_id"`
+	Plan      ShopPlan           `json:"plan"`
+	Amount    int64              `json:"amount"`
+	Currency  string             `json:"currency"`
+	Recurring bool               `json:"recurring"`
+	Period    BillingPeriod      `json:"period"`
+	Kind      string             `json:"kind"`
+	FromPlan  NullShopPlan       `json:"from_plan"`
+	PeriodEnd pgtype.Timestamptz `json:"period_end"`
 }
 
 func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error) {
@@ -61,6 +66,10 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		arg.Amount,
 		arg.Currency,
 		arg.Recurring,
+		arg.Period,
+		arg.Kind,
+		arg.FromPlan,
+		arg.PeriodEnd,
 	)
 	var i Payment
 	err := row.Scan(
@@ -74,12 +83,69 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.Recurring,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Period,
+		&i.Kind,
+		&i.FromPlan,
+		&i.PeriodStart,
+		&i.PeriodEnd,
 	)
 	return i, err
 }
 
+const expirePaidShops = `-- name: ExpirePaidShops :many
+UPDATE shops
+SET plan = 'free', paid_until = NULL, updated_at = now()
+WHERE plan <> 'free' AND paid_until IS NOT NULL AND paid_until < now()
+RETURNING id, slug, name, owner_id
+`
+
+type ExpirePaidShopsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Slug    string    `json:"slug"`
+	Name    string    `json:"name"`
+	OwnerID uuid.UUID `json:"owner_id"`
+}
+
+// Окончание оплаты или пробного периода: аккаунт переходит на Бесплатный,
+// витрина работает, контент остаётся.
+func (q *Queries) ExpirePaidShops(ctx context.Context) ([]ExpirePaidShopsRow, error) {
+	rows, err := q.db.Query(ctx, expirePaidShops)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpirePaidShopsRow
+	for rows.Next() {
+		var i ExpirePaidShopsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.OwnerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const expireSubscriptions = `-- name: ExpireSubscriptions :exec
+UPDATE subscriptions
+SET status = 'expired', next_plan = NULL, next_period = NULL, updated_at = now()
+WHERE period_end < now() AND status IN ('active', 'past_due', 'canceled')
+`
+
+func (q *Queries) ExpireSubscriptions(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, expireSubscriptions)
+	return err
+}
+
 const getPaymentByProviderID = `-- name: GetPaymentByProviderID :one
-SELECT id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at FROM payments
+SELECT id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at, period, kind, from_plan, period_start, period_end FROM payments
 WHERE provider_payment_id = $1
 `
 
@@ -97,13 +163,18 @@ func (q *Queries) GetPaymentByProviderID(ctx context.Context, providerPaymentID 
 		&i.Recurring,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Period,
+		&i.Kind,
+		&i.FromPlan,
+		&i.PeriodStart,
+		&i.PeriodEnd,
 	)
 	return i, err
 }
 
 const getSubscriptionByShop = `-- name: GetSubscriptionByShop :one
 
-SELECT id, shop_id, plan, status, period_start, period_end, created_at, payment_method_id, updated_at FROM subscriptions
+SELECT id, shop_id, plan, status, period_start, period_end, created_at, payment_method_id, updated_at, period, next_plan, next_period FROM subscriptions
 WHERE shop_id = $1
 `
 
@@ -121,8 +192,87 @@ func (q *Queries) GetSubscriptionByShop(ctx context.Context, shopID uuid.UUID) (
 		&i.CreatedAt,
 		&i.PaymentMethodID,
 		&i.UpdatedAt,
+		&i.Period,
+		&i.NextPlan,
+		&i.NextPeriod,
 	)
 	return i, err
+}
+
+const lastManualPayment = `-- name: LastManualPayment :one
+SELECT id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at, period, kind, from_plan, period_start, period_end FROM payments
+WHERE shop_id = $1 AND NOT recurring AND status <> 'pending'
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+// Последняя оплата, начатая продавцом (не автосписание), — для плашки
+// «Оплата не прошла».
+func (q *Queries) LastManualPayment(ctx context.Context, shopID uuid.UUID) (Payment, error) {
+	row := q.db.QueryRow(ctx, lastManualPayment, shopID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.Plan,
+		&i.Amount,
+		&i.Currency,
+		&i.ProviderPaymentID,
+		&i.Status,
+		&i.Recurring,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Period,
+		&i.Kind,
+		&i.FromPlan,
+		&i.PeriodStart,
+		&i.PeriodEnd,
+	)
+	return i, err
+}
+
+const listPayments = `-- name: ListPayments :many
+SELECT id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at, period, kind, from_plan, period_start, period_end FROM payments
+WHERE shop_id = $1 AND status <> 'pending'
+ORDER BY created_at DESC
+LIMIT 100
+`
+
+// История платежей: новые сверху, незавершённые не показываются.
+func (q *Queries) ListPayments(ctx context.Context, shopID uuid.UUID) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, listPayments, shopID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payment
+	for rows.Next() {
+		var i Payment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShopID,
+			&i.Plan,
+			&i.Amount,
+			&i.Currency,
+			&i.ProviderPaymentID,
+			&i.Status,
+			&i.Recurring,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Period,
+			&i.Kind,
+			&i.FromPlan,
+			&i.PeriodStart,
+			&i.PeriodEnd,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listStuckPayments = `-- name: ListStuckPayments :many
@@ -168,25 +318,24 @@ func (q *Queries) ListStuckPayments(ctx context.Context, olderThanMinutes int32)
 }
 
 const listSubscriptionsToRenew = `-- name: ListSubscriptionsToRenew :many
-SELECT s.id, s.shop_id, s.plan, s.status, s.period_start, s.period_end, s.created_at, s.payment_method_id, s.updated_at FROM subscriptions s
+SELECT s.id, s.shop_id, s.plan, s.status, s.period_start, s.period_end, s.created_at, s.payment_method_id, s.updated_at, s.period, s.next_plan, s.next_period FROM subscriptions s
 WHERE s.status = 'active'
   AND s.payment_method_id IS NOT NULL
   AND s.period_end < now() + interval '1 day'
+  AND s.period_end > now()
   AND NOT EXISTS (
-      -- Незакрытый платёж блокирует повторное списание, но только пока он
-      -- действительно может завершиться. Без срока одно недоставленное
-      -- уведомление замораживало продления магазина навсегда: подписка
-      -- тихо уходила в grace и дальше в suspended при рабочей карте.
       SELECT 1 FROM payments p
-      WHERE p.shop_id = s.shop_id AND p.recurring AND p.status = 'pending'
-        AND p.created_at > now() - make_interval(hours => $1::int)
+      WHERE p.shop_id = s.shop_id AND p.recurring
+        AND p.created_at > s.period_end - interval '1 day'
   )
 `
 
 // Рекуррентные списания: активные подписки с сохранённым способом оплаты,
-// истекающие в ближайшие сутки, без незавершённого рекуррентного платежа.
-func (q *Queries) ListSubscriptionsToRenew(ctx context.Context, pendingHours int32) ([]Subscription, error) {
-	rows, err := q.db.Query(ctx, listSubscriptionsToRenew, pendingHours)
+// истекающие в ближайшие сутки. Одна попытка на период: если автосписание
+// не прошло, повторов нет — тариф заканчивается (макет 18 · «История
+// платежей»). Прошедшее списание сдвигает period_end, и окно уезжает вперёд.
+func (q *Queries) ListSubscriptionsToRenew(ctx context.Context) ([]Subscription, error) {
+	rows, err := q.db.Query(ctx, listSubscriptionsToRenew)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +353,9 @@ func (q *Queries) ListSubscriptionsToRenew(ctx context.Context, pendingHours int
 			&i.CreatedAt,
 			&i.PaymentMethodID,
 			&i.UpdatedAt,
+			&i.Period,
+			&i.NextPlan,
+			&i.NextPeriod,
 		); err != nil {
 			return nil, err
 		}
@@ -215,28 +367,63 @@ func (q *Queries) ListSubscriptionsToRenew(ctx context.Context, pendingHours int
 	return items, nil
 }
 
-const markSubscriptionsExpired = `-- name: MarkSubscriptionsExpired :exec
-UPDATE subscriptions s
-SET status = 'expired', updated_at = now()
-FROM shops sh
-WHERE s.shop_id = sh.id AND sh.billing_state = 'suspended'
-  AND s.status IN ('active', 'past_due', 'canceled')
+const resumeSubscription = `-- name: ResumeSubscription :execrows
+UPDATE subscriptions
+SET status = 'active', updated_at = now()
+WHERE shop_id = $1 AND status = 'canceled' AND period_end > now()
+  AND payment_method_id IS NOT NULL
 `
 
-func (q *Queries) MarkSubscriptionsExpired(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, markSubscriptionsExpired)
-	return err
+// Включить автопродление обратно — без оплаты, пока период не кончился
+// и есть сохранённый способ оплаты.
+func (q *Queries) ResumeSubscription(ctx context.Context, shopID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, resumeSubscription, shopID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const markSubscriptionsPastDue = `-- name: MarkSubscriptionsPastDue :exec
-UPDATE subscriptions s
-SET status = 'past_due', updated_at = now()
-FROM shops sh
-WHERE s.shop_id = sh.id AND sh.billing_state = 'grace' AND s.status = 'active'
+const scheduleSubscriptionChange = `-- name: ScheduleSubscriptionChange :execrows
+UPDATE subscriptions
+SET next_plan   = $2::shop_plan,
+    next_period = $3::billing_period,
+    status      = CASE WHEN payment_method_id IS NOT NULL THEN 'active'::subscription_status ELSE status END,
+    updated_at  = now()
+WHERE shop_id = $1 AND status IN ('active', 'canceled') AND period_end > now()
 `
 
-func (q *Queries) MarkSubscriptionsPastDue(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, markSubscriptionsPastDue)
+type ScheduleSubscriptionChangeParams struct {
+	ShopID     uuid.UUID     `json:"shop_id"`
+	NextPlan   ShopPlan      `json:"next_plan"`
+	NextPeriod BillingPeriod `json:"next_period"`
+}
+
+// Переход ниже — с конца оплаченного периода: применяется при очередном
+// автосписании. Автопродление включается, если есть чем платить.
+func (q *Queries) ScheduleSubscriptionChange(ctx context.Context, arg ScheduleSubscriptionChangeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, scheduleSubscriptionChange, arg.ShopID, arg.NextPlan, arg.NextPeriod)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setPaymentPeriod = `-- name: SetPaymentPeriod :exec
+UPDATE payments
+SET period_start = $2, period_end = $3, updated_at = now()
+WHERE id = $1
+`
+
+type SetPaymentPeriodParams struct {
+	ID          uuid.UUID          `json:"id"`
+	PeriodStart pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd   pgtype.Timestamptz `json:"period_end"`
+}
+
+// Срок, за который заплачено, — для истории платежей.
+func (q *Queries) SetPaymentPeriod(ctx context.Context, arg SetPaymentPeriodParams) error {
+	_, err := q.db.Exec(ctx, setPaymentPeriod, arg.ID, arg.PeriodStart, arg.PeriodEnd)
 	return err
 }
 
@@ -293,7 +480,7 @@ const settlePayment = `-- name: SettlePayment :one
 UPDATE payments
 SET status = $2, updated_at = now()
 WHERE provider_payment_id = $1 AND status = 'pending'
-RETURNING id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at
+RETURNING id, shop_id, plan, amount, currency, provider_payment_id, status, recurring, created_at, updated_at, period, kind, from_plan, period_start, period_end
 `
 
 type SettlePaymentParams struct {
@@ -317,90 +504,13 @@ func (q *Queries) SettlePayment(ctx context.Context, arg SettlePaymentParams) (P
 		&i.Recurring,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Period,
+		&i.Kind,
+		&i.FromPlan,
+		&i.PeriodStart,
+		&i.PeriodEnd,
 	)
 	return i, err
-}
-
-const shopsEnterGrace = `-- name: ShopsEnterGrace :many
-UPDATE shops
-SET billing_state = 'grace', updated_at = now()
-WHERE plan != 'free' AND billing_state = 'ok'
-  AND paid_until IS NOT NULL AND paid_until < now()
-RETURNING id, slug, name, owner_id
-`
-
-type ShopsEnterGraceRow struct {
-	ID      uuid.UUID `json:"id"`
-	Slug    string    `json:"slug"`
-	Name    string    `json:"name"`
-	OwnerID uuid.UUID `json:"owner_id"`
-}
-
-// Жизненный цикл: оплата истекла -> grace (загрузка заблокирована).
-func (q *Queries) ShopsEnterGrace(ctx context.Context) ([]ShopsEnterGraceRow, error) {
-	rows, err := q.db.Query(ctx, shopsEnterGrace)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ShopsEnterGraceRow
-	for rows.Next() {
-		var i ShopsEnterGraceRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Slug,
-			&i.Name,
-			&i.OwnerID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const shopsEnterSuspended = `-- name: ShopsEnterSuspended :many
-UPDATE shops
-SET billing_state = 'suspended', updated_at = now()
-WHERE plan != 'free' AND billing_state = 'grace'
-  AND paid_until < now() - make_interval(days => $1)
-RETURNING id, slug, name, owner_id
-`
-
-type ShopsEnterSuspendedRow struct {
-	ID      uuid.UUID `json:"id"`
-	Slug    string    `json:"slug"`
-	Name    string    `json:"name"`
-	OwnerID uuid.UUID `json:"owner_id"`
-}
-
-// Grace истёк -> suspended (витрина скрыта, контент не удаляется).
-func (q *Queries) ShopsEnterSuspended(ctx context.Context, days int32) ([]ShopsEnterSuspendedRow, error) {
-	rows, err := q.db.Query(ctx, shopsEnterSuspended, days)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ShopsEnterSuspendedRow
-	for rows.Next() {
-		var i ShopsEnterSuspendedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Slug,
-			&i.Name,
-			&i.OwnerID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const shopsNearStorageLimit = `-- name: ShopsNearStorageLimit :many
@@ -408,7 +518,6 @@ SELECT s.id, s.name, s.slug, s.storage_used, u.email
 FROM shops s
 JOIN users u ON u.id = s.owner_id
 WHERE s.status = 'active'
-  AND s.billing_state = 'ok'
   AND u.email IS NOT NULL
   AND s.storage_used >= ($1::bigint * 9 / 10)
   AND s.storage_used < $1::bigint
@@ -450,32 +559,81 @@ func (q *Queries) ShopsNearStorageLimit(ctx context.Context, dollar_1 int64) ([]
 	return items, nil
 }
 
+const startTrial = `-- name: StartTrial :execrows
+UPDATE shops
+SET plan = 'pro', paid_until = now() + interval '7 days',
+    trial_ends_at = now() + interval '7 days', updated_at = now()
+WHERE shops.id = $1 AND shops.plan = 'free' AND shops.trial_ends_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.shop_id = shops.id)
+  AND NOT EXISTS (SELECT 1 FROM shops o WHERE o.owner_id = shops.owner_id AND o.trial_ends_at IS NOT NULL)
+`
+
+// Пробный «Про» на 7 дней: один раз на аккаунт и только тому, кто ещё
+// не платил (после платного тарифа пробный не предлагается).
+func (q *Queries) StartTrial(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, startTrial, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const trashUsage = `-- name: TrashUsage :one
+SELECT count(*)::bigint AS photos,
+       coalesce(sum(orig_size + drv_size), 0)::bigint AS bytes
+FROM photos
+WHERE shop_id = $1 AND deleted_at IS NOT NULL
+`
+
+type TrashUsageRow struct {
+	Photos int64 `json:"photos"`
+	Bytes  int64 `json:"bytes"`
+}
+
+// Что лежит в «Удаленном»: фото и их объём — для блока заполненности.
+func (q *Queries) TrashUsage(ctx context.Context, shopID uuid.UUID) (TrashUsageRow, error) {
+	row := q.db.QueryRow(ctx, trashUsage, shopID)
+	var i TrashUsageRow
+	err := row.Scan(&i.Photos, &i.Bytes)
+	return i, err
+}
+
 const upsertSubscriptionPaid = `-- name: UpsertSubscriptionPaid :one
-INSERT INTO subscriptions (shop_id, plan, status, period_start, period_end, payment_method_id)
-VALUES ($1, $2, 'active', now(), now() + make_interval(days => $3), $4)
+INSERT INTO subscriptions (shop_id, plan, period, status, period_start, period_end, payment_method_id)
+VALUES ($1, $2, $3, 'active', $4, $5, $6)
 ON CONFLICT (shop_id) DO UPDATE SET
     plan              = EXCLUDED.plan,
+    period            = EXCLUDED.period,
     status            = 'active',
-    period_end        = greatest(subscriptions.period_end, now()) + make_interval(days => $3),
+    period_start      = EXCLUDED.period_start,
+    period_end        = EXCLUDED.period_end,
     payment_method_id = coalesce(EXCLUDED.payment_method_id, subscriptions.payment_method_id),
+    next_plan         = NULL,
+    next_period       = NULL,
     updated_at        = now()
-RETURNING id, shop_id, plan, status, period_start, period_end, created_at, payment_method_id, updated_at
+RETURNING id, shop_id, plan, status, period_start, period_end, created_at, payment_method_id, updated_at, period, next_plan, next_period
 `
 
 type UpsertSubscriptionPaidParams struct {
-	ShopID          uuid.UUID `json:"shop_id"`
-	Plan            ShopPlan  `json:"plan"`
-	Days            int32     `json:"days"`
-	PaymentMethodID *string   `json:"payment_method_id"`
+	ShopID          uuid.UUID          `json:"shop_id"`
+	Plan            ShopPlan           `json:"plan"`
+	Period          BillingPeriod      `json:"period"`
+	PeriodStart     pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd       pgtype.Timestamptz `json:"period_end"`
+	PaymentMethodID *string            `json:"payment_method_id"`
 }
 
-// Успешная оплата: создать подписку или продлить существующую.
-// Период продлевается от текущего конца, если он в будущем, иначе от now().
+// Успешная оплата: подписка создаётся или переписывается целиком — сроки
+// и тариф считает settlePaymentSucceeded (в транзакции, под блокировкой
+// платежа), запрос только сохраняет. Запланированный переход ниже
+// снимается: оплата и есть выбор тарифа.
 func (q *Queries) UpsertSubscriptionPaid(ctx context.Context, arg UpsertSubscriptionPaidParams) (Subscription, error) {
 	row := q.db.QueryRow(ctx, upsertSubscriptionPaid,
 		arg.ShopID,
 		arg.Plan,
-		arg.Days,
+		arg.Period,
+		arg.PeriodStart,
+		arg.PeriodEnd,
 		arg.PaymentMethodID,
 	)
 	var i Subscription
@@ -489,6 +647,9 @@ func (q *Queries) UpsertSubscriptionPaid(ctx context.Context, arg UpsertSubscrip
 		&i.CreatedAt,
 		&i.PaymentMethodID,
 		&i.UpdatedAt,
+		&i.Period,
+		&i.NextPlan,
+		&i.NextPeriod,
 	)
 	return i, err
 }

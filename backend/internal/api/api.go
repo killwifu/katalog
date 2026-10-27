@@ -111,11 +111,13 @@ func (a *API) Router() http.Handler {
 					r.Delete("/", a.handleDeleteShop)
 
 					r.Get("/billing", a.handleGetBilling)
+					r.Get("/billing/quote", a.handleQuoteBilling)
+					r.Get("/billing/payments", a.handleListPayments)
 					r.Post("/billing/subscribe", a.handleSubscribe)
 					r.Post("/billing/cancel", a.handleCancelSubscription)
+					r.Post("/billing/resume", a.handleResumeSubscription)
+					r.Post("/billing/trial", a.handleStartTrial)
 					r.Get("/stats", a.handleShopStats)
-					r.Get("/downgrade", a.handleGetDowngrade)
-					r.Put("/downgrade", a.handleApplyDowngrade)
 
 					r.Route("/tabs", func(r chi.Router) {
 						r.Post("/", a.handleCreateTab)

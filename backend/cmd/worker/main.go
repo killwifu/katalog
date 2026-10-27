@@ -119,9 +119,10 @@ func run(logger *slog.Logger) error {
 	if _, err := scheduler.Register("30 0 * * *", statsTask); err != nil {
 		return fmt.Errorf("register stats cron: %w", err)
 	}
-	// Биллинг: переходы состояний (00:45 UTC), затем рекуррентные списания
-	// по истекающим подпискам (01:00 UTC).
-	if _, err := scheduler.Register("45 0 * * *", tasks.NewBillingLifecycle()); err != nil {
+	// Биллинг: окончание оплаты и пробного периода -> Бесплатный (каждый
+	// час, чтобы пробный «Про» кончался в свой день), рекуррентные списания
+	// по истекающим в ближайшие сутки подпискам (01:00 UTC).
+	if _, err := scheduler.Register("45 * * * *", tasks.NewBillingLifecycle()); err != nil {
 		return fmt.Errorf("register billing lifecycle cron: %w", err)
 	}
 	if _, err := scheduler.Register("0 1 * * *", tasks.NewBillingRenew()); err != nil {
