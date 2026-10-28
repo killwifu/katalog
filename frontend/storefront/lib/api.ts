@@ -13,6 +13,8 @@ export type ShopPublic = {
   msg_template: string
   // Время ответа продавца — показывается рядом с кнопками связи.
   reply_time?: string
+  // Логотип витрины; нет — в шапке инициалы.
+  logo_url?: string
 }
 
 export type AlbumPublic = {

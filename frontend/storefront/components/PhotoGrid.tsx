@@ -213,16 +213,16 @@ function Lightbox({
                   channel={channel}
                   href={contactHref(channel, value, text)}
                   className={`btn btn-${channel}`}
-                  copyText={channel === 'vk' || channel === 'max' ? text : undefined}
+                  copyText={channel === 'vk' || channel === 'max' || channel === 'avito' ? text : undefined}
                 >
                   Написать в {CHANNEL_LABELS[channel]}
                 </LeadLink>
               ))}
             </div>
           )}
-          {channels.some((c) => c.channel === 'vk' || c.channel === 'max') && (
+          {channels.some((c) => c.channel === 'vk' || c.channel === 'max' || c.channel === 'avito') && (
             <p className="lead-hint">
-              В VK и MAX текст о товаре не подставится сам — мы скопируем его, вставьте в чат.
+              В VK, MAX и Авито текст о товаре не подставится сам — мы скопируем его, вставьте в чат.
             </p>
           )}
         </div>

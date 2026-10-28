@@ -9,8 +9,9 @@ import { ShopTabs } from './ShopTabs'
 // (VK, MAX) не печатаем — хватит названия канала.
 function contactLabel(channel: Channel, value: string): string {
   const v = value.trim()
-  if (/^https?:\/\//i.test(v)) return CHANNEL_LABELS[channel]
-  if (channel === 'telegram') return `Telegram @${v.replace(/^@/, '')}`
+  if (/^https?:\/\//i.test(v) || channel === 'avito') return CHANNEL_LABELS[channel]
+  // Ссылку t.me/ник без https:// печатаем ником, а не «@t.me/ник».
+  if (channel === 'telegram') return `Telegram @${v.replace(/^(?:www\.)?(?:t\.me|telegram\.me)\//i, '').replace(/^@/, '').replace(/\/$/, '')}`
   // Российский номер хранится цифрами (79991234567) — печатаем как в макете.
   const ru = v.replace(/[^\d]/g, '').match(/^[78](\d{3})(\d{3})(\d{2})(\d{2})$/)
   if (channel === 'whatsapp' && ru) return `${CHANNEL_LABELS[channel]} +7 ${ru[1]} ${ru[2]}-${ru[3]}-${ru[4]}`
@@ -72,7 +73,8 @@ export function ShopHeader({
       <header className="shophead">
         <div className="shophead__row">
           <span className="shophead__ava" aria-hidden="true">
-            {initials(shop.name)}
+            {/* Логотип из «Настроек» (макет 17); без него — инициалы. */}
+            {shop.logo_url ? <img src={shop.logo_url} alt="" /> : initials(shop.name)}
           </span>
           <div className="shophead__info">
             <h1>
