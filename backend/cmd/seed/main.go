@@ -276,7 +276,7 @@ func verifyEmail(dbURL, email string) {
 	if err != nil {
 		log.Fatalf("postgres: %v", err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 	if _, err := conn.Exec(ctx, `UPDATE users SET email_verified_at = now() WHERE email = $1`, email); err != nil {
 		log.Fatalf("подтвердить почту: %v", err)
 	}
