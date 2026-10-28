@@ -10,6 +10,9 @@ export const API_ERRORS: Record<string, string> = {
   invalid_contacts: 'Проверьте контакты: ник латиницей или ссылка на сам мессенджер',
   invalid_telegram: 'Telegram: ник из латиницы, цифр и _ или ссылка вида t.me/ник',
   invalid_whatsapp: 'WhatsApp: номер в международном формате, только цифры — например 79991234567',
+  invalid_avito: 'Авито: только ссылка на профиль или магазин — avito.ru/user/… или avito.ru/brands/…',
+  invalid_phone: 'Телефон: от 10 до 15 цифр',
+  logo_too_large: 'Логотип больше 10 МБ — выберите файл поменьше',
   invalid_name: 'Укажите название',
   invalid_title: 'Укажите название (до 200 символов)',
   invalid_parent: 'Неверная родительская категория',
@@ -106,6 +109,10 @@ export type User = {
   pending_email?: string | null
   // false — аккаунт создан входом через Яндекс/VK, пароля нет.
   has_password?: boolean
+  // Телефон для связи по вопросам аккаунта (Настройки · «Личные данные»).
+  phone?: string | null
+  // Подключённые входы через соцсети; label — логин Яндекса или имя в VK.
+  identities?: { provider: 'yandex' | 'vk'; label: string | null }[]
 }
 
 // Тариф, с которым продавец пришёл на регистрацию (см. lib/signupIntent).
@@ -166,6 +173,8 @@ export type Shop = {
   // Когда адрес можно будет сменить снова; null — можно сейчас.
   // Срок считает сервер: повторять правило здесь значит разойтись с ним.
   slug_changeable_at: string | null
+  // Логотип витрины; пусто — в шапке инициалы.
+  logo_url?: string
 }
 
 // Каналы связи продавца. Ключи совпадают с теми, что читает витрина
@@ -175,6 +184,7 @@ export type ShopContacts = {
   whatsapp?: string
   vk?: string
   max?: string
+  avito?: string
 }
 
 export type ShopSettings = {
@@ -182,7 +192,8 @@ export type ShopSettings = {
   // Показывается рядом с кнопкой «Написать»: помогает покупателю
   // не ждать ответа ночью.
   reply_time?: string
-  watermark?: { enabled: boolean; text: string; opacity: number; position?: WatermarkPosition }
+  // color — цвет подписи #RRGGBB (макет 17); пусто — белый.
+  watermark?: { enabled: boolean; text: string; opacity: number; position?: WatermarkPosition; color?: string }
 }
 
 // Клетки сетки 3×3 через запятую («tl,br») или «tile» — см. lib/watermark.ts.
@@ -403,6 +414,20 @@ export const api = {
       new_password: newPassword,
     }),
   verifyEmail: (token: string) => request<User>('POST', '/auth/verify-email', { token }),
+  // Аккаунт без пароля (вход через Яндекс/VK) задаёт его без текущего.
+  setPassword: (newPassword: string) => request<void>('POST', '/auth/password/change', { new_password: newPassword }),
+  updateMe: (patch: { phone?: string }) => request<User>('PATCH', '/auth/me', patch),
+  deleteAccount: (password: string) => request<void>('DELETE', '/auth/me', { password }),
+  resendEmailChange: () => request<void>('POST', '/auth/email/change/resend'),
+  presignLogo: (shopId: string) => request<{ logo_id: string; url: string }>('POST', `/shops/${shopId}/logo/presign`),
+  confirmLogo: (shopId: string, logoId: string) =>
+    request<void>('POST', `/shops/${shopId}/logo/confirm`, { logo_id: logoId }),
+  logoStatus: (shopId: string, logoId: string) =>
+    request<{ status: 'processing' | 'ready' | 'failed'; reason?: string; logo_url?: string }>(
+      'GET',
+      `/shops/${shopId}/logo/status?logo_id=${logoId}`,
+    ),
+  deleteLogo: (shopId: string) => request<void>('DELETE', `/shops/${shopId}/logo`),
 
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),

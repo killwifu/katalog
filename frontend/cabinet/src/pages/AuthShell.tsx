@@ -141,7 +141,7 @@ export function SocialLogin({ intent, disabled }: { intent: SignupIntent; disabl
   )
 }
 
-function YandexLogo() {
+export function YandexLogo() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="12" fill="#FC3F1D" />
@@ -150,7 +150,7 @@ function YandexLogo() {
   )
 }
 
-function VKLogo() {
+export function VKLogo() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="12" fill="#0077FF" />
