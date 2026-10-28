@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { fillDays } from '../lib/stats'
 import { Droplet, MessageCircle, SlidersHorizontal, Trash2, Upload, RefreshCw, WifiOff } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useSegThumb } from '../lib/useSegThumb'
-import { api } from '../api'
+import { api, type Billing, type Shop } from '../api'
 import { ChartIcon, Icon } from '../lib/icons'
 import { InlineError } from '../lib/InlineError'
 import { PaidLock, PLAN_NAMES } from '../lib/plans'
@@ -30,9 +30,6 @@ export function OverviewPage() {
   })
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const billing = useQuery({ queryKey: ['billing', shop.id], queryFn: () => api.getBilling(shop.id) })
-  // Корзина в блоке хранилища: удалённое продолжает занимать место, и без
-  // этой строки продавец у лимита не понимает, куда оно делось.
-  const trash = useQuery({ queryKey: ['trash', shop.id, 1], queryFn: () => api.listTrash(shop.id) })
   const [sharing, setSharing] = useState(false)
   // Макет предлагает считать расход и в фотографиях, и в гигабайтах:
   // лимит тарифа упирается то в одно, то в другое.
@@ -53,10 +50,22 @@ export function OverviewPage() {
     rows.reduce((n, d) => n + d[key], 0)
 
   const photos = billing.data?.usage.photos
-  const gbUsed = shop.storage_used / 1024 / 1024 / 1024
-  const mbUsed = shop.storage_used / 1024 / 1024
-  const gbMax = shop.storage_max / 1024 / 1024 / 1024
+  // Корзина в блоке хранилища: удалённое продолжает занимать место, и без
+  // этой строки продавец у лимита не понимает, куда оно делось.
+  const trashPhotos = billing.data?.usage.trash_photos ?? 0
+  const trashBytes = billing.data?.usage.trash_bytes ?? 0
   const num = (n: number) => n.toLocaleString('ru-RU')
+  // «37,2 ГБ», «40 ГБ», «67 МБ»: меньше гигабайта — в мегабайтах, иначе
+  // «0,0 ГБ» выглядело так, будто объём не считается вовсе.
+  const size = (bytes: number) => {
+    const gb = bytes / 1024 ** 3
+    if (gb >= 1) {
+      const v = Math.round(gb * 10) / 10
+      return `${Number.isInteger(v) ? v : v.toFixed(1).replace('.', ',')} ГБ`
+    }
+    const mb = bytes / 1024 ** 2
+    return `${mb < 10 ? mb.toFixed(1).replace('.', ',') : num(Math.round(mb))} МБ`
+  }
 
   // Состояния лимитов по макету 09 · «Лимит фото/объёма почти исчерпан» и
   // «исчерпан». Порог «почти» — 90%: раньше продавец узнавал о лимите
@@ -64,22 +73,33 @@ export function OverviewPage() {
   const NEAR = 0.9
   const photosLeft = photos === undefined ? undefined : shop.max_photos - photos
   const photosFull = photosLeft !== undefined && photosLeft <= 0
+  // Фото больше лимита — тариф закончился, аккаунт перешёл на Бесплатный
+  // (макет 09 · «Тариф закончился»): фото не удаляются, новые не загрузить.
+  const photosOver = photosLeft !== undefined && photosLeft < 0
   const photosNear = photos !== undefined && !photosFull && photos >= shop.max_photos * NEAR
   const bytesLeft = shop.storage_max - shop.storage_used
   const gbFull = shop.storage_max > 0 && bytesLeft <= 0
   const gbNear = !gbFull && shop.storage_used >= shop.storage_max * NEAR
-  const leftSize = (bytes: number) =>
-    bytes >= 1024 ** 3
-      ? `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} ГБ`
-      : `${Math.max(1, Math.round(bytes / 1024 / 1024))} МБ`
 
   // «Тариф скоро закончится» (макет 09/18): за 5 дней и только если
   // автопродление отключено — иначе тариф продлится сам.
   // «Сейчас» фиксируется при открытии страницы: счёт идёт на дни.
   const [now] = useState(() => Date.now())
+  const b = billing.data
+  const sub = b?.subscription ?? null
+  // Пробный «Про» идёт, пока не оплачен и срок не вышел (как в «Подписке»).
+  const paid = sub !== null && sub.status !== 'expired' && sub.plan === shop.plan && new Date(sub.period_end).getTime() > now
+  const trialActive = !paid && !free && b?.trial_ends_at != null && new Date(b.trial_ends_at).getTime() > now
+  // На Бесплатном: что закончилось последним — платный тариф или пробный.
+  const subEnd = sub?.status === 'expired' ? new Date(sub.period_end).getTime() : 0
+  const trialEnd = b?.trial_ends_at ? new Date(b.trial_ends_at).getTime() : 0
+  const paidEnded = free && subEnd > 0 && subEnd >= trialEnd
+  const trialEnded = free && !paidEnded && trialEnd > 0 && trialEnd <= now
+  const freeLimits = b?.plans.find((x) => x.id === 'free')
+  const freeLimitText = freeLimits ? `${num(freeLimits.max_photos)} фото и ${size(freeLimits.max_storage)}` : '…'
   const daysLeft = shop.paid_until ? Math.ceil((new Date(shop.paid_until).getTime() - now) / 86_400_000) : null
   const endingSoon =
-    !free && billing.data !== undefined && !billing.data.subscription?.auto_renew &&
+    !free && !trialActive && b !== undefined && !sub?.auto_renew &&
     daysLeft !== null && daysLeft >= 0 && daysLeft <= 5
 
   // Новый аккаунт: альбомов ещё нет, цифры ни о чём не говорят.
@@ -89,13 +109,14 @@ export function OverviewPage() {
 
   // Весь «Обзор» не загрузился (макет 09): вместо блоков — сообщение и
   // «Повторить»; меню и шапка остаются, чтобы уйти в другой раздел.
-  if (albums.isError && stats.isError && billing.isError) {
+  // На Бесплатном статистику не спрашиваем — её ошибки там не бывает.
+  if (albums.isError && billing.isError && (free || stats.isError)) {
     return (
       <div className="loadfail" role="alert">
         <i aria-hidden="true">
                 <Icon as={WifiOff} size={28} />
               </i>
-        <h2>Не удалось загрузить обзор</h2>
+        <h2>Не удалось загрузить кабинет</h2>
         <p>Проверьте подключение к интернету и попробуйте ещё раз</p>
         <button
           className="btn btn--primary"
@@ -117,7 +138,7 @@ export function OverviewPage() {
       {fresh && (
         <div className="alert alert--info">
           <div className="alert__body">
-            <b>Добро пожаловать в Katalog!</b>
+            <b>Добро пожаловать в вуад!</b>
             <p>Создайте первый альбом и загрузите фото — потом поделитесь ссылкой на витрину с покупателями.</p>
             <div className="alert__actions">
               <Link to="/albums" search={{ create: true }} className="btn btn--primary btn--pill">
@@ -139,7 +160,7 @@ export function OverviewPage() {
               — {new Date(shop.paid_until!).toLocaleDateString('ru-RU')}
             </b>
             <p>
-              После перехода на бесплатный тариф аналитика станет недоступна, лимит — 250 фото и 1 ГБ: если
+              После перехода на бесплатный тариф аналитика станет недоступна, лимит — {freeLimitText}: если
               загружено больше, новые фото добавить не получится. Ставить пароли на альбомы будет нельзя, а те, что
               уже стоят, сохранятся, но изменить или снять их не получится.
             </p>
@@ -152,7 +173,43 @@ export function OverviewPage() {
         </div>
       )}
 
-      {photosFull && (
+      {/* Платный тариф или пробный «Про» закончился — аккаунт на Бесплатном
+          (макеты 09 · «Тариф закончился», «Пробный период закончился»). */}
+      {paidEnded && sub && (
+        <div className="alert alert--danger">
+          <div className="alert__body">
+            <b>Тариф «{PLAN_NAMES[sub.plan]}» закончился — вы на бесплатном тарифе</b>
+            <p>
+              Добавлять пароли на альбомы больше нельзя. Пароли, которые уже стоят, сохранились, но изменить или снять
+              их не получится. Продлите «{PLAN_NAMES[sub.plan]}», чтобы вернуть все возможности.
+            </p>
+            <div className="alert__actions">
+              <Link to="/billing" className="btn btn--primary btn--pill">
+                Продлить «{PLAN_NAMES[sub.plan]}»
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+      {trialEnded && (
+        <div className="alert alert--danger">
+          <div className="alert__body">
+            <b>Пробный период «Про» закончился — вы на бесплатном тарифе</b>
+            <p>
+              Аналитика недоступна, лимит — {freeLimitText}: если загружено больше, новые фото добавить не получится.
+              Ставить пароли на альбомы нельзя, а те, что уже стоят, не получится изменить или снять. Оплатите «Про»,
+              чтобы вернуть все возможности.
+            </p>
+            <div className="alert__actions">
+              <Link to="/billing" className="btn btn--primary btn--pill">
+                Оплатить «Про»
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {photosFull && !photosOver && (
         <div className="alert alert--danger">
           <div className="alert__body">
             <b>
@@ -178,7 +235,7 @@ export function OverviewPage() {
         <div className="alert alert--danger">
           <div className="alert__body">
             <b>
-              Достигнут лимит объёма — {gbMax.toFixed(0)} ГБ из {gbMax.toFixed(0)} ГБ
+              Достигнут лимит объёма — {size(shop.storage_max)} из {size(shop.storage_max)}
             </b>
             <p>
               Новые фото не загрузятся{photosFull ? '' : ', хотя по количеству фото лимит ещё не исчерпан'}. Удалите
@@ -210,7 +267,8 @@ export function OverviewPage() {
                 <span>Альбомов: </span>
                 <b>{albums.data ? num(albums.data.length) : skel('w-8')}</b>
               </p>
-              <p>
+              {/* У лимита фото «Фото: N» выделено целиком (макет 09 · «Лимит фото»). */}
+              <p className={photosNear || photosFull ? 'counts__hot' : undefined}>
                 <span>Фото: </span>
                 <b>{photos === undefined ? skel('w-12') : num(photos)}</b>
               </p>
@@ -236,48 +294,12 @@ export function OverviewPage() {
           )}
         </section>
 
-        <section className="ovsec">
-          <div className="ovsec__info">
-          <div className="ov__head">
-            {/* Макет 09 · «Free-тариф»: «Тариф Free · Бесплатно, без срока». */}
-            <h2>{shop.plan === 'free' ? 'Тариф Free' : `Тариф «${PLAN_NAMES[shop.plan]}»`}</h2>
-            {/* Телефон (макет 09 · Mobile): срок — справа в строке заголовка. */}
-            {shop.paid_until && (
-              <span className="ov__until">
-                до <b>{new Date(shop.paid_until).toLocaleDateString('ru-RU')}</b>
-              </span>
-            )}
-          </div>
-            <p className={`ovsec__validity ${shop.paid_until ? 'ov__validity' : ''}`}>
-              {shop.paid_until ? (
-                <>
-                  Действует до{' '}
-                  <b>
-                    {new Date(shop.paid_until).toLocaleDateString('ru-RU')}
-                  </b>
-                </>
-              ) : shop.plan === 'free' ? (
-                'Бесплатно, без срока'
-              ) : (
-                'Бессрочный'
-              )}
-            </p>
-          </div>
-            <div className="ovsec__acts">
-              {/* Бесплатный тариф продлевать нечем — только улучшать. */}
-              {shop.plan !== 'free' && (
-                <Link to="/billing" className="btn btn--ghost btn--sm btn--pill">
-                  Продлить
-                </Link>
-              )}
-              <Link to="/billing" className="btn btn--ghost btn--sm btn--pill">
-                Улучшить
-              </Link>
-              <Link to="/billing" className="ovsec__link">
-                Платежи
-              </Link>
-            </div>
-        </section>
+        <TariffBlock
+          shop={shop}
+          billing={billing.isPending ? null : (b ?? null)}
+          state={{ paid, trialActive, paidEnded, trialEnded, endingSoon }}
+          fresh={fresh}
+        />
       </div>
 
       <div className="ov__sep" />
@@ -296,48 +318,61 @@ export function OverviewPage() {
             </div>
           </div>
           {unit === 'photos' ? (
-            <p>
-              <b className="bignum">{photos === undefined ? skel('h-8 w-20') : num(photos)}</b>
-              <span>/ из {num(shop.max_photos)} фото</span>
+            photosFull && !photosOver ? (
+              // Лимит исчерпан (макет 09): число мелкое серое, под ним — красная строка.
+              <p className="ov__full">
+                {num(photos!)} <span>/ из {num(shop.max_photos)} фото</span>
+              </p>
+            ) : (
+              <p>
+                <b className={`bignum ${photosOver ? 'bignum--full' : photosNear ? 'bignum--warn' : ''}`}>
+                  {photos === undefined ? skel('h-8 w-20') : num(photos)}
+                </b>
+                <span>/ из {num(shop.max_photos)} фото</span>
+              </p>
+            )
+          ) : gbFull ? (
+            <p className="ov__full">
+              {size(shop.storage_used)} <span>/ из {size(shop.storage_max)}</span>
             </p>
           ) : (
             <p>
-              {/* Меньше гигабайта — в мегабайтах: «0,0 / из 5 ГБ» выглядело
-                  так, будто объём не считается вовсе. */}
-              <b className="bignum">
-                {gbUsed >= 1 ? gbUsed.toFixed(1).replace('.', ',') : mbUsed < 10 ? mbUsed.toFixed(1).replace('.', ',') : num(Math.round(mbUsed))}
-              </b>
-              <span>
-                {gbUsed >= 1 ? 'ГБ' : 'МБ'} / из {gbMax.toFixed(0)} ГБ
-              </span>
+              <b className={`bignum ${gbNear ? 'bignum--warn' : ''}`}>{size(shop.storage_used)}</b>
+              <span>/ из {size(shop.storage_max)}</span>
             </p>
           )}
           {unit === 'photos' && photosNear && (
-            <p className="mt-2 text-sm text-[#7A5310]">
+            <p className="ov__note ov__note--warn">
               Осталось {num(photosLeft!)} фото — удалите лишние или смените тариф
             </p>
           )}
+          {unit === 'photos' && photosOver && (
+            <p className="ov__note ov__note--full">
+              Превышен лимит {free ? 'бесплатного тарифа' : 'тарифа'} — новые фото загрузить нельзя
+            </p>
+          )}
+          {((unit === 'photos' && photosFull && !photosOver) || (unit === 'gb' && gbFull)) && (
+            <p className="ov__note ov__note--full">Новые фото не загрузятся</p>
+          )}
           {unit === 'gb' && gbNear && (
-            <p className="mt-2 text-sm text-[#7A5310]">
-              Осталось {leftSize(bytesLeft)} — удалите лишние фото или смените тариф
+            <p className="ov__note ov__note--warn">
+              Осталось {size(bytesLeft)} — удалите лишние фото или смените тариф
             </p>
           )}
           {/* Подсказка о лимите в другой единице: продавец смотрит на фото
               и не видит, что упёрся в гигабайты, и наоборот. */}
           {unit === 'photos' && (gbNear || gbFull) && !photosNear && !photosFull && (
-            <p className="mt-2 text-sm text-[#7A5310]">
+            <p className="ov__note ov__note--warn">
               Место в хранилище заканчивается —{' '}
               <button className="font-medium underline" onClick={() => setUnit('gb')}>
                 показать в ГБ
               </button>
             </p>
           )}
-          {(trash.data?.total ?? 0) > 0 && (
-            <p className="mt-2 text-sm text-ink-3">
-              В Удаленном: {num(trash.data!.total)} фото{' '}
-              <Link to="/trash" className="font-medium text-brand">
-                Открыть
-              </Link>
+          {trashPhotos > 0 && (
+            <p className="ov__trash">
+              В Удаленном: {unit === 'gb' ? size(trashBytes) : `${num(trashPhotos)} фото`}{' '}
+              <Link to="/trash">Открыть</Link>
             </p>
           )}
         </section>
@@ -428,17 +463,6 @@ export function OverviewPage() {
         </section>
       </div>
 
-      {fresh && (
-        <>
-          <div className="ov__sep" />
-          <section>
-            <div className="ov__head">
-              <h2>Что смотрят чаще всего</h2>
-            </div>
-            <p className="text-sm text-ink-3">Здесь будут альбомы, которые покупатели смотрят чаще всего</p>
-          </section>
-        </>
-      )}
 
       {/* Популярные альбомы: скелетон, пока грузятся, и своя ошибка с
           «Повторить» — остальной обзор при этом работает (макет 09). */}
@@ -504,4 +528,77 @@ function delta(value: number, prev: number): { label: string; up: boolean } {
   const pct = Math.round(((value - prev) / prev) * 100)
   if (pct === 0) return { label: 'столько же', up: false }
   return { label: `${pct > 0 ? '+' : ''}${pct}%`, up: pct > 0 }
+}
+
+// Блок «Тариф» (макет 09): строка срока и кнопки — по состоянию тарифа.
+// Пока тариф грузится — серый блок на месте срока (макет 09 · «Загрузка»).
+function TariffBlock({
+  shop,
+  billing: b,
+  state,
+  fresh,
+}: {
+  shop: Shop
+  billing: Billing | null
+  state: { paid: boolean; trialActive: boolean; paidEnded: boolean; trialEnded: boolean; endingSoon: boolean }
+  fresh: boolean
+}) {
+  const date = (iso: string) => new Date(iso).toLocaleDateString('ru-RU')
+  const free = shop.plan === 'free'
+  const until = shop.paid_until
+  let line: ReactNode
+  if (!b) line = <span className="skel skel--inline h-5 w-40" aria-hidden="true" />
+  else if (state.trialActive && b.trial_ends_at) line = <>Пробный период до {date(b.trial_ends_at)}</>
+  else if (state.paidEnded && b.subscription) line = <>Платный тариф закончился<br />{date(b.subscription.period_end)}</>
+  else if (state.trialEnded && b.trial_ends_at) line = <>Пробный период закончился {date(b.trial_ends_at)}</>
+  else if (until && !free)
+    line = (
+      <>
+        Действует до <b className={state.endingSoon ? 'ov__soon' : undefined}>{date(until)}</b>
+      </>
+    )
+  else line = free ? 'Бесплатно, без срока' : 'Бессрочный'
+
+  const ghost = 'btn btn--ghost btn--sm btn--pill'
+  return (
+    <section className="ovsec">
+      <div className="ovsec__info">
+        <div className="ov__head">
+          <h2>Тариф «{PLAN_NAMES[shop.plan]}»</h2>
+          {/* Телефон (макет 09 · Mobile): срок — справа в строке заголовка. */}
+          {until && !free && !state.trialActive && (
+            <span className="ov__until">
+              до <b className={state.endingSoon ? 'ov__soon' : undefined}>{date(until)}</b>
+            </span>
+          )}
+        </div>
+        <p className={`ovsec__validity ${until && !free && !state.trialActive ? 'ov__validity' : ''}`}>{line}</p>
+      </div>
+      <div className="ovsec__acts">
+        {state.trialActive ? (
+          <Link to="/billing" className={ghost}>
+            Оплатить «{PLAN_NAMES[shop.plan]}»
+          </Link>
+        ) : (
+          <>
+            {/* Бесплатный продлевать нечем — кроме случая, когда закончился платный. */}
+            {(!free || state.paidEnded) && (
+              <Link to="/billing" className={ghost}>
+                Продлить
+              </Link>
+            )}
+            <Link to="/billing" className={ghost}>
+              Улучшить
+            </Link>
+          </>
+        )}
+        {/* Новому аккаунту платить ещё не за что — ссылки на платежи нет. */}
+        {!fresh && (
+          <Link to="/billing" className="ovsec__link">
+            Платежи
+          </Link>
+        )}
+      </div>
+    </section>
+  )
 }
