@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"katalog/backend/internal/auth"
@@ -74,6 +75,9 @@ type oauthState struct {
 	Provider string       `json:"provider"`
 	Verifier string       `json:"verifier"`
 	Intent   signupIntent `json:"intent"`
+	// LinkUser — «Подключить» в Настройках: привязать вход к этому
+	// аккаунту, а не входить (макет 17 · «Вход через соцсети»).
+	LinkUser uuid.UUID `json:"link_user,omitempty"`
 }
 
 func pkceChallenge(verifier string) string {
@@ -102,6 +106,14 @@ func (a *API) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	st := oauthState{Provider: name, Verifier: verifier, Intent: signupIntent{
 		Plan: q.Get("plan"), Period: q.Get("period"), Trial: q.Get("trial") == "1",
 	}}
+	if q.Get("link") == "1" {
+		uid, ok := a.sessionUser(r)
+		if !ok {
+			http.Redirect(w, r, "/app/login?redirect=%2Fsettings", http.StatusFound)
+			return
+		}
+		st.LinkUser = uid
+	}
 	raw, _ := json.Marshal(st)
 	if err := a.RDB.Set(r.Context(), "oauth:"+state, raw, oauthStateTTL).Err(); err != nil {
 		a.internalError(w, "store oauth state", err)
@@ -135,6 +147,8 @@ func (a *API) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 type oauthProfile struct {
 	Subject string
 	Email   string
+	// Label — как подписать вход в Настройках: логин Яндекса, имя в VK.
+	Label string
 }
 
 func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +204,10 @@ func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		fail("provider exchange", err)
 		return
 	}
+	if st.LinkUser != uuid.Nil {
+		http.Redirect(w, r, a.oauthLink(r.Context(), name, prof, st.LinkUser), http.StatusFound)
+		return
+	}
 	user, err := a.oauthUser(r.Context(), name, prof)
 	if err != nil {
 		fail("link user", err)
@@ -199,6 +217,47 @@ func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/app/"+strings.Replace(st.Intent.query(), "&", "?", 1), http.StatusFound)
+}
+
+// oauthLink привязывает вход через провайдера к аккаунту из Настроек и
+// возвращает, куда вернуть продавца. Уже привязанный к другому аккаунту —
+// ошибка «Этот аккаунт уже подключён к другой витрине» (макет 17).
+func (a *API) oauthLink(ctx context.Context, provider string, prof oauthProfile, userID uuid.UUID) string {
+	back := "/app/settings?oauth_linked=" + provider + "#account"
+	uid, err := a.Q.GetUserIdentity(ctx, db.GetUserIdentityParams{Provider: provider, Subject: prof.Subject})
+	switch {
+	case err == nil && uid == userID:
+		return back
+	case err == nil:
+		return "/app/settings?oauth_error=taken#account"
+	case !errors.Is(err, pgx.ErrNoRows):
+		a.Log.Error("oauth link: get identity", "error", err)
+		return "/app/settings?oauth_error=1#account"
+	}
+	if err := a.Q.CreateUserIdentity(ctx, db.CreateUserIdentityParams{
+		Provider: provider, Subject: prof.Subject, UserID: userID, Label: labelPtr(prof.Label),
+	}); err != nil {
+		a.Log.Error("oauth link: create identity", "error", err)
+		return "/app/settings?oauth_error=1#account"
+	}
+	return back
+}
+
+func labelPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// sessionUser — пользователь текущей сессии на публичной ручке (без requireAuth).
+func (a *API) sessionUser(r *http.Request) (uuid.UUID, bool) {
+	cookie, err := r.Cookie(auth.SessionCookie)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	uid, err := a.Sessions.Get(r.Context(), cookie.Value)
+	return uid, err == nil
 }
 
 // oauthUser находит или заводит аккаунт: сначала по привязке (провайдер, id),
@@ -241,7 +300,7 @@ func (a *API) oauthUser(ctx context.Context, provider string, prof oauthProfile)
 		}
 	}
 	if err := a.Q.CreateUserIdentity(ctx, db.CreateUserIdentityParams{
-		Provider: provider, Subject: prof.Subject, UserID: user.ID,
+		Provider: provider, Subject: prof.Subject, UserID: user.ID, Label: labelPtr(prof.Label),
 	}); err != nil {
 		return db.User{}, fmt.Errorf("create identity: %w", err)
 	}
@@ -291,11 +350,12 @@ func yandexProfile(ctx context.Context, p config.OAuthProvider, code, verifier s
 	var info struct {
 		ID           string `json:"id"`
 		DefaultEmail string `json:"default_email"`
+		Login        string `json:"login"`
 	}
 	if err := oauthJSON(req, &info); err != nil {
 		return oauthProfile{}, fmt.Errorf("userinfo: %w", err)
 	}
-	return oauthProfile{Subject: info.ID, Email: info.DefaultEmail}, nil
+	return oauthProfile{Subject: info.ID, Email: info.DefaultEmail, Label: info.Login}, nil
 }
 
 // vkProfile: VK ID OAuth 2.1 — обмен кода с code_verifier и device_id из
@@ -314,8 +374,10 @@ func vkProfile(ctx context.Context, p config.OAuthProvider, code, verifier, devi
 	var info struct {
 		User struct {
 			// Строка или число — в документации VK ID встречается и то и другое.
-			UserID json.RawMessage `json:"user_id"`
-			Email  string          `json:"email"`
+			UserID    json.RawMessage `json:"user_id"`
+			Email     string          `json:"email"`
+			FirstName string          `json:"first_name"`
+			LastName  string          `json:"last_name"`
 		} `json:"user"`
 	}
 	if err := oauthJSON(postForm(ctx, p.UserInfoURL, url.Values{
@@ -330,5 +392,6 @@ func vkProfile(ctx context.Context, p config.OAuthProvider, code, verifier, devi
 	if sub == "" && tok.UserID != 0 {
 		sub = strconv.FormatInt(tok.UserID, 10)
 	}
-	return oauthProfile{Subject: sub, Email: info.User.Email}, nil
+	label := strings.TrimSpace(info.User.FirstName + " " + info.User.LastName)
+	return oauthProfile{Subject: sub, Email: info.User.Email, Label: label}, nil
 }

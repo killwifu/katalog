@@ -102,6 +102,23 @@ type Watermark struct {
 	// Position — точки сетки 3×3 через запятую или «tile» — по всему кадру
 	// (imagingmeta.WatermarkCells). Пусто — правый нижний угол.
 	Position string
+	// Color — цвет подписи #RRGGBB (макет 17: белый, чёрный, серый или
+	// свой). Пусто — белый.
+	Color string
+}
+
+// watermarkColors — цвет подписи и контрастной тени к нему: под светлой
+// подписью тень тёмная, под тёмной — светлая, иначе на фоне её цвета
+// знак не виден совсем.
+func watermarkColors(hex string) (fg, shadow string) {
+	var r, g, b int
+	if _, err := fmt.Sscanf(hex, "#%02x%02x%02x", &r, &g, &b); err != nil || len(hex) != 7 {
+		return "#FFFFFF", "#000000"
+	}
+	if 299*r+587*g+114*b >= 128000 {
+		return hex, "#000000"
+	}
+	return hex, "#FFFFFF"
 }
 
 // Process валидирует изображение и строит деривативы.
@@ -266,14 +283,15 @@ func applyWatermark(img *vips.ImageRef, wm Watermark) error {
 			RGBA:      true,
 		})
 	}
-	overlay, err := render(fmt.Sprintf(`<span foreground="white" alpha="%d%%">%s</span>`, int(opacity*100+0.5), text))
+	fg, bg := watermarkColors(wm.Color)
+	overlay, err := render(fmt.Sprintf(`<span foreground="%s" alpha="%d%%">%s</span>`, fg, int(opacity*100+0.5), text))
 	if err != nil {
 		return fmt.Errorf("render text: %w", err)
 	}
 	defer overlay.Close()
-	// Тёмная тень под белым текстом: на белом фоне одна белая подпись
+	// Контрастная тень под подписью (watermarkColors): на белом фоне одна белая подпись
 	// не видна совсем.
-	shadow, err := render(fmt.Sprintf(`<span foreground="black" alpha="%d%%">%s</span>`, int(opacity*60+0.5), text))
+	shadow, err := render(fmt.Sprintf(`<span foreground="%s" alpha="%d%%">%s</span>`, bg, int(opacity*60+0.5), text))
 	if err != nil {
 		return fmt.Errorf("render shadow: %w", err)
 	}

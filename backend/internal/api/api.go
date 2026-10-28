@@ -105,6 +105,9 @@ func (a *API) Router() http.Handler {
 			r.Use(a.requireAuth)
 			r.Post("/auth/logout", a.handleLogout)
 			r.Get("/auth/me", a.handleMe)
+			r.Patch("/auth/me", a.handleUpdateMe)
+			r.With(a.rateLimit("auth", a.Cfg.AuthRateLimit)).Delete("/auth/me", a.handleDeleteMe)
+			r.Post("/auth/email/change/resend", a.handleResendEmailChange)
 			// Подбор текущего пароля чужой открытой сессией ограничен тем же
 			// лимитом, что и вход.
 			r.With(a.rateLimit("auth", a.Cfg.AuthRateLimit)).Post("/auth/password/change", a.handleChangePassword)
@@ -121,6 +124,10 @@ func (a *API) Router() http.Handler {
 					r.Get("/", a.handleGetShop)
 					r.Patch("/", a.handleUpdateShop)
 					r.Delete("/", a.handleDeleteShop)
+					r.Post("/logo/presign", a.handleLogoPresign)
+					r.Post("/logo/confirm", a.handleLogoConfirm)
+					r.Get("/logo/status", a.handleLogoStatus)
+					r.Delete("/logo", a.handleLogoDelete)
 
 					r.Get("/billing", a.handleGetBilling)
 					r.Get("/billing/quote", a.handleQuoteBilling)

@@ -371,6 +371,12 @@ func (a *API) handleChangeEmail(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "check email uniqueness", err)
 		return
 	}
+	a.sendEmailChange(w, r, user, email)
+}
+
+// sendEmailChange — письмо со ссылкой подтверждения новой почты; не чаще
+// раза в минуту (кнопка «Отправить ещё раз» в Настройках).
+func (a *API) sendEmailChange(w http.ResponseWriter, r *http.Request, user db.User, email string) {
 	if !a.resendAllowed(r.Context(), "emchg:"+user.ID.String()) {
 		apiError(w, http.StatusTooManyRequests, "resend_too_soon", "wait a minute before sending another email")
 		return
@@ -394,6 +400,22 @@ func (a *API) handleChangeEmail(w http.ResponseWriter, r *http.Request) {
 	link := a.Cfg.SiteURL + "/app/confirm-email?token=" + token
 	a.sendTemplate(r.Context(), email, mail.ConfirmNewEmail(a.Cfg.SiteURL, shopName, link))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleResendEmailChange — повтор письма на почту, ждущую подтверждения.
+// Пароль второй раз не спрашиваем: его проверила сама смена почты.
+func (a *API) handleResendEmailChange(w http.ResponseWriter, r *http.Request) {
+	user, err := a.Q.GetUserByID(r.Context(), userID(r))
+	if err != nil {
+		a.internalError(w, "load user", err)
+		return
+	}
+	email, err := a.RDB.Get(r.Context(), emailPendingKey(user.ID)).Result()
+	if err != nil || email == "" {
+		apiError(w, http.StatusNotFound, "not_found", "no email change pending")
+		return
+	}
+	a.sendEmailChange(w, r, user, email)
 }
 
 // handleConfirmEmailChange — переход по ссылке «Подтвердите новую почту».

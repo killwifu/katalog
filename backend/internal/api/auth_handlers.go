@@ -35,6 +35,15 @@ type userResponse struct {
 	// HasPassword — false у аккаунта, созданного входом через Яндекс/VK:
 	// смена почты и пароля у него не спрашивает текущий пароль.
 	HasPassword bool `json:"has_password"`
+	// Phone — для связи по вопросам аккаунта (Настройки · «Личные данные»).
+	Phone *string `json:"phone"`
+	// Identities — подключённые входы через соцсети (Настройки).
+	Identities []identityResponse `json:"identities,omitempty"`
+}
+
+type identityResponse struct {
+	Provider string  `json:"provider"`
+	Label    *string `json:"label"`
 }
 
 func toUserResponse(u db.User) userResponse {
@@ -44,6 +53,7 @@ func toUserResponse(u db.User) userResponse {
 		Role:          string(u.Role),
 		EmailVerified: u.EmailVerifiedAt.Valid,
 		HasPassword:   u.PasswordHash != nil,
+		Phone:         u.Phone,
 	}
 }
 
@@ -51,6 +61,14 @@ func (a *API) userResponse(ctx context.Context, u db.User) userResponse {
 	resp := toUserResponse(u)
 	if p, err := a.RDB.Get(ctx, emailPendingKey(u.ID)).Result(); err == nil && p != "" {
 		resp.PendingEmail = &p
+	}
+	ids, err := a.Q.ListUserIdentities(ctx, u.ID)
+	if err != nil {
+		a.Log.Warn("list identities", "user_id", u.ID, "error", err)
+	}
+	resp.Identities = []identityResponse{}
+	for _, id := range ids {
+		resp.Identities = append(resp.Identities, identityResponse{Provider: id.Provider, Label: id.Label})
 	}
 	return resp
 }

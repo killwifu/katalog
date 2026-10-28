@@ -23,7 +23,26 @@ const (
 	TypeStatsDigest      = "stats:digest"
 	TypeTrafficAlert     = "stats:traffic-alert"
 	TypeAlbumRewatermark = "album:rewatermark"
+	TypeShopLogo         = "shop:logo"
 )
+
+// ShopLogoPayload — логотип витрины, загруженный в orig/{shop_id}/{logo_id}.
+type ShopLogoPayload struct {
+	ShopID uuid.UUID `json:"shop_id"`
+	LogoID uuid.UUID `json:"logo_id"`
+}
+
+// NewShopLogo — обработать загруженный логотип (те же проверки, что у фото).
+func NewShopLogo(shopID, logoID uuid.UUID) (*asynq.Task, error) {
+	payload, err := json.Marshal(ShopLogoPayload{ShopID: shopID, LogoID: logoID})
+	if err != nil {
+		return nil, fmt.Errorf("marshal shop:logo payload: %w", err)
+	}
+	return asynq.NewTask(TypeShopLogo, payload, asynq.MaxRetry(3), asynq.Timeout(2*time.Minute)), nil
+}
+
+// LogoFailKey — Redis-метка «логотип не обработан» (кабинет опрашивает статус).
+func LogoFailKey(logoID uuid.UUID) string { return "logofail:" + logoID.String() }
 
 // StatsDigestPayload — месяц дайджеста в формате YYYY-MM (UTC).
 // Пустой = прошлый календарный месяц (для запуска по cron 1-го числа).

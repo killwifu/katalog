@@ -40,7 +40,16 @@ func TestValidateContacts(t *testing.T) {
 		{"telegram по номеру", `{"telegram":"t.me/+79991234567"}`, false},
 		{"telegram чужой ссылкой", `{"telegram":"https://evil.example"}`, true},
 		{"telegram с пробелом", `{"telegram":"demo shop"}`, true},
-		{"telegram слишком короткий", `{"telegram":"ab"}`, true},
+		{"telegram слишком короткий", `{"telegram":"abc"}`, true},
+		{"telegram ник с цифры", `{"telegram":"1shop"}`, true},
+		{"telegram кириллицей", `{"telegram":"@сеулвеар"}`, true},
+
+		// Авито (макет 16): только ссылка на профиль или магазин.
+		{"avito магазин без схемы", `{"avito":"avito.ru/brands/seoulwear"}`, false},
+		{"avito профиль со схемой", `{"avito":"https://www.avito.ru/user/abc123/profile"}`, false},
+		{"avito ником", `{"avito":"seoulwear"}`, true},
+		{"avito объявление", `{"avito":"avito.ru/moskva/odezhda/kurtka_123"}`, true},
+		{"avito чужой хост", `{"avito":"https://avito.ru.evil.example/user/x"}`, true},
 
 		{"max со схемой javascript", `{"max":"javascript:alert(1)"}`, true},
 		{"vk ником с точкой", `{"vk":"id12345.shop"}`, false},
@@ -80,6 +89,8 @@ func TestValidateSettings(t *testing.T) {
 		{"положение из сетки", `{"watermark":{"text":"x","position":"tl"}}`, false},
 		{"положение не задано", `{"watermark":{"text":"x","position":""}}`, false},
 		{"положение вне сетки", `{"watermark":{"text":"x","position":"left"}}`, true},
+		{"цвет знака", `{"watermark":{"color":"#1A1A1A"}}`, false},
+		{"цвет знака не hex", `{"watermark":{"color":"red"}}`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -99,6 +99,7 @@ func run(logger *slog.Logger) error {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.TypePhotoProcess, processor.HandlePhotoProcess)
 	mux.HandleFunc(tasks.TypeAlbumRewatermark, processor.HandleAlbumRewatermark)
+	mux.HandleFunc(tasks.TypeShopLogo, processor.HandleShopLogo)
 	mux.HandleFunc(tasks.TypeStatsAggregate, processor.HandleStatsAggregate)
 	mux.HandleFunc(tasks.TypeBillingLifecycle, processor.HandleBillingLifecycle)
 	mux.HandleFunc(tasks.TypeBillingRenew, processor.HandleBillingRenew)

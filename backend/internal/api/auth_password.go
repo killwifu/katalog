@@ -31,18 +31,10 @@ func (a *API) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Открытая на чужом компьютере сессия не должна позволять перехватить
-	// аккаунт: без текущего пароля смены нет.
-	if user.PasswordHash == nil || len([]rune(req.CurrentPassword)) > maxAccountPassword {
-		apiError(w, http.StatusBadRequest, "wrong_password", "current password is wrong")
-		return
-	}
-	ok, err := auth.VerifyPassword(req.CurrentPassword, *user.PasswordHash)
-	if err != nil {
-		a.internalError(w, "verify password", err)
-		return
-	}
-	if !ok {
-		apiError(w, http.StatusBadRequest, "wrong_password", "current password is wrong")
+	// аккаунт: без текущего пароля смены нет. Аккаунт, созданный через
+	// Яндекс/VK, пароля не имеет — его задают впервые (макет 17 · «Задать
+	// пароль»): пароль нужен для удаления аккаунта и входа без соцсети.
+	if user.PasswordHash != nil && !a.passwordMatches(w, user, req.CurrentPassword) {
 		return
 	}
 	hash, err := auth.HashPassword(req.NewPassword)
@@ -70,4 +62,23 @@ func (a *API) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// passwordMatches сверяет пароль аккаунта; на неверном отвечает
+// wrong_password сам. У аккаунта без пароля совпадения нет.
+func (a *API) passwordMatches(w http.ResponseWriter, user db.User, password string) bool {
+	if user.PasswordHash == nil || len([]rune(password)) > maxAccountPassword {
+		apiError(w, http.StatusBadRequest, "wrong_password", "password is wrong")
+		return false
+	}
+	ok, err := auth.VerifyPassword(password, *user.PasswordHash)
+	if err != nil {
+		a.internalError(w, "verify password", err)
+		return false
+	}
+	if !ok {
+		apiError(w, http.StatusBadRequest, "wrong_password", "password is wrong")
+		return false
+	}
+	return true
 }

@@ -23,7 +23,16 @@ var contactHosts = map[string][]string{
 // номер (t.me/+79991234567). Кабинет подсказывает «ссылка вида t.me/ник», и
 // продавцы вставляют её целиком — раньше она сохранялась «ником», и кнопка
 // на витрине вела на t.me/https%3A… Чужие ссылки отклоняем.
-var telegramContact = regexp.MustCompile(`^(?i:(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/)?@?(?:[A-Za-z0-9_]{3,32}|\+[0-9]{10,15})/?$`)
+// Ник — как в макете 16 («Ошибка формата»): латиница, цифры и _,
+// начинается с буквы, 4–32 символа.
+var telegramContact = regexp.MustCompile(`^(?i:(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/)?@?(?:[A-Za-z][A-Za-z0-9_]{3,31}|\+[0-9]{10,15})/?$`)
+
+// Авито — только ссылка на профиль (/user/…) или магазин (/brands/…)
+// продавца, https:// можно не писать (макет 16).
+var avitoContact = regexp.MustCompile(`^(?i:(?:https?://)?(?:www\.|m\.)?avito\.ru/(?:user|brands)/)[A-Za-z0-9_.\-]+(?:[/?#][^\s]*)?$`)
+
+// watermarkColor — цвет знака: #RRGGBB (белый, чёрный, серый или свой).
+var watermarkColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 // plainHandle — ник VK или MAX без ссылки.
 var plainHandle = regexp.MustCompile(`^@?[A-Za-z0-9_.\-]{2,64}$`)
@@ -47,6 +56,7 @@ func validateSettings(raw json.RawMessage) string {
 			Text     string  `json:"text"`
 			Opacity  float64 `json:"opacity"`
 			Position string  `json:"position"`
+			Color    string  `json:"color"`
 		} `json:"watermark"`
 	}
 	if err := json.Unmarshal(raw, &settings); err != nil {
@@ -61,6 +71,9 @@ func validateSettings(raw json.RawMessage) string {
 	}
 	if wm.Opacity < 0 || wm.Opacity > 1 {
 		return "watermark.opacity must be between 0 and 1"
+	}
+	if wm.Color != "" && !watermarkColor.MatchString(wm.Color) {
+		return "watermark.color must be #RRGGBB"
 	}
 	if !imagingmeta.ValidWatermarkPosition(wm.Position) {
 		return "watermark.position must be \"tile\" or comma-separated distinct cells of " + strings.Join(imagingmeta.WatermarkPositions, ", ")
@@ -92,7 +105,13 @@ func validateContacts(raw json.RawMessage) (code, msg string) {
 		}
 		if channel == "telegram" {
 			if !telegramContact.MatchString(v) {
-				return "invalid_telegram", "telegram: username (3-32 letters, digits, _) or a t.me link"
+				return "invalid_telegram", "telegram: username (4-32 latin letters, digits, _, starts with a letter) or a t.me link"
+			}
+			continue
+		}
+		if channel == "avito" {
+			if !avitoContact.MatchString(v) {
+				return "invalid_avito", "avito: link to avito.ru/user/… or avito.ru/brands/…"
 			}
 			continue
 		}

@@ -76,7 +76,7 @@ func (q *Queries) CountShopsByOwner(ctx context.Context, ownerID uuid.UUID) (int
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
 `
 
 type CreateShopParams struct {
@@ -116,6 +116,7 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.SlugChangedAt,
 		&i.MediaRev,
 		&i.TrialEndsAt,
+		&i.LogoID,
 	)
 	return i, err
 }
@@ -149,7 +150,7 @@ func (q *Queries) DropSlugReservation(ctx context.Context, slug string) error {
 }
 
 const getShopByID = `-- name: GetShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
 WHERE id = $1
 `
 
@@ -174,12 +175,13 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 		&i.SlugChangedAt,
 		&i.MediaRev,
 		&i.TrialEndsAt,
+		&i.LogoID,
 	)
 	return i, err
 }
 
 const getShopForOwner = `-- name: GetShopForOwner :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -210,6 +212,7 @@ func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams
 		&i.SlugChangedAt,
 		&i.MediaRev,
 		&i.TrialEndsAt,
+		&i.LogoID,
 	)
 	return i, err
 }
@@ -237,7 +240,7 @@ func (q *Queries) GetSlugReservation(ctx context.Context, arg GetSlugReservation
 }
 
 const listShopsByOwner = `-- name: ListShopsByOwner :many
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
 WHERE owner_id = $1
 ORDER BY created_at
 `
@@ -270,6 +273,7 @@ func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sh
 			&i.SlugChangedAt,
 			&i.MediaRev,
 			&i.TrialEndsAt,
+			&i.LogoID,
 		); err != nil {
 			return nil, err
 		}
@@ -300,6 +304,23 @@ func (q *Queries) ReserveReleasedSlug(ctx context.Context, arg ReserveReleasedSl
 	return err
 }
 
+const setShopLogo = `-- name: SetShopLogo :exec
+UPDATE shops
+SET logo_id = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetShopLogoParams struct {
+	ID     uuid.UUID     `json:"id"`
+	LogoID uuid.NullUUID `json:"logo_id"`
+}
+
+// Логотип витрины; NULL — без логотипа.
+func (q *Queries) SetShopLogo(ctx context.Context, arg SetShopLogoParams) error {
+	_, err := q.db.Exec(ctx, setShopLogo, arg.ID, arg.LogoID)
+	return err
+}
+
 const updateShop = `-- name: UpdateShop :one
 UPDATE shops
 SET name        = $3,
@@ -308,7 +329,7 @@ SET name        = $3,
     settings    = $6,
     updated_at  = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
 `
 
 type UpdateShopParams struct {
@@ -349,6 +370,7 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.SlugChangedAt,
 		&i.MediaRev,
 		&i.TrialEndsAt,
+		&i.LogoID,
 	)
 	return i, err
 }
@@ -357,7 +379,7 @@ const updateShopSlug = `-- name: UpdateShopSlug :one
 UPDATE shops
 SET slug = $3, slug_changed_at = now(), updated_at = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
 `
 
 type UpdateShopSlugParams struct {
@@ -389,6 +411,7 @@ func (q *Queries) UpdateShopSlug(ctx context.Context, arg UpdateShopSlugParams) 
 		&i.SlugChangedAt,
 		&i.MediaRev,
 		&i.TrialEndsAt,
+		&i.LogoID,
 	)
 	return i, err
 }

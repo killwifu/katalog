@@ -15,7 +15,7 @@ import (
 const createOAuthUser = `-- name: CreateOAuthUser :one
 INSERT INTO users (email, email_verified_at)
 VALUES ($1, now())
-RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at
+RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at, phone
 `
 
 // Аккаунт, созданный входом через внешнего провайдера: почта провайдера
@@ -32,6 +32,7 @@ func (q *Queries) CreateOAuthUser(ctx context.Context, email *string) (User, err
 		&i.UpdatedAt,
 		&i.Role,
 		&i.EmailVerifiedAt,
+		&i.Phone,
 	)
 	return i, err
 }
@@ -39,7 +40,7 @@ func (q *Queries) CreateOAuthUser(ctx context.Context, email *string) (User, err
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, tg_user_id)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at
+RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at, phone
 `
 
 type CreateUserParams struct {
@@ -60,13 +61,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.Role,
 		&i.EmailVerifiedAt,
+		&i.Phone,
 	)
 	return i, err
 }
 
 const createUserIdentity = `-- name: CreateUserIdentity :exec
-INSERT INTO user_identities (provider, subject, user_id)
-VALUES ($1, $2, $3)
+INSERT INTO user_identities (provider, subject, user_id, label)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING
 `
 
@@ -74,10 +76,16 @@ type CreateUserIdentityParams struct {
 	Provider string    `json:"provider"`
 	Subject  string    `json:"subject"`
 	UserID   uuid.UUID `json:"user_id"`
+	Label    *string   `json:"label"`
 }
 
 func (q *Queries) CreateUserIdentity(ctx context.Context, arg CreateUserIdentityParams) error {
-	_, err := q.db.Exec(ctx, createUserIdentity, arg.Provider, arg.Subject, arg.UserID)
+	_, err := q.db.Exec(ctx, createUserIdentity,
+		arg.Provider,
+		arg.Subject,
+		arg.UserID,
+		arg.Label,
+	)
 	return err
 }
 
@@ -92,7 +100,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at FROM users
+SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at, phone FROM users
 WHERE email = $1
 `
 
@@ -108,12 +116,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email *string) (User, erro
 		&i.UpdatedAt,
 		&i.Role,
 		&i.EmailVerifiedAt,
+		&i.Phone,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at FROM users
+SELECT id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at, phone FROM users
 WHERE id = $1
 `
 
@@ -129,6 +138,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 		&i.Role,
 		&i.EmailVerifiedAt,
+		&i.Phone,
 	)
 	return i, err
 }
@@ -148,6 +158,39 @@ func (q *Queries) GetUserIdentity(ctx context.Context, arg GetUserIdentityParams
 	var user_id uuid.UUID
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const listUserIdentities = `-- name: ListUserIdentities :many
+SELECT provider, label, created_at FROM user_identities
+WHERE user_id = $1
+ORDER BY created_at
+`
+
+type ListUserIdentitiesRow struct {
+	Provider  string             `json:"provider"`
+	Label     *string            `json:"label"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+// Подключённые входы аккаунта (Настройки · «Вход через соцсети»).
+func (q *Queries) ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]ListUserIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listUserIdentities, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserIdentitiesRow
+	for rows.Next() {
+		var i ListUserIdentitiesRow
+		if err := rows.Scan(&i.Provider, &i.Label, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateUserEmail = `-- name: UpdateUserEmail :exec
@@ -180,6 +223,22 @@ type UpdateUserPasswordParams struct {
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const updateUserPhone = `-- name: UpdateUserPhone :exec
+UPDATE users
+SET phone = $2, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateUserPhoneParams struct {
+	ID    uuid.UUID `json:"id"`
+	Phone *string   `json:"phone"`
+}
+
+func (q *Queries) UpdateUserPhone(ctx context.Context, arg UpdateUserPhoneParams) error {
+	_, err := q.db.Exec(ctx, updateUserPhone, arg.ID, arg.Phone)
 	return err
 }
 

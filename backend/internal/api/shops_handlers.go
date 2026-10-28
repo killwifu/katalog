@@ -97,6 +97,8 @@ type shopResponse struct {
 	// если можно прямо сейчас. Считает сервер: повторять правило
 	// в кабинете значит разойтись с ним при первой правке срока.
 	SlugChangeableAt *time.Time `json:"slug_changeable_at"`
+	// LogoURL — логотип витрины; пусто — в шапке инициалы.
+	LogoURL string `json:"logo_url"`
 }
 
 func (a *API) toShopResponse(s db.Shop) shopResponse {
@@ -121,6 +123,7 @@ func (a *API) toShopResponse(s db.Shop) shopResponse {
 		StorageMax:       limits.MaxStorage,
 		MaxPhotos:        limits.MaxPhotos,
 		SlugChangeableAt: slugChangeableAt,
+		LogoURL:          a.logoURL(s),
 	}
 	if s.PaidUntil.Valid {
 		resp.PaidUntil = &s.PaidUntil.Time

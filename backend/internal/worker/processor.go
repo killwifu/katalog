@@ -169,6 +169,7 @@ func (p *Processor) watermarkFor(ctx context.Context, shopID, albumID uuid.UUID)
 			Text     string  `json:"text"`
 			Opacity  float64 `json:"opacity"`
 			Position string  `json:"position"`
+			Color    string  `json:"color"`
 		} `json:"watermark"`
 	}
 	if err := json.Unmarshal(shop.Settings, &settings); err != nil {
@@ -208,6 +209,7 @@ func (p *Processor) watermarkFor(ctx context.Context, shopID, albumID uuid.UUID)
 		Text:     settings.Watermark.Text,
 		Opacity:  opacity,
 		Position: settings.Watermark.Position,
+		Color:    settings.Watermark.Color,
 	}
 }
 
