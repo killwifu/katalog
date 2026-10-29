@@ -2971,3 +2971,73 @@ textarea.ocs__inp { height: auto; min-height: 92px; padding: 11px 14px; resize: 
 .alpage__drop i { width: 72px; height: 72px; }
 .alpage__drop b { font-size: 22px; line-height: 28px; color: var(--color-brand); }
 .alpage__drop small { font-size: 13px; line-height: 18px; color: var(--color-brand); }
+
+/* --- Раздел «Категории» (макет 14) ------------------------------------------ */
+/* Поле в строке дерева — одна рамка на всех ширинах (14 · Mobile · «Новая категория»). */
+@media (max-width: 859px) {
+  .cattree__edit { padding: 0; }
+  .cattree__edit--sub { padding-left: 24px; }
+  .cattree__editrow { gap: 8px; height: 40px; padding: 0 6px 0 12px; border: 1.5px solid #2547CE; border-radius: 10px; background: #fff; }
+  .cattree__editrow:has(.inp[aria-invalid="true"]) { border-color: var(--color-danger); }
+  .cattree__editrow .inp { height: auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font-size: 14px; line-height: 20px; }
+  .cattree__editrow .inp:focus { box-shadow: none; }
+  .cattree__len { display: inline; flex: none; font-size: 12px; line-height: 16px; color: var(--color-ink-3); }
+  .app .cattree__ok:not(.hidden):not([hidden]), .app .cattree__no:not(.hidden):not([hidden]) { display: grid; place-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 0; }
+  .cattree__ok { background: #2547CE; color: #fff; }
+  .cattree__no { color: #62615C; }
+  .cattree__ok .lucide, .cattree__no .lucide { width: 16px; height: 16px; }
+}
+/* Название и «не на главной»: пометка у счётчика, на планшете — под названием. */
+.cattree__name { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
+.cattree__name .cattree__title { min-width: 0; }
+.cattree__badge { flex: none; margin-left: auto; padding: 0; border-radius: 0; background: none; font-size: 12px; line-height: 16px; color: var(--color-ink-3); }
+@media (min-width: 641px) and (max-width: 1199px) {
+  .cattree__name { flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 0; }
+  .cattree__name .cattree__title { max-width: 100%; }
+  .cattree__name .cattree__badge { margin-left: 0; }
+}
+/* «⋯» — у выбранной и у строки под мышью (14 · «Меню подкатегории»). */
+@media (hover: hover) {
+  .cattree__item:hover > .cattree__more, .cattree__item:focus-within > .cattree__more { display: block; }
+  .cattree__item:hover .cattree__row, .cattree__item:focus-within .cattree__row { padding-right: 38px; }
+  .cattree__item:hover > .cattree__row:not([aria-current="true"]) { background: var(--color-surface-alt); }
+}
+.cattree__item:has(.pop__panel) { z-index: 6; }
+.cattree__item:has(.pop__panel) > .cattree__more { display: block; }
+/* Перетаскивание (14 · «Перетаскивание»): синяя линия с точкой — куда встанет
+   строка; подсветка — подкатегория переезжает в эту категорию. */
+.cattree__row { position: relative; }
+.cattree__row[data-drop="into"] { background: var(--color-brand-soft); }
+.cattree__row[data-drop="above"]::before, .cattree__row[data-drop="below"]::before { content: ''; position: absolute; left: 8px; right: 0; height: 2px; background: #2547CE; pointer-events: none; }
+.cattree__row[data-drop="above"]::after, .cattree__row[data-drop="below"]::after { content: ''; position: absolute; left: 0; width: 8px; height: 8px; box-sizing: border-box; border: 2px solid #2547CE; border-radius: 50%; background: #fff; pointer-events: none; }
+.cattree__row[data-drop="above"]::before { top: -1px; }
+.cattree__row[data-drop="above"]::after { top: -4px; }
+.cattree__row[data-drop="below"]::before { bottom: -1px; }
+.cattree__row[data-drop="below"]::after { bottom: -4px; }
+.cattree__row[data-dragging] { opacity: .4; }
+/* «Изменить порядок» в дереве (14 · Tablet/Mobile): подсказка и «Готово»
+   вместо сводки, ручки справа, «Без категории» приглушена. */
+.cattree__sum--order { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 4px 6px 12px; }
+.cats__done { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 28px; min-height: 0; padding: 0 12px 0 10px; border: 0; border-radius: 999px; background: #2547CE; font: inherit; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #fff; cursor: pointer; }
+.app .cats__done:not(.hidden):not([hidden]) { min-width: 0; min-height: 28px; }
+.cattree--ordering .cattree__handle { order: 10; margin-left: 4px; color: #62615C; }
+.cattree--ordering .cattree__row { padding-right: 6px; }
+.cattree--ordering .cattree__none { opacity: .5; }
+/* Шапка категории: плашки «Скрыта с витрины» / «Видно только вам» и серая справка. */
+.catpane__badge { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 4px 10px; border-radius: 999px; background: #F1F0EC; font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; white-space: nowrap; }
+.catpane__note { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; padding: 10px 14px; border-radius: 10px; background: #F1F0EC; font-size: 13.5px; line-height: 20px; color: #62615C; }
+.catpane__note .lucide { flex: none; }
+.catpane .alhead__act .lucide { flex: none; }
+/* Выбранная карточка — синяя рамка по обложке (14 · «Выбраны альбомы»). */
+.catpane .alcard:has(.alcard__pick:checked) .alcard__cover::after { content: ''; position: absolute; inset: 0; border: 2px solid #2547CE; border-radius: 10px; pointer-events: none; }
+/* Режим порядка альбомов: подсказка строкой ниже, ручка — белый круг справа. */
+.cats__hint { display: flex; flex-basis: 100%; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12.5px; line-height: 18px; color: var(--color-ink-3); }
+.cats__hint .lucide { flex: none; }
+.catpane .photo__handle { left: auto; right: 10px; top: 10px; width: 32px; height: 32px; border-radius: 999px; background: #fff; color: #62615C; box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
+.catpane .photo__handle .lucide { width: 18px; height: 18px; }
+.catpane .emptybox__ico { width: 56px; height: 56px; }
+.app .catpane .alhead:has(.cats__hint) { flex-wrap: wrap; }
+.app .catpane .alhead:has(.cats__hint) > .spacer { display: block; }
+.catpane .emptybox h3 { margin-bottom: -6px; font-size: 17px; line-height: 24px; }
+.catpane .emptybox p { max-width: 400px; font-size: 14px; line-height: 20px; color: #62615C; }
+@media (max-width: 640px) { .cattree__item .cattree__row { padding-right: 42px; } }
