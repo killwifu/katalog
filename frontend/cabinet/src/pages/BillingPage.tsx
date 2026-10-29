@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, TriangleAlert, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   api,
   errorText,
@@ -54,7 +54,16 @@ export function BillingPage() {
   const queryClient = useQueryClient()
   const billing = useQuery({ queryKey: ['billing', shop.id], queryFn: () => api.getBilling(shop.id) })
   const me = useQuery({ queryKey: ['me'], queryFn: api.me })
-  const [year, setYear] = useState(false)
+  // Тариф с лендинга для вошедшего продавца (заметка макета 02):
+  // /app/billing?plan=…&period=year — свитч на этом периоде и сразу окно
+  // перехода на тариф. «Про» с доступным пробным периодом окна не открывает:
+  // в карточке и так кнопка «Пробный период».
+  const [wanted] = useState(() => {
+    const q = new URLSearchParams(location.search)
+    const plan = q.get('plan') as Plan | null
+    return { plan: plan && PLAN_ORDER.includes(plan) ? plan : null, year: q.get('period') === 'year' }
+  })
+  const [year, setYear] = useState(wanted.year)
   const [ask, setAsk] = useState<Ask | null>(null)
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
@@ -85,6 +94,7 @@ export function BillingPage() {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settled?.id])
+  const wantedDone = useRef(false)
   const shownToast = toast || (settled?.status === 'succeeded' && !seen ? `Тариф «${PLAN_NAMES[settled.plan]}» подключён` : '')
 
   const pay = useMutation({
@@ -110,6 +120,16 @@ export function BillingPage() {
     },
     onError: (e) => setError(errorText(e)),
   })
+  useEffect(() => {
+    const b = billing.data
+    if (!b || !wanted.plan || wantedDone.current) return
+    wantedDone.current = true
+    history.replaceState(null, '', location.pathname)
+    if (!(wanted.plan === 'pro' && b.trial_available)) {
+      choose.mutate({ plan: wanted.plan, period: wanted.year ? 'year' : 'month' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billing.data])
   const simple = (fn: () => Promise<void>, done?: string) => ({
     mutationFn: fn,
     onSuccess: () => {
