@@ -1,6 +1,5 @@
-// Тарифы и матрица сравнения — один источник данных для трёх представлений:
-// карточек, таблицы на десктопе и переключателя панелей на мобильном.
-// Цены отсюда же показывает главная.
+// Тарифы и матрица сравнения — один источник данных для карточек тарифов
+// (главная и /pricing) и таблицы сравнения.
 //
 // ВАЖНО: цифры здесь должны совпадать с тем, что система реально считает и
 // списывает — backend/internal/config/config.go, блок Billing.Plans. Это
@@ -19,8 +18,16 @@ export type Plan = {
   tagline: string
   cta: string
   featured: boolean
-  bullets: string[]
+  /** Пункты карточки; off — недоступно на тарифе (серым с прочерком). */
+  bullets: { text: string; off?: boolean }[]
 }
+
+const paidBullets = (photos: string, storage: string) => [
+  { text: `${photos} фото` },
+  { text: `${storage} хранилища` },
+  { text: 'Пароли на альбомы' },
+  { text: 'Аналитика за 30 дней' },
+]
 
 export const PLANS: Plan[] = [
   {
@@ -31,7 +38,12 @@ export const PLANS: Plan[] = [
     tagline: 'Попробовать витрину',
     cta: 'Начать бесплатно',
     featured: false,
-    bullets: ['250 фото', '1 ГБ хранилища'],
+    bullets: [
+      { text: '250 фото' },
+      { text: '1 ГБ хранилища' },
+      { text: 'Пароли на альбомы', off: true },
+      { text: 'Аналитика за 30 дней', off: true },
+    ],
   },
   {
     id: 'standard',
@@ -41,7 +53,7 @@ export const PLANS: Plan[] = [
     tagline: 'Для небольшого каталога',
     cta: 'Выбрать «Стандарт»',
     featured: false,
-    bullets: ['2 000 фото', '5 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
+    bullets: paidBullets('2 000', '5 ГБ'),
   },
   {
     id: 'pro',
@@ -51,7 +63,7 @@ export const PLANS: Plan[] = [
     tagline: 'Для активных продаж',
     cta: 'Пробный период',
     featured: true,
-    bullets: ['20 000 фото', '40 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
+    bullets: paidBullets('20 000', '40 ГБ'),
   },
   {
     id: 'business',
@@ -61,7 +73,7 @@ export const PLANS: Plan[] = [
     tagline: 'Для больших каталогов',
     cta: 'Выбрать «Бизнес»',
     featured: false,
-    bullets: ['70 000 фото', '120 ГБ хранилища', 'Пароли на альбомы', 'Аналитика за 30 дней'],
+    bullets: paidBullets('70 000', '120 ГБ'),
   },
 ]
 
@@ -82,7 +94,7 @@ export const MATRIX: MatrixGroup[] = [
   {
     title: 'Лимиты',
     rows: [
-      { label: 'Фотографии', values: { free: '250', standard: '2 000', pro: '20 000', business: '70 000' } },
+      { label: 'Фото', values: { free: '250', standard: '2 000', pro: '20 000', business: '70 000' } },
       { label: 'Хранилище', values: { free: '1 ГБ', standard: '5 ГБ', pro: '40 ГБ', business: '120 ГБ' } },
       { label: 'Размер одного фото', values: all('до 10 МБ') },
       { label: 'Форматы фото', values: all('JPEG, PNG, HEIC') },

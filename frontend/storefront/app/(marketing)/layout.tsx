@@ -1,23 +1,15 @@
-import { Golos_Text } from 'next/font/google'
 import type { ReactNode } from 'react'
-import { SiteFooter } from '@/components/site/SiteFooter'
+import { CookieBanner } from '@/components/site/CookieBanner'
 import { SiteHeader } from '@/components/site/SiteHeader'
+import s from '@/components/site/landing.module.css'
 
-// Фирменный шрифт только здесь. На витрине магазина он стоил ~59 КБ с высоким
-// приоритетом и +400 мс к LCP — за бюджет 2.5s; там остаётся системный стек.
-// Self-hosted через next/font: запроса к fonts.googleapis.com нет.
-const golos = Golos_Text({
-  subsets: ['cyrillic', 'latin'],
-  weight: ['400', '500', '600'],
-  display: 'swap',
-})
-
-// Общая обвязка публичных страниц: главная, тарифы,
-// «убрать фон» и юридические страницы. Витрина магазина сюда не входит —
-// у неё своя шапка (см. app/[slug]/layout.tsx).
+// Общая обвязка публичных страниц (макет 01): главная, тарифы, «убрать фон»
+// и юридические страницы. Шрифт — Inter, как во всём макете (подключён в
+// корневом layout). Витрина магазина сюда не входит — у неё своя шапка и
+// подвал (см. app/[slug]/layout.tsx).
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className={golos.className}>
+    <div className={s.root}>
       {/* Маркер сессии — не httpOnly cookie, который сервер кладёт при входе
           и снимает при выходе. Читаем его синхронно, до отрисовки шапки:
           страница статическая и отдаётся из кеша всем одинаково, а решать
@@ -30,7 +22,36 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       />
       <SiteHeader />
       {children}
-      <SiteFooter />
+      <footer className={s.foot}>
+        <div className={s.in}>
+          <div className={s.footTop}>
+            <div>
+              <a className={s.footLogo} href="/">
+                вуад
+              </a>
+              <p>Фотокаталог для бизнеса</p>
+            </div>
+            <nav className={s.footNav}>
+              <a href="/">Главная</a>
+              <a href="/pricing">Тарифы</a>
+              <a className="auth-out" href="/app/login">
+                Войти
+              </a>
+              <a className="auth-in" href="/app/">
+                Кабинет
+              </a>
+            </nav>
+          </div>
+          <div className={s.footBottom}>
+            <span>© 2026 вуад</span>
+            <nav className={s.footLegal}>
+              <a href="/terms">Оферта</a>
+              <a href="/privacy">Политика конфиденциальности</a>
+            </nav>
+          </div>
+        </div>
+      </footer>
+      <CookieBanner />
     </div>
   )
 }

@@ -148,11 +148,11 @@ img {
   padding: 0 20px;
 }
 
-/* Липкая полоса действия (components/site/StickyBar) фиксирована у нижнего
-   края и перекрыла бы подвал: страницы, где она есть, получают отступ снизу. */
-@media (max-width: 859px) {
-  body:has(.stickybar) { padding-bottom: 76px; }
-}
+/* Вход/кабинет на публичных страницах: атрибут html[data-auth] ставит
+   инлайн-скрипт из app/(marketing)/layout.tsx до первой отрисовки. Без
+   атрибута показываем «не вошёл» — так у большинства и без JS. */
+html[data-auth='in'] .auth-out { display: none !important; }
+html:not([data-auth='in']) .auth-in { display: none !important; }
 
 .muted  { color: var(--text-2); }
 .dim    { color: var(--text-3); }
@@ -1309,10 +1309,6 @@ body:has(.shopbar) {
   box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
 }
 .back-to-cabinet:hover { background: var(--brand-hover); }
-/* На телефоне внизу закреплены полосы действий — плашка встаёт над ними. */
-@media (max-width: 859px) {
-  body:has(.stickybar) .back-to-cabinet { bottom: 92px; }
-}
 
 /* ==========================================================================
    Витрина v3 — перенос «15 · Витрина (покупатель)» целиком: шапка без

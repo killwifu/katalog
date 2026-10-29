@@ -37,7 +37,7 @@ function matrixRow(label) {
     [...m[1].matchAll(/(\w+): '([^']*)'/g)].map(([, id, v]) => [id, v.replace(/\s| /g, '')]),
   )
 }
-const tsPhotos = matrixRow('Фотографии')
+const tsPhotos = matrixRow('Фото')
 const tsStorage = matrixRow('Хранилище')
 
 const errors = []

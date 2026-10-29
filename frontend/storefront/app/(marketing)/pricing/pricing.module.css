@@ -1,213 +1,116 @@
-/* Тарифы: карточки, таблица сравнения (десктоп) и панели по тарифам (мобильный). */
+/* Сравнение тарифов (макет 08). Десктоп/планшет — обычная таблица:
+   колонка названий + 4 тарифа, «Про» подсвечен. Телефон — та же таблица
+   сеткой: название строки сверху, под ним 4 значения, шапка закреплена. */
 
-.top {
-  padding: 44px 0 30px;
+.cmp { padding: 56px 0; background: #fff; text-align: center; }
+
+.in { max-width: 1264px; margin: 0 auto; padding: 0 18px; }
+
+.cmp h2 { font-size: 28px; font-weight: 700; line-height: 1.2; }
+
+.lead { margin-top: 12px; font-size: 15px; color: var(--text-2); }
+
+.table {
+  width: 100%;
+  margin-top: 24px;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  font-size: 12px;
   text-align: center;
 }
 
-.top p {
-  margin: 10px auto 0;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-  max-width: 52ch;
+.table th,
+.table td { padding: 0; font-weight: 400; vertical-align: middle; }
+
+.hl { background: rgba(233, 236, 251, 0.6); }
+
+/* Шапка: название тарифа и цена. */
+.table thead th {
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--border-strong);
+  background: #fff;
 }
 
-.cards {
-  display: grid;
-  gap: 12px;
-}
+.table thead th.hl { background: #f2f4fd; }
 
-.card {
-  display: flex;
-  flex-direction: column;
-}
-
-.name {
-  font-size: var(--fs-h3);
-  font-weight: 500;
-}
-
-.price {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-top: 6px;
-}
-
-.price small {
-  font-size: var(--fs-sm);
-  font-weight: 400;
-  color: var(--text-2);
-}
-
-.note {
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
-/* .btn и .tag — глобальные классы из globals.css, отсюда :global(). */
-.card :global(.btn) { margin: 16px 0; }
+.planName { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
 
 .badge {
-  align-self: flex-start;
-  margin-bottom: 8px;
-}
-
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-  padding: 18px 0;
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-
-/* --- Таблица сравнения: десктоп ------------------------------------------ */
-
-.matrix {
   display: none;
-  width: 100%;
-  border-collapse: collapse;
+  margin: 0 auto 6px;
+  width: max-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
 }
 
-.matrix th,
-.matrix td {
-  padding: 11px 12px;
-  font-weight: 400;
-}
-
-.matrix thead th {
-  vertical-align: bottom;
-  text-align: center;
-  font-size: var(--fs-body);
-  font-weight: 500;
-}
-
-.matrix thead th small {
-  display: block;
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-  font-weight: 400;
-}
-
-.matrix thead th :global(.tag) { margin-bottom: 5px; }
-
-.matrix tbody th {
-  text-align: left;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-}
-
-.matrix td {
-  text-align: center;
-  font-size: var(--fs-sm);
-}
+.label { display: none; }
 
 .group th {
-  padding-top: 26px;
-  padding-bottom: 2px;
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  color: var(--text-3);
-}
-
-/* Колонка рекомендованного тарифа подсвечена по всей высоте. */
-.hl { background: var(--surface); }
-
-.matrix thead .hl {
-  border-radius: var(--r-card) var(--r-card) 0 0;
-  padding-top: 14px;
-}
-
-.matrix tr:last-child .hl { border-radius: 0 0 var(--r-card) var(--r-card); }
-
-.same { color: var(--text-3); }
-
-.ctaRow td { padding-top: 20px; }
-.ctaRow .hl { padding: 20px 12px 22px; }
-
-/* --- Панели по тарифам: мобильный ---------------------------------------- */
-
-.tabs {
-  display: flex;
-  gap: 3px;
-  padding: 4px;
-  background: var(--surface-alt);
-  border-radius: var(--r-pill);
-  margin-bottom: 18px;
-}
-
-.tabs button {
-  flex: 1;
-  padding: 8px 4px;
-  border: 1px solid transparent;
-  border-radius: var(--r-pill);
-  background: none;
-  font: inherit;
-  font-size: var(--fs-xs);
-  color: var(--text-2);
-  cursor: pointer;
-}
-
-.tabs button[aria-selected='true'] {
-  background: var(--surface);
-  border-color: var(--border);
-  color: var(--text);
-  font-weight: 500;
-}
-
-.panelPrice {
-  font-size: 30px;
+  padding: 10px 14px;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.panelPrice small {
-  font-size: var(--fs-sm);
-  font-weight: 400;
-  color: var(--text-2);
-}
-
-.panelNote {
-  font-size: var(--fs-xs);
-  margin-bottom: 12px;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 0;
-  font-size: var(--fs-sm);
-}
-
-.row span:first-child { color: var(--text-2); }
-.row span:last-child { text-align: right; }
-
-.rowGroup {
-  padding-top: 18px;
-  font-size: var(--fs-xs);
-  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-3);
 }
 
-/* --- Вопросы -------------------------------------------------------------- */
+.table tbody tr:not(.group) > * { border-bottom: 1px solid var(--border); }
+.table tbody tr:last-child > * { border-bottom: 0; }
 
-.faq dt {
-  font-size: var(--fs-body);
-  font-weight: 500;
-  margin-top: 18px;
-}
-
-.faq dd {
-  margin: 5px 0 0;
-  font-size: var(--fs-sm);
-  color: var(--text-2);
+@media (max-width: 859px) {
+  .table,
+  .table thead,
+  .table tbody { display: block; }
+  .table tr { display: grid; grid-template-columns: repeat(4, 1fr); }
+  /* Шапка с тарифами и ценами — закреплена под шапкой сайта (69 px). */
+  .table thead { position: sticky; top: 69px; z-index: 2; }
+  .table thead tr { border-radius: 18px 18px 0 0; overflow: hidden; }
+  .table .group th { grid-column: 1 / -1; }
+  .table tbody tr:not(.group) > th {
+    grid-column: 1 / -1;
+    padding: 12px 14px 2px;
+    border-bottom: 0;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .table tbody tr:not(.group) > td { padding: 6px 4px 12px; }
 }
 
 @media (min-width: 860px) {
-  .cards { grid-template-columns: repeat(4, 1fr); align-items: start; }
-  .matrix { display: table; }
-  .mobileMatrix { display: none; }
+  .cmp { padding: 96px 0 104px; }
+  .in { padding: 0 32px; }
+  .cmp h2 { font-size: 40px; line-height: 48px; }
+  .lead { margin-top: 16px; font-size: 18px; }
+  .table { margin-top: 40px; border-radius: 24px; font-size: 15px; table-layout: fixed; }
+  .label {
+    display: table-cell;
+    width: 30%;
+    padding: 20px 24px 20px 28px !important;
+    vertical-align: bottom !important;
+    text-align: left;
+    color: var(--text-3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-strong);
+  }
+  .table thead th { padding: 20px 12px; vertical-align: bottom; }
+  .planName { font-size: 17px; margin-bottom: 6px; }
+  .badge { display: block; }
+  .group th { padding: 12px 24px 12px 28px; font-size: 12px; }
+  .table tbody tr:not(.group) > th { padding: 16px 24px 16px 28px; text-align: left; line-height: 21px; }
+  .table tbody tr:not(.group) > td { padding: 16px; }
+}
+
+@media (min-width: 860px) and (max-width: 1199px) {
+  .label { width: 320px; }
 }
