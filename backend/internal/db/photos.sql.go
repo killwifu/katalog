@@ -356,7 +356,9 @@ func (q *Queries) ListAlbumTreePhotos(ctx context.Context, albumID uuid.UUID) ([
 }
 
 const listDeletedPhotos = `-- name: ListDeletedPhotos :many
-SELECT photos.id, photos.album_id, photos.shop_id, photos.caption, photos.caption_tsv, photos.status, photos.orig_size, photos.width, photos.height, photos.phash, photos.source, photos.sort_order, photos.created_at, photos.updated_at, photos.flagged, photos.drv_size, photos.fail_reason, photos.deleted_at FROM photos
+SELECT photos.id, photos.album_id, photos.shop_id, photos.caption, photos.caption_tsv, photos.status, photos.orig_size, photos.width, photos.height, photos.phash, photos.source, photos.sort_order, photos.created_at, photos.updated_at, photos.flagged, photos.drv_size, photos.fail_reason, photos.deleted_at, a.title AS album_title, (photos.orig_size + photos.drv_size)::bigint AS bytes
+FROM photos
+JOIN albums a ON a.id = photos.album_id
 WHERE photos.shop_id = $1 AND photos.deleted_at IS NOT NULL
   -- Фото, уехавшие вместе с альбомом, показываются одной строкой — самим
   -- альбомом; по отдельности их не восстановить, альбома-то нет.
@@ -371,34 +373,43 @@ type ListDeletedPhotosParams struct {
 	Offset int32     `json:"offset"`
 }
 
-func (q *Queries) ListDeletedPhotos(ctx context.Context, arg ListDeletedPhotosParams) ([]Photo, error) {
+type ListDeletedPhotosRow struct {
+	Photo      Photo  `json:"photo"`
+	AlbumTitle string `json:"album_title"`
+	Bytes      int64  `json:"bytes"`
+}
+
+// album_title и bytes — для карточки «из «альбома»» и тоста «освободилось N МБ».
+func (q *Queries) ListDeletedPhotos(ctx context.Context, arg ListDeletedPhotosParams) ([]ListDeletedPhotosRow, error) {
 	rows, err := q.db.Query(ctx, listDeletedPhotos, arg.ShopID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Photo
+	var items []ListDeletedPhotosRow
 	for rows.Next() {
-		var i Photo
+		var i ListDeletedPhotosRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.AlbumID,
-			&i.ShopID,
-			&i.Caption,
-			&i.CaptionTsv,
-			&i.Status,
-			&i.OrigSize,
-			&i.Width,
-			&i.Height,
-			&i.Phash,
-			&i.Source,
-			&i.SortOrder,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Flagged,
-			&i.DrvSize,
-			&i.FailReason,
-			&i.DeletedAt,
+			&i.Photo.ID,
+			&i.Photo.AlbumID,
+			&i.Photo.ShopID,
+			&i.Photo.Caption,
+			&i.Photo.CaptionTsv,
+			&i.Photo.Status,
+			&i.Photo.OrigSize,
+			&i.Photo.Width,
+			&i.Photo.Height,
+			&i.Photo.Phash,
+			&i.Photo.Source,
+			&i.Photo.SortOrder,
+			&i.Photo.CreatedAt,
+			&i.Photo.UpdatedAt,
+			&i.Photo.Flagged,
+			&i.Photo.DrvSize,
+			&i.Photo.FailReason,
+			&i.Photo.DeletedAt,
+			&i.AlbumTitle,
+			&i.Bytes,
 		); err != nil {
 			return nil, err
 		}

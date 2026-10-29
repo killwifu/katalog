@@ -34,8 +34,13 @@ FROM daily_stats
 WHERE shop_id = $1 AND album_id IS NULL AND date >= $2 AND date <= $3
 ORDER BY date;
 
+-- clicks — клики «Написать» с фото альбома за тот же период, в реальном
+-- времени из lead_clicks (макет 19 · колонка «Клики»).
 -- name: GetShopTopAlbums :many
-SELECT d.album_id, a.title, sum(d.views)::bigint AS views
+SELECT d.album_id, a.title, sum(d.views)::bigint AS views,
+       (SELECT count(*) FROM lead_clicks l JOIN photos p ON p.id = l.photo_id
+        WHERE l.shop_id = $1 AND p.album_id = d.album_id
+          AND l.created_at >= $4 AND l.created_at < $5)::bigint AS clicks
 FROM daily_stats d
 JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
 WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.date >= $2 AND d.date <= $3
@@ -52,11 +57,12 @@ GROUP BY channel
 ORDER BY clicks DESC;
 
 -- name: GetShopTopPhotos :many
-SELECT l.photo_id, p.caption, p.status, count(*)::bigint AS clicks
+SELECT l.photo_id, p.caption, p.status, a.title AS album_title, count(*)::bigint AS clicks
 FROM lead_clicks l
 JOIN photos p ON p.id = l.photo_id
+JOIN albums a ON a.id = p.album_id
 WHERE l.shop_id = $1 AND l.created_at >= $2 AND l.created_at < $3
-GROUP BY l.photo_id, p.caption, p.status
+GROUP BY l.photo_id, p.caption, p.status, a.title
 ORDER BY clicks DESC, l.photo_id
 LIMIT 10;
 

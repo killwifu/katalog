@@ -80,8 +80,18 @@ WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL;
 
 -- Удалённые альбомы для «Удаленного». Подальбом, уехавший вместе с
 -- родителем, отдельной строкой не показываем — он вернётся вместе с ним.
+-- tree_photos/tree_bytes — фото альбома с подальбомами, уехавшие вместе
+-- с ним: «Альбом и 12 фото… Освободится 16 МБ» (макет 20).
 -- name: ListDeletedAlbums :many
-SELECT a.* FROM albums a
+SELECT sqlc.embed(a),
+       coalesce(t.photos, 0)::bigint AS tree_photos,
+       coalesce(t.bytes, 0)::bigint  AS tree_bytes
+FROM albums a
+LEFT JOIN LATERAL (
+    SELECT count(*) AS photos, sum(p.orig_size + p.drv_size) AS bytes
+    FROM photos p JOIN albums c ON c.id = p.album_id
+    WHERE (c.id = a.id OR c.parent_id = a.id) AND p.deleted_at = a.deleted_at
+) t ON true
 WHERE a.shop_id = $1 AND a.deleted_at IS NOT NULL
   AND NOT EXISTS (
         SELECT 1 FROM albums p

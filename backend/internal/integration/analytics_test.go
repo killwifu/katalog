@@ -31,9 +31,11 @@ type shopStatsJSON struct {
 		AlbumID string `json:"album_id"`
 		Title   string `json:"title"`
 		Views   int64  `json:"views"`
+		Clicks  int64  `json:"clicks"`
 	} `json:"top_albums"`
 	TopPhotos []struct {
-		PhotoID  string `json:"photo_id"`
+		PhotoID    string `json:"photo_id"`
+		AlbumTitle string `json:"album_title"`
 		Clicks   int64  `json:"clicks"`
 		ThumbURL string `json:"thumb_url"`
 	} `json:"top_photos"`
@@ -99,6 +101,26 @@ func TestShopStatsDashboard(t *testing.T) {
 	if len(stats.TopPhotos) != 1 || stats.TopPhotos[0].PhotoID != photoID ||
 		stats.TopPhotos[0].Clicks != 2 || stats.TopPhotos[0].ThumbURL == "" {
 		t.Fatalf("top photos: %+v", stats.TopPhotos)
+	}
+
+	if stats.TopAlbums[0].Clicks != 2 || stats.TopAlbums[1].Clicks != 0 {
+		t.Fatalf("клики по альбомам: %+v (want 2 и 0)", stats.TopAlbums)
+	}
+	if stats.TopPhotos[0].AlbumTitle != album.Title {
+		t.Fatalf("album_title топ-фото: %q, want %q", stats.TopPhotos[0].AlbumTitle, album.Title)
+	}
+
+	// «Свой период»: позавчера–вчера — 20 + 30 просмотров; сегодняшние
+	// клики в него не попадают.
+	day := func(n int) string { return time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02") }
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/stats?from="+day(2)+"&to="+day(1), nil, http.StatusOK, &stats)
+	if stats.Days != 2 || stats.Totals.Views != 50 || stats.Totals.LeadClicks != 0 {
+		t.Fatalf("свой период: days %d, totals %+v (want 2 дня, 50 просмотров, 0 кликов)", stats.Days, stats.Totals)
+	}
+	for _, q := range []string{"from=" + day(1) + "&to=" + day(2), "from=" + day(100) + "&to=" + day(1), "from=" + day(1) + "&to=" + day(-1), "from=x&to=" + day(1)} {
+		if status, _ := c.do("GET", "/api/v1/shops/"+shop.ID+"/stats?"+q, nil); status != http.StatusBadRequest {
+			t.Errorf("stats?%s: status %d, want 400", q, status)
+		}
 	}
 
 	// Тенант-изоляция: чужому — 404.

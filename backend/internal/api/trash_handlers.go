@@ -30,17 +30,36 @@ type trashAlbumResponse struct {
 	PhotoCount int32             `json:"photo_count"`
 	DeletedAt  string            `json:"deleted_at"`
 	CoverUrls  map[string]string `json:"cover_urls,omitempty"`
+	// Photos и Bytes — всё, что уехало вместе с альбомом (с подальбомами):
+	// для подтверждения «Альбом и 12 фото… Освободится 16 МБ» (макет 20).
+	Photos int64 `json:"photos"`
+	Bytes  int64 `json:"bytes"`
+}
+
+// trashPhotoResponse — отдельное фото в корзине: «из «альбома»», срок и
+// объём для тоста «освободилось N МБ».
+type trashPhotoResponse struct {
+	photoResponse
+	AlbumTitle string `json:"album_title"`
+	DeletedAt  string `json:"deleted_at"`
+	Bytes      int64  `json:"bytes"`
 }
 
 type trashResponse struct {
 	// Albums отдаются целиком и только на первой странице: их единицы,
 	// а листают в корзине фотографии.
 	Albums   []trashAlbumResponse `json:"albums"`
-	Photos   []photoResponse      `json:"photos"`
+	Photos   []trashPhotoResponse `json:"photos"`
 	Total    int64                `json:"total"`
 	Page     int                  `json:"page"`
 	PerPage  int                  `json:"per_page"`
 	KeepDays int64                `json:"keep_days"`
+	// Usage — всё «Удаленное» целиком (с фото удалённых альбомов): плашка
+	// «Здесь 48 фото на 67 МБ» и сводка «Очистить «Удаленное»».
+	Usage struct {
+		Photos int64 `json:"photos"`
+		Bytes  int64 `json:"bytes"`
+	} `json:"usage"`
 }
 
 func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
@@ -62,9 +81,22 @@ func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "count trash", err)
 		return
 	}
-	out := make([]photoResponse, 0, len(rows))
+	out := make([]trashPhotoResponse, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, a.toPhotoResponse(p, shopFromCtx(r).MediaRev))
+		item := trashPhotoResponse{
+			photoResponse: a.toPhotoResponse(p.Photo, shop.MediaRev),
+			AlbumTitle:    p.AlbumTitle,
+			Bytes:         p.Bytes,
+		}
+		if p.Photo.DeletedAt.Valid {
+			item.DeletedAt = p.Photo.DeletedAt.Time.Format(time.RFC3339)
+		}
+		out = append(out, item)
+	}
+	usage, err := a.Q.TrashUsage(r.Context(), shop.ID)
+	if err != nil {
+		a.internalError(w, "trash usage", err)
+		return
 	}
 	albums := []trashAlbumResponse{}
 	if page == 1 {
@@ -73,8 +105,12 @@ func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 			a.internalError(w, "list deleted albums", err)
 			return
 		}
-		for _, al := range deleted {
-			item := trashAlbumResponse{ID: al.ID.String(), Title: al.Title, PhotoCount: al.PhotoCount}
+		for _, row := range deleted {
+			al := row.Album
+			item := trashAlbumResponse{
+				ID: al.ID.String(), Title: al.Title, PhotoCount: al.PhotoCount,
+				Photos: row.TreePhotos, Bytes: row.TreeBytes,
+			}
 			if al.DeletedAt.Valid {
 				item.DeletedAt = al.DeletedAt.Time.Format(time.RFC3339)
 			}
@@ -87,14 +123,17 @@ func (a *API) handleListTrash(w http.ResponseWriter, r *http.Request) {
 			albums = append(albums, item)
 		}
 	}
-	writeJSON(w, http.StatusOK, trashResponse{
+	resp := trashResponse{
 		Albums:   albums,
 		Photos:   out,
 		Total:    total,
 		Page:     page,
 		PerPage:  trashPerPage,
 		KeepDays: a.Cfg.TrashKeepDays,
-	})
+	}
+	resp.Usage.Photos = usage.Photos
+	resp.Usage.Bytes = usage.Bytes
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (a *API) handleRestorePhoto(w http.ResponseWriter, r *http.Request) {

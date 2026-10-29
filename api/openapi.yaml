@@ -729,6 +729,18 @@ paths:
           required: false
           schema: { type: integer, default: 30 }
           description: Период 1–365 дней; больше 365 — 365, остальное некорректное — 30.
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: >
+            «Свой период» — начало (включительно), вместе с to. Не раньше
+            62 дней назад; при from/to параметр days игнорируется.
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Конец периода включительно, не позже сегодня.
       responses:
         "200":
           description: OK
@@ -736,6 +748,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShopStats"
+        "400":
+          description: Некорректный from/to (error=invalid_period)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "403":
           description: Недоступно на Бесплатном тарифе (error=analytics_plan_required)
           content:
@@ -1065,7 +1082,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [albums, photos, total, page, per_page, keep_days]
+                required: [albums, photos, total, page, per_page, keep_days, usage]
                 properties:
                   albums:
                     type: array
@@ -1074,16 +1091,33 @@ paths:
                       уехавшие вместе с альбомом, в photos не дублируются.
                     items:
                       type: object
-                      required: [id, title, photo_count, deleted_at]
+                      required: [id, title, photo_count, deleted_at, photos, bytes]
                       properties:
                         id: { type: string, format: uuid }
                         title: { type: string }
                         photo_count: { type: integer }
                         deleted_at: { type: string, format: date-time }
                         cover_urls: { $ref: "#/components/schemas/PhotoUrls" }
+                        photos: { type: integer, description: Фото, удалённые вместе с альбомом (с подальбомами) }
+                        bytes: { type: integer, description: Их объём, байты }
                   photos:
                     type: array
-                    items: { $ref: "#/components/schemas/Photo" }
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Photo"
+                        - type: object
+                          required: [album_title, deleted_at, bytes]
+                          properties:
+                            album_title: { type: string }
+                            deleted_at: { type: string, format: date-time }
+                            bytes: { type: integer }
+                  usage:
+                    type: object
+                    description: Всё «Удаленное» вместе с фото удалённых альбомов
+                    required: [photos, bytes]
+                    properties:
+                      photos: { type: integer }
+                      bytes: { type: integer }
                   total: { type: integer }
                   page: { type: integer }
                   per_page: { type: integer }
@@ -2665,9 +2699,11 @@ components:
 
     ShopStats:
       type: object
-      required: [days, totals, daily, channels, top_albums, top_photos]
+      required: [days, from, to, totals, daily, channels, top_albums, top_photos]
       properties:
         days: { type: integer }
+        from: { type: string, format: date, description: Начало периода включительно }
+        to: { type: string, format: date, description: Конец периода включительно }
         totals:
           type: object
           required: [views, unique_visitors, lead_clicks]
@@ -2703,20 +2739,22 @@ components:
           maxItems: 5
           items:
             type: object
-            required: [album_id, title, views]
+            required: [album_id, title, views, clicks]
             properties:
               album_id: { type: string, format: uuid }
               title: { type: string }
               views: { type: integer }
+              clicks: { type: integer, description: Клики «написать» с фото альбома за период }
         top_photos:
           type: array
           maxItems: 10
           items:
             type: object
-            required: [photo_id, caption, clicks]
+            required: [photo_id, caption, album_title, clicks]
             properties:
               photo_id: { type: string, format: uuid }
               caption: { type: string }
+              album_title: { type: string }
               clicks: { type: integer }
               thumb_url: { type: string }
 

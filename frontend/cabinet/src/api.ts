@@ -361,30 +361,39 @@ export type TrashAlbum = {
   photo_count: number
   deleted_at: string
   cover_urls?: { small: string; medium: string; large: string }
+  // Фото, уехавшие вместе с альбомом, и их объём (байты).
+  photos: number
+  bytes: number
 }
+
+export type TrashPhoto = Photo & { album_title: string; deleted_at: string; bytes: number }
 
 export type TrashPage = {
   // Альбомы приходят только на первой странице.
   albums: TrashAlbum[]
-  photos: Photo[]
+  photos: TrashPhoto[]
   total: number
   page: number
   per_page: number
   // Сколько дней фотография лежит в корзине до окончательной уборки.
   keep_days: number
+  // Всё «Удаленное» вместе с фото удалённых альбомов.
+  usage: { photos: number; bytes: number }
 }
 
 export type ConfirmResult = { photo_id: string; status: string; error?: string; code?: string }
 
 export type ShopStats = {
   days: number
+  from: string
+  to: string
   totals: { views: number; unique_visitors: number; lead_clicks: number }
   daily: { date: string; views: number; unique_visitors: number; lead_clicks: number }[]
   channels: { channel: string; clicks: number }[]
   // Сколько разных альбомов открывали за последние 7 дней.
   albums_viewed_week?: number
-  top_albums: { album_id: string; title: string; views: number }[]
-  top_photos: { photo_id: string; caption: string; clicks: number; thumb_url?: string }[]
+  top_albums: { album_id: string; title: string; views: number; clicks: number }[]
+  top_photos: { photo_id: string; caption: string; album_title: string; clicks: number; thumb_url?: string }[]
 }
 
 export const api = {
@@ -575,6 +584,9 @@ export const api = {
 
   getStats: (shopId: string, days: number) =>
     request<ShopStats>('GET', `/shops/${shopId}/stats?days=${days}`),
+  // «Свой период» (и прошлый отрезок для сравнения): даты YYYY-MM-DD включительно.
+  getStatsRange: (shopId: string, from: string, to: string) =>
+    request<ShopStats>('GET', `/shops/${shopId}/stats?from=${from}&to=${to}`),
 
   getBilling: (shopId: string) => request<Billing>('GET', `/shops/${shopId}/billing`),
   quote: (shopId: string, plan: Plan, period: BillingPeriod) =>
