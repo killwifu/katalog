@@ -32,9 +32,20 @@ SELECT user_id FROM user_identities
 WHERE provider = $1 AND subject = $2;
 
 -- name: CreateUserIdentity :exec
-INSERT INTO user_identities (provider, subject, user_id)
-VALUES ($1, $2, $3)
+INSERT INTO user_identities (provider, subject, user_id, label)
+VALUES ($1, $2, $3, $4)
 ON CONFLICT DO NOTHING;
+
+-- Подключённые входы аккаунта (Настройки · «Вход через соцсети»).
+-- name: ListUserIdentities :many
+SELECT provider, label, created_at FROM user_identities
+WHERE user_id = $1
+ORDER BY created_at;
+
+-- name: UpdateUserPhone :exec
+UPDATE users
+SET phone = $2, updated_at = now()
+WHERE id = $1;
 
 -- Привязка входа через провайдера к аккаунту с неподтверждённой почтой:
 -- пароль сбрасывается. Иначе чужой человек мог заранее зарегистрировать

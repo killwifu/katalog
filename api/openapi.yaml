@@ -130,6 +130,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
         "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      operationId: updateMe
+      summary: Личные данные — телефон для связи по вопросам аккаунта
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                phone: { type: string, description: "10–15 цифр, можно + пробелы ( ) -; пусто — убрать" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400":
+          description: invalid_phone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+    delete:
+      operationId: deleteMe
+      summary: Удалить аккаунт со всеми витринами, альбомами и фото
+      description: >
+        Только с верным паролем. Аккаунту без пароля (вход через Яндекс/VK)
+        его сначала нужно задать (changePassword без current_password).
+        Сессии закрываются, объекты хранилища удаляются задачей уборки.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        "204": { description: Аккаунт удалён }
+        "400":
+          description: wrong_password
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /api/v1/auth/password/forgot:
     post:
@@ -193,8 +245,9 @@ paths:
       operationId: changePassword
       summary: Сменить пароль из кабинета
       description: >
-        Требует текущий пароль. Остальные сессии пользователя закрываются,
-        текущая выдаётся заново (Set-Cookie). Rate-limit как у входа.
+        Требует текущий пароль; аккаунт без пароля (вход через Яндекс/VK)
+        задаёт его впервые без current_password. Остальные сессии пользователя
+        закрываются, текущая выдаётся заново (Set-Cookie). Rate-limit как у входа.
       requestBody:
         required: true
         content:
@@ -202,7 +255,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [current_password, new_password]
+              required: [new_password]
               properties:
                 current_password: { type: string }
                 new_password: { type: string, minLength: 8, maxLength: 128 }
@@ -303,6 +356,16 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/auth/email/change/resend:
+    post:
+      operationId: resendEmailChange
+      summary: Отправить письмо подтверждения новой почты ещё раз (не чаще раза в минуту)
+      responses:
+        "204": { description: Письмо отправлено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/auth/email/confirm:
     post:
       operationId: confirmEmailChange
@@ -358,6 +421,13 @@ paths:
         - { name: plan, in: query, schema: { type: string } }
         - { name: period, in: query, schema: { type: string } }
         - { name: trial, in: query, schema: { type: string } }
+        - name: link
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: >
+            «Подключить» в Настройках: привязать вход к аккаунту текущей сессии.
+            Колбэк вернёт на /app/settings?oauth_linked={provider} или
+            ?oauth_error=taken (уже привязан к другому аккаунту).
       responses:
         "302": { description: Редирект на страницу входа провайдера }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -544,6 +614,86 @@ paths:
       summary: Удалить магазин
       responses:
         "204": { description: Удалено }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/logo/presign:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: presignShopLogo
+      summary: URL для прямой загрузки логотипа витрины в хранилище
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [logo_id, url]
+                properties:
+                  logo_id: { type: string, format: uuid }
+                  url: { type: string, description: pre-signed PUT }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/logo/confirm:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    post:
+      operationId: confirmShopLogo
+      summary: Логотип загружен — поставить в обработку (те же проверки, что у фото, мин. 200×200)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [logo_id]
+              properties:
+                logo_id: { type: string, format: uuid }
+      responses:
+        "202": { description: В обработке — статус через getShopLogoStatus }
+        "400":
+          description: logo_too_large (больше 10 МБ)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/logo/status:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    get:
+      operationId: getShopLogoStatus
+      summary: Обработан ли логотип
+      parameters:
+        - { name: logo_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [processing, ready, failed] }
+                  reason: { type: string, description: "failed: too_small или код отказа обработки фото" }
+                  logo_url: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/shops/{shopID}/logo:
+    parameters:
+      - $ref: "#/components/parameters/ShopID"
+    delete:
+      operationId: deleteShopLogo
+      summary: Убрать логотип — в шапке витрины снова инициалы
+      responses:
+        "204": { description: Убран }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -2012,7 +2162,7 @@ paths:
               properties:
                 shop_id: { type: string, format: uuid }
                 photo_id: { type: string, format: uuid }
-                channel: { type: string, enum: [telegram, whatsapp, max, vk] }
+                channel: { type: string, enum: [telegram, whatsapp, max, vk, avito] }
       responses:
         "204": { description: Лид зафиксирован }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -2498,6 +2648,18 @@ components:
         has_password:
           description: false — аккаунт создан входом через Яндекс/VK
           type: boolean
+        phone:
+          description: Телефон для связи по вопросам аккаунта; покупателям не виден
+          type: [string, "null"]
+        identities:
+          description: Подключённые входы через соцсети (только в /auth/me)
+          type: array
+          items:
+            type: object
+            required: [provider, label]
+            properties:
+              provider: { type: string, enum: [yandex, vk] }
+              label: { type: [string, "null"], description: Логин Яндекса или имя в VK }
 
     ShopStats:
       type: object
@@ -2527,7 +2689,7 @@ components:
             type: object
             required: [channel, clicks]
             properties:
-              channel: { type: string, enum: [telegram, whatsapp, max, vk] }
+              channel: { type: string, enum: [telegram, whatsapp, max, vk, avito] }
               clicks: { type: integer }
         albums_viewed_week:
           type: integer
@@ -2615,6 +2777,7 @@ components:
         storage_used: { type: integer }
         storage_max: { type: integer }
         max_photos: { type: integer }
+        logo_url: { type: string, description: Логотип витрины; пусто — инициалы }
 
     PlanID:
       type: string
@@ -2792,14 +2955,15 @@ components:
         msg_template:
           type: string
           maxLength: 200
-          description: Текст для мессенджера, подстановка {caption}
+          description: >
+            «Текст сообщения» из Контактов. Подстановка {caption}; без неё
+            витрина добавляет подпись фото отдельной строкой.
         reply_time:
           type: string
           maxLength: 100
           description: >
-            Когда продавец отвечает. Показывается покупателю рядом
-            с кнопками связи — единственная настройка помимо msg_template,
-            которая уходит наружу.
+            Устаревшее: «Когда отвечаете» убрано из кабинета (макет 16) и
+            покупателю больше не отдаётся. Наружу уходит только msg_template.
         watermark:
           type: object
           description: >
@@ -2810,6 +2974,7 @@ components:
             text: { type: string, maxLength: 40 }
             opacity: { type: number, minimum: 0, maximum: 1 }
             position: { $ref: '#/components/schemas/WatermarkPosition' }
+            color: { type: string, pattern: "^#[0-9A-Fa-f]{6}$", description: "Цвет подписи; пусто — белый" }
 
     AlbumStatus:
       type: string
@@ -2943,10 +3108,13 @@ components:
         description: { type: string }
         contacts:
           type: object
-          description: "Каналы связи: telegram/whatsapp/vk/max -> handle"
+          description: "Каналы связи: telegram/whatsapp/vk/max/avito -> handle или ссылка (avito — только avito.ru/user|brands/…)"
         msg_template:
           type: string
-          description: Шаблон сообщения покупателя, плейсхолдер {caption}
+          description: >
+            Текст сообщения покупателя. Плейсхолдер {caption}; без него подпись
+            фото добавляется к тексту отдельной строкой.
+        logo_url: { type: string, description: Логотип витрины; нет — инициалы }
 
     PublicAlbum:
       type: object

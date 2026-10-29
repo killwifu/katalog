@@ -249,3 +249,18 @@ func TestWatermarkVisibleOnWhite(t *testing.T) {
 		t.Errorf("на белом фоне знака не видно: тёмных пикселей %d", dark)
 	}
 }
+
+// Тень контрастна подписи: под чёрным знаком светлая, под белым — тёмная.
+func TestWatermarkColors(t *testing.T) {
+	for _, tt := range []struct{ in, fg, shadow string }{
+		{"", "#FFFFFF", "#000000"},
+		{"#FFFFFF", "#FFFFFF", "#000000"},
+		{"#1A1A1A", "#1A1A1A", "#FFFFFF"},
+		{"#9A9A94", "#9A9A94", "#000000"},
+		{"red", "#FFFFFF", "#000000"},
+	} {
+		if fg, sh := watermarkColors(tt.in); fg != tt.fg || sh != tt.shadow {
+			t.Errorf("watermarkColors(%q) = %s, %s; want %s, %s", tt.in, fg, sh, tt.fg, tt.shadow)
+		}
+	}
+}

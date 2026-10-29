@@ -41,7 +41,8 @@ type publicShopResponse struct {
 	Description string          `json:"description"`
 	Contacts    json.RawMessage `json:"contacts"`
 	MsgTemplate string          `json:"msg_template"`
-	ReplyTime   string          `json:"reply_time,omitempty"`
+	// LogoURL — логотип витрины (Настройки · «Витрина»); пусто — инициалы.
+	LogoURL string `json:"logo_url,omitempty"`
 }
 
 type publicAlbumResponse struct {
@@ -104,12 +105,13 @@ func (a *API) mediaURLs(rev int32, shopID, photoID uuid.UUID) map[string]string 
 	return urls
 }
 
-func toPublicShopResponse(s db.Shop) publicShopResponse {
+func (a *API) toPublicShopResponse(s db.Shop) publicShopResponse {
 	// Из settings наружу уходит ТОЛЬКО то, что рисует витрина: шаблон
-	// сообщения и время ответа. Остальное — внутренние настройки продавца.
+	// сообщения. Остальное — внутренние настройки продавца. «Когда
+	// отвечаете» (reply_time) убрано из кабинета по макету 16 — наружу
+	// больше не отдаётся, иначе продавец не смог бы его ни увидеть, ни стереть.
 	var settings struct {
 		MsgTemplate string `json:"msg_template"`
-		ReplyTime   string `json:"reply_time"`
 	}
 	_ = json.Unmarshal(s.Settings, &settings)
 	return publicShopResponse{
@@ -119,8 +121,16 @@ func toPublicShopResponse(s db.Shop) publicShopResponse {
 		Description: s.Description,
 		Contacts:    json.RawMessage(s.Contacts),
 		MsgTemplate: settings.MsgTemplate,
-		ReplyTime:   settings.ReplyTime,
+		LogoURL:     a.logoURL(s),
 	}
+}
+
+// logoURL — адрес логотипа витрины (дериватив small); пусто, если его нет.
+func (a *API) logoURL(s db.Shop) string {
+	if !s.LogoID.Valid {
+		return ""
+	}
+	return a.mediaURLs(0, s.ID, s.LogoID.UUID)["small"]
 }
 
 func (a *API) toPublicPhotoResponse(p db.Photo, rev int32) publicPhotoResponse {
@@ -268,7 +278,7 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"shop":     toPublicShopResponse(shop),
+		"shop":     a.toPublicShopResponse(shop),
 		"albums":   out,
 		"tabs":     navTabs,
 		"sections": sections,
@@ -315,7 +325,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 	if lock.PasswordHash != nil && !a.albumUnlocked(r, lock) {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"shop": toPublicShopResponse(shop),
+			"shop": a.toPublicShopResponse(shop),
 			"album": publicAlbumResponse{
 				ID:          album.ID.String(),
 				ParentID:    parentID,
@@ -392,7 +402,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"shop":     toPublicShopResponse(shop),
+		"shop":     a.toPublicShopResponse(shop),
 		"album":    albumOut,
 		"children": outChildren,
 		"photos":   outPhotos,
@@ -494,6 +504,7 @@ var leadChannels = map[string]db.LeadChannel{
 	"whatsapp": db.LeadChannelWhatsapp,
 	"max":      db.LeadChannelMax,
 	"vk":       db.LeadChannelVk,
+	"avito":    db.LeadChannelAvito,
 }
 
 // handleLeadClick фиксирует клик «написать по товару» в lead_clicks.
@@ -505,7 +516,7 @@ func (a *API) handleLeadClick(w http.ResponseWriter, r *http.Request) {
 	}
 	channel, ok := leadChannels[req.Channel]
 	if !ok {
-		apiError(w, http.StatusBadRequest, "invalid_channel", "channel must be one of: telegram, whatsapp, max, vk")
+		apiError(w, http.StatusBadRequest, "invalid_channel", "channel must be one of: telegram, whatsapp, max, vk, avito")
 		return
 	}
 	shopID, err := uuid.Parse(req.ShopID)

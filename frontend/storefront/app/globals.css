@@ -339,6 +339,7 @@ img {
 .btn-whatsapp { background: #107F71; }  /* 4.9:1 */
 .btn-vk       { background: #0062D6; }  /* 5.6:1 */
 .btn-max      { background: #7B3FF2; }  /* 5.5:1 */
+.btn-avito    { background: #D9363E; }  /* 4.6:1 */
 
 .lead-buttons .btn:hover { filter: brightness(0.93); }
 .lead-hint { margin: -8px 0 16px; font-size: 13px; text-align: center; color: rgba(255, 255, 255, 0.82); } /* на тёмной подложке лайтбокса */
@@ -975,6 +976,8 @@ body:has(.shopbar) {
   font-size: 20px;
   font-weight: 600;
 }
+
+.shophead__ava img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 
 .shophead__info { flex: 1; min-width: 0; }
 .shophead h1 { font-size: 24px; font-weight: 600; line-height: 1.25; }

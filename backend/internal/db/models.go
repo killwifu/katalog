@@ -191,6 +191,7 @@ const (
 	LeadChannelWhatsapp LeadChannel = "whatsapp"
 	LeadChannelMax      LeadChannel = "max"
 	LeadChannelVk       LeadChannel = "vk"
+	LeadChannelAvito    LeadChannel = "avito"
 )
 
 func (e *LeadChannel) Scan(src interface{}) error {
@@ -736,6 +737,7 @@ type Shop struct {
 	SlugChangedAt pgtype.Timestamptz `json:"slug_changed_at"`
 	MediaRev      int32              `json:"media_rev"`
 	TrialEndsAt   pgtype.Timestamptz `json:"trial_ends_at"`
+	LogoID        uuid.NullUUID      `json:"logo_id"`
 }
 
 type Subscription struct {
@@ -773,6 +775,7 @@ type User struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Role            UserRole           `json:"role"`
 	EmailVerifiedAt pgtype.Timestamptz `json:"email_verified_at"`
+	Phone           *string            `json:"phone"`
 }
 
 type UserIdentity struct {
@@ -780,4 +783,5 @@ type UserIdentity struct {
 	Subject   string             `json:"subject"`
 	UserID    uuid.UUID          `json:"user_id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Label     *string            `json:"label"`
 }

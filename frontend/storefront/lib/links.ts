@@ -1,21 +1,26 @@
 // Deep-links в мессенджеры продавца с шаблоном сообщения.
 // Формат contacts (jsonb магазина): { telegram: 'handle', whatsapp: '7999...',
-// vk: 'handle', max: 'handle или полный URL' }.
+// vk: 'handle', max: 'handle или полный URL', avito: 'avito.ru/brands/…' }.
 
-export type Channel = 'telegram' | 'whatsapp' | 'vk' | 'max'
+export type Channel = 'telegram' | 'whatsapp' | 'vk' | 'max' | 'avito'
 
 export const CHANNEL_LABELS: Record<Channel, string> = {
   telegram: 'Telegram',
   whatsapp: 'WhatsApp',
   vk: 'VK',
   max: 'MAX',
+  avito: 'Авито',
 }
 
 const DEFAULT_TEMPLATE = 'Здравствуйте! Интересует: {caption}'
 
+// Текст сообщения продавец пишет в «Контактах» свободно (макет 16) — без
+// {caption} подпись фото добавляется отдельной строкой: иначе продавец не
+// узнает, о каком товаре речь.
 export function messageText(template: string, caption: string): string {
   const t = template || DEFAULT_TEMPLATE
-  return t.replaceAll('{caption}', caption || '')
+  if (t.includes('{caption}')) return t.replaceAll('{caption}', caption || '')
+  return caption ? `${t}\n${caption}` : t
 }
 
 // Полную ссылку продавец вставить может (у MAX это обычный сценарий), но
@@ -54,7 +59,16 @@ export function contactHref(channel: Channel, value: string, text: string): stri
       return fullLink('vk', v) ?? `https://vk.me/${encodeURIComponent(v)}`
     case 'max':
       return fullLink('max', v) ?? `https://max.ru/${encodeURIComponent(v)}`
+    case 'avito':
+      // Только профиль или магазин продавца; текст Авито не подставляет.
+      return avitoLink(v) ?? 'https://www.avito.ru/'
   }
+}
+
+// Ссылка на avito.ru/user|brands/… (сервер проверяет то же при сохранении).
+function avitoLink(v: string): string | null {
+  const m = v.match(/^(?:https?:\/\/)?(?:www\.|m\.)?avito\.ru\/((?:user|brands)\/[^\s]+)$/i)
+  return m ? `https://www.avito.ru/${m[1]}` : null
 }
 
 function telegramHandle(v: string): string {
@@ -64,7 +78,7 @@ function telegramHandle(v: string): string {
 
 // Каналы магазина в фиксированном порядке (contacts может содержать мусор).
 export function shopChannels(contacts: Record<string, string>): { channel: Channel; value: string }[] {
-  const order: Channel[] = ['telegram', 'whatsapp', 'vk', 'max']
+  const order: Channel[] = ['telegram', 'whatsapp', 'vk', 'max', 'avito']
   return order
     .filter((ch) => typeof contacts[ch] === 'string' && contacts[ch].trim() !== '')
     .map((ch) => ({ channel: ch, value: contacts[ch] }))

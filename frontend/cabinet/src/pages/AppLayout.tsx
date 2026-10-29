@@ -74,7 +74,7 @@ export function AppLayout() {
     return (
       <div className="app">
         <aside className="app__aside side">
-          <div className="side__logo">Katalog</div>
+          <div className="side__logo">вуад</div>
           {/* Меню остаётся и при ошибке (макет 09 · «Кабинет не загрузился»). */}
           {shops.isError && (
             <nav className="flex flex-col gap-0.5" aria-label="Разделы кабинета">
@@ -132,19 +132,23 @@ export function AppLayout() {
   }
 
   const isAdmin = me.data?.role === 'admin'
-  // Лимит тарифа продавец считает в фотографиях, поэтому в меню они,
-  // а место — второй строкой.
+  // Лимит тарифа продавец считает в фотографиях, поэтому в меню они.
+  // ГБ — только когда раньше кончается объём, от 90% (заметка макета 09 ·
+  // «Лимит объёма почти исчерпан»).
   const photos = billing.data?.usage.photos
   const maxPhotos = shop.max_photos
-  const usedMB = Math.round(shop.storage_used / 1024 / 1024)
-  const maxMB = Math.round(shop.storage_max / 1024 / 1024)
   const usedPct = maxPhotos > 0 && photos !== undefined ? Math.min(100, (photos / maxPhotos) * 100) : 0
   const storagePct = shop.storage_max > 0 ? Math.min(100, (shop.storage_used / shop.storage_max) * 100) : 0
-  // Что ближе к пределу — то и показываем; от 90% жёлтое, на пределе красное.
-  const byStorage = storagePct > usedPct
+  const byStorage = storagePct >= 90 && storagePct > usedPct
   const worst = Math.max(storagePct, usedPct)
   const level: 'ok' | 'warn' | 'full' = worst >= 100 ? 'full' : worst >= 90 ? 'warn' : 'ok'
-  const gb = (bytes: number) => (bytes / 1024 ** 3).toFixed(1).replace('.', ',')
+  // Фото больше лимита (тариф закончился, аккаунт на Бесплатном) — строка красная.
+  const over = photos !== undefined && photos > maxPhotos
+  // «37,2 из 40 ГБ»: целое без «,0».
+  const gb = (bytes: number) => {
+    const v = Math.round((bytes / 1024 ** 3) * 10) / 10
+    return Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ',')
+  }
 
   const nav = (
     <nav className="flex flex-col gap-0.5" aria-label="Разделы кабинета" onClick={() => setMenuOpen(false)}>
@@ -167,11 +171,11 @@ export function AppLayout() {
     <ShopContext.Provider value={shop}>
       <div className="app">
         <aside className="app__aside side">
-          <div className="side__logo">{shop.name}</div>
+          <div className="side__logo">вуад</div>
           {nav}
           {/* Макет 09 · v2: в меню осталось «сколько занято», а тариф и место
               в гигабайтах переехали в «Обзор» — там для них есть строка. */}
-          <div className={`side__usage ${level === 'ok' ? '' : `side__usage--${level}`}`}>
+          <div className={`side__usage ${level === 'ok' ? '' : `side__usage--${level}`} ${over ? 'side__usage--over' : ''}`}>
             <p>Использовано</p>
             <div className={`prog mt-2 ${level === 'ok' ? '' : `prog--${level}`}`} aria-hidden="true">
               <span style={{ width: `${byStorage ? storagePct : usedPct}%` }} />
@@ -180,11 +184,11 @@ export function AppLayout() {
                 кончится раньше (макет 09 · «Лимит объёма почти исчерпан»). */}
             {byStorage ? (
               <p title={`${photos ?? '…'} из ${maxPhotos} фото · тариф «${PLAN_NAMES[shop.plan]}»`}>
-                {gb(shop.storage_used)} из {gb(shop.storage_max)} ГБ
+                <span className="side__num">{gb(shop.storage_used)}</span> из {gb(shop.storage_max)} ГБ
               </p>
             ) : (
-              <p title={`${usedMB} из ${maxMB} МБ · тариф «${PLAN_NAMES[shop.plan]}»`}>
-                {photos === undefined ? '…' : photos.toLocaleString('ru-RU')} из{' '}
+              <p title={`${gb(shop.storage_used)} из ${gb(shop.storage_max)} ГБ · тариф «${PLAN_NAMES[shop.plan]}»`}>
+                <span className="side__num">{photos === undefined ? '…' : photos.toLocaleString('ru-RU')}</span> из{' '}
                 {maxPhotos.toLocaleString('ru-RU')} фото
               </p>
             )}
@@ -293,14 +297,9 @@ function AccountMenu({ shop, onLogout }: { shop: Shop; onLogout: () => void }) {
     }
   }, [open])
 
-  // Две буквы названия вместо аватара: картинки профиля у витрины нет.
-  const initials = shop.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
+  // Две буквы названия вместо аватара (как в шапке витрины): «seoul-wear» →
+  // «SW» — слова делятся и дефисом, одно слово — первые две буквы.
+  const initials = shopInitials(shop.name)
 
   return (
     <div className="acct" ref={box}>
@@ -327,4 +326,12 @@ function AccountMenu({ shop, onLogout }: { shop: Shop; onLogout: () => void }) {
       )}
     </div>
   )
+}
+
+// shopInitials — инициалы витрины: те же правила, что в шапке витрины
+// (storefront/components/ShopHeader.tsx).
+export function shopInitials(name: string): string {
+  const words = name.split(/[\s\-_.]+/).filter(Boolean)
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)
+  return letters.toUpperCase()
 }
