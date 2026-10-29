@@ -9,11 +9,15 @@ import { pageZoom } from './zoom'
 // Пока тянут, элемент «поднят» (макет 11/13 · «Изменить порядок»): копия
 // чуть больше, повёрнута и с тенью едет за пальцем, на месте — пунктир
 // (атрибут data-lifted: className перерисовывает React, атрибут он не трогает).
-export function usePointerReorder(attr: string) {
+// holdMs > 0 — фото поднимается только после долгого нажатия (макет 13 ·
+// Mobile · «Изменить порядок»).
+export function usePointerReorder(attr: string, holdMs = 0) {
   const [dragging, setDragging] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const lift = useRef<{ ghost: HTMLElement; item: HTMLElement; x: number; y: number; z: number } | null>(null)
+  const hold = useRef<number | undefined>(undefined)
   const drop = () => {
+    clearTimeout(hold.current)
     const l = lift.current
     if (!l) return
     l.ghost.remove()
@@ -30,21 +34,27 @@ export function usePointerReorder(attr: string) {
       e.preventDefault()
       e.stopPropagation()
       e.currentTarget.setPointerCapture(e.pointerId)
-      setDragging(id)
       const item = e.currentTarget.closest<HTMLElement>(`[data-${attr}]`)
-      if (item) {
-        drop()
-        const z = pageZoom()
-        const r = item.getBoundingClientRect()
-        const ghost = item.cloneNode(true) as HTMLElement
-        ghost.removeAttribute(`data-${attr}`)
-        ghost.classList.add('drag-ghost')
-        ghost.setAttribute('aria-hidden', 'true')
-        ghost.style.cssText += `left: ${r.left / z}px; top: ${r.top / z}px; width: ${r.width / z}px; height: ${r.height / z}px; ${GHOST_STYLE}`
-        ;(document.querySelector('.app') ?? document.body).appendChild(ghost)
-        item.setAttribute('data-lifted', '')
-        lift.current = { ghost, item, x: e.clientX, y: e.clientY, z }
+      const { clientX, clientY } = e
+      const start = () => {
+        setDragging(id)
+        if (item) {
+          drop()
+          const z = pageZoom()
+          const r = item.getBoundingClientRect()
+          const ghost = item.cloneNode(true) as HTMLElement
+          ghost.removeAttribute(`data-${attr}`)
+          ghost.classList.add('drag-ghost')
+          ghost.setAttribute('aria-hidden', 'true')
+          ghost.style.cssText += `left: ${r.left / z}px; top: ${r.top / z}px; width: ${r.width / z}px; height: ${r.height / z}px; ${GHOST_STYLE}`
+          ;(document.querySelector('.app') ?? document.body).appendChild(ghost)
+          item.setAttribute('data-lifted', '')
+          lift.current = { ghost, item, x: clientX, y: clientY, z }
+        }
       }
+      clearTimeout(hold.current)
+      if (holdMs > 0) hold.current = window.setTimeout(start, holdMs)
+      else start()
     },
     onPointerMove: (e: PointerEvent<HTMLElement>) => {
       if (dragging !== id) return

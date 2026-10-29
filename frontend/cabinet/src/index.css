@@ -994,7 +994,6 @@ button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 .loadfail .btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; }
 
 /* Полоса прогресса на плитке загрузки в сетке альбома. */
-.uptile2__bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--color-brand); transition: width 0.2s; }
 
 /* Массовая загрузка · категории папки: поиск и дерево с галочками. */
 /* Список категорий — макет 10 · «Выбор категории у папки» (×1/1.38): панель
@@ -1102,9 +1101,6 @@ button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 
 /* Страница альбома на тач-экране: меню по нажатию на фото, без кнопок
    «при наведении» (наведения нет). */
-.photo__menu { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 10px; background: rgb(26 26 24 / 55%); }
-.photo__menu button { padding: 8px 6px; border: 0; border-radius: 8px; background: var(--color-surface); font: inherit; font-size: 12.5px; font-weight: 500; color: var(--color-ink); white-space: nowrap; }
-.photo__menu .photo__menu--danger { color: var(--color-danger); }
 @media (hover: none) { .algallery .photo-tile__act { display: none !important; } }
 .touch-only-inline { display: none; }
 @media (hover: none) { .touch-only-inline { display: inline; } .hover-only { display: none; } }
@@ -2917,3 +2913,61 @@ textarea.ocs__inp { height: auto; min-height: 92px; padding: 11px 14px; resize: 
 }
 /* Шапка и низ окна — поверх ручек и меню фото при прокрутке. */
 .modal--album > .modal__head, .modal--album > .modal__foot { z-index: 6; }
+
+/* ==========================================================================
+   Страница альбома (макет 13): плитки, статус над сеткой, пустой альбом,
+   перетаскивание файлов.
+   ========================================================================== */
+/* Крестик удаления — на каждом фото всегда; на тач-экране его нет (меню по нажатию). */
+.algallery .photo__del:not([hidden]) { display: grid; }
+/* Выбранное фото — синяя рамка. */
+.algallery figure.is-picked { outline: 2px solid var(--color-brand); outline-offset: -2px; }
+/* Меню фото на тач-экране — под плиткой, плитка обведена синим. */
+.algallery figure.is-menu { overflow: visible; z-index: 3; outline: 2px solid var(--color-brand); outline-offset: -2px; }
+.algallery figure.is-menu > .aspect-square { overflow: hidden; border-radius: 10px; }
+/* Затемнённая плитка загрузки с процентом по центру. */
+.algallery .uptile2__up b { font-size: 14px; line-height: 20px; font-weight: 600; }
+.algallery .uptile2__msg small { max-width: 100%; }
+
+/* Статус над сеткой (загрузка, ошибки, лимит) — вместо подсказки про порядок;
+   на телефоне — под подсказкой. */
+.ap__status { display: inline-flex; min-width: 0; }
+.ap__status .limerr span { text-align: right; }
+.ap__status .limerr b, .ap__status-m .limerr b { font-weight: 400; }
+.ap__status-m { display: none; }
+@media (min-width: 641px) { .alhead:has(.ap__status) .alhead__order:not([aria-pressed="true"]) { display: none; } }
+@media (max-width: 640px) {
+  .alhead .ap__status { display: none; }
+  .ap__status-m { display: block; margin: -6px 0 16px; }
+  .ap__status-m .limerr span { text-align: left; }
+  .alhead:has(.alhead__act--narrow) .alhead__order { display: none !important; }
+  .algallery .uptile small { display: none; }
+  .algallery .uptile span { font-size: 12.5px; line-height: 18px; font-weight: 500; color: #62615C; }
+}
+
+/* Пустой альбом-черновик: плашка со ссылкой «Изменить доступ» сразу после текста. */
+.ap__draft { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; padding: 12px 16px; border-radius: 12px; background: #FBEEDA; font-size: 13.5px; line-height: 20px; color: #8A5A00; }
+.ap__draft > .lucide { flex: none; margin-top: 1px; }
+.ap__draft button { margin-left: 6px; padding: 0; border: 0; background: none; font: inherit; font-weight: 500; color: var(--color-brand); cursor: pointer; }
+/* Ссылка мелкая по макету — область нажатия добирается невидимой рамкой. */
+@media (hover: none) {
+  .app .ap__draft button:not(.hidden) { position: relative; display: inline; min-width: 0; min-height: 0; }
+  .app .ap__draft button::after { content: ''; position: absolute; inset: -12px -6px; }
+}
+@media (max-width: 640px) { .app .ap__draft button:not(.hidden) { display: block; margin: 4px 0 0; } }
+.alpage .bigdrop { gap: 4px; padding: 56px 24px; border: 1px dashed #CFCCC4; background: #F6F5F3; }
+.alpage .bigdrop i { width: 64px; height: 64px; margin-bottom: 12px; }
+.alpage .bigdrop b { font-size: 20px; line-height: 28px; }
+.alpage .bigdrop > span { font-size: 14px; line-height: 20px; color: var(--color-ink-3); }
+.alpage .bigdrop .btn { margin: 12px 0 10px; }
+.alpage .bigdrop small { margin: 0; font-size: 12.5px; line-height: 18px; }
+@media (max-width: 640px) { .alpage .bigdrop { padding: 40px 20px; } .alpage .bigdrop b { font-size: 18px; } }
+
+/* Файлы над страницей: заливка — рабочая область под шапкой, синяя карточка по центру. */
+.alpage__drop { inset: 72px 12px 12px; }
+@media (min-width: 860px) { .alpage__drop { inset: 80px 16px 16px calc(184px + 16px); } }
+@media (min-width: 1200px) { .alpage__drop { inset: 80px 16px 16px calc(232px + 16px); } }
+.alpage__drop > div { padding: 36px 48px; }
+.alpage__drop i { width: 72px; height: 72px; }
+.alpage__drop b { font-size: 22px; line-height: 28px; color: var(--color-brand); }
+.alpage__drop small { font-size: 13px; line-height: 18px; color: var(--color-brand); }

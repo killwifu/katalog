@@ -870,7 +870,7 @@ export function useTileMenuDismiss(menuKey: string | null, setMenuKey: (k: null)
   useEffect(() => {
     if (!menuKey) return
     const hide = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest('.uptile2.is-menu')) setMenuKey(null)
+      if (!(e.target as HTMLElement).closest('.is-menu')) setMenuKey(null)
     }
     document.addEventListener('pointerdown', hide)
     return () => document.removeEventListener('pointerdown', hide)
