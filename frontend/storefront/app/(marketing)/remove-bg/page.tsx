@@ -3,7 +3,7 @@ import { RemoveBgTool } from './RemoveBgTool'
 import styles from './remove-bg.module.css'
 
 export const metadata: Metadata = {
-  title: 'Убрать фон с фотографии — Katalog',
+  title: 'Убрать фон с фотографии — вуад',
   description:
     'Уберите фон с фотографии товара бесплатно и без регистрации. Результат за несколько секунд.',
 }

@@ -1,155 +1,475 @@
-/* Главная. Мобильный — база, десктоп добавляется в @media (min-width: 860px). */
+/* Главная по макету 01 (Desktop 1440 / Tablet 1024 / Mobile 390).
+   Мобильный — база; планшет от 860, десктоп от 1200. */
 
-.hero { padding: 46px 0 40px; }
+/* --- Первый экран --------------------------------------------------------- */
 
-.heroGrid {
-  display: grid;
-  gap: 28px;
+.hero {
+  background: var(--page);
+  padding: 40px 0 56px;
 }
 
-.hero h1 { margin: 12px 0; }
+.heroMain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
 
-.lead {
+.heroText { text-align: center; max-width: 720px; }
+
+.heroText h1 {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.heroText p {
+  margin-top: 20px;
   font-size: 16px;
+  line-height: 1.55;
   color: var(--text-2);
-  max-width: 46ch;
 }
 
 .heroCta {
+  margin-top: 28px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 22px;
-}
-
-/* Превью витрины продавца: серые блоки вместо фотографий. */
-.peek {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  padding: 12px;
-}
-
-.peekBar {
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand);
-  margin-bottom: 10px;
-}
-
-.peekTabs {
-  display: flex;
+  align-items: stretch;
   gap: 12px;
-  font-size: var(--fs-xs);
-  color: var(--text-3);
-  margin-bottom: 10px;
 }
 
-.peekTabs b { color: var(--text); font-weight: 500; }
-
-.peekGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.trial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 18px 8px 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  text-align: left;
 }
 
-.peekCell {
-  aspect-ratio: 4 / 5;
+.trialIc {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trial b { display: block; font-size: 15px; font-weight: 600; line-height: 22px; }
+.trial small { display: block; font-size: 14px; line-height: 20px; color: var(--text-2); }
+
+/* Макет витрины: окно браузера и телефон поверх. */
+.mock {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  aspect-ratio: 600 / 540;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.browser {
+  position: absolute;
+  left: 0;
+  top: 1.5%;
+  width: 93.3%;
+  height: 82%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
   background: var(--surface-alt);
-  border-radius: 8px;
 }
 
-.grid2 { display: grid; gap: 12px; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: #ff5f57; }
+.dots i:nth-child(2) { background: #febc2e; }
+.dots i:nth-child(3) { background: #28c840; }
 
-.feature h3 { margin: 10px 0 5px; }
+.browserBody { padding: 12px 14px; }
 
-.feature p {
-  font-size: var(--fs-sm);
-  color: var(--text-2);
+.phone {
+  position: absolute;
+  right: 0;
+  top: 18.5%;
+  width: 36%;
+  height: 82%;
+  padding: 7px;
+  background: var(--text);
+  border-radius: 34px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
 }
 
-.steps { display: grid; gap: 20px; }
+.phoneScreen {
+  height: 100%;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #fff;
+  padding: 16px 10px;
+  font-size: 9px;
+}
 
-.step { display: flex; gap: 14px; }
+.mShop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-.stepNum {
-  flex: 0 0 26px;
-  height: 26px;
+.mAva {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--brand-soft);
-  color: var(--brand-ink);
-  display: grid;
-  place-items: center;
-  font-size: var(--fs-xs);
+  color: var(--brand);
   font-weight: 600;
-}
-
-.step h3 { margin-bottom: 3px; }
-
-.step p {
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-
-.plans { display: grid; gap: 10px; }
-
-.plan {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+}
+
+.mShop b { display: block; font-size: 1.4em; }
+.mShop small { display: block; font-size: 0.9em; color: var(--text-2); }
+.mCh { margin-left: auto; display: flex; gap: 4px; }
+.phone .mCh { margin-left: 0; width: 100%; }
+
+.mTabs {
+  display: flex;
   gap: 14px;
-}
-
-.planText {
-  flex: 1;
-  min-width: 0;
-}
-
-.planText b {
-  display: block;
-  font-size: var(--fs-h3);
+  margin-top: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
   font-weight: 500;
 }
 
-.planText span {
-  font-size: var(--fs-sm);
-  color: var(--text-2);
+.mTabs span { padding-bottom: 6px; }
+.mTabOn { color: var(--brand); font-weight: 600; box-shadow: inset 0 -2px var(--brand); }
+
+.mHead { display: flex; justify-content: space-between; margin: 10px 0 8px; }
+.mHead b { font-size: 1.15em; }
+.mHead span { color: var(--brand); font-weight: 500; }
+
+.mAlbums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 10px; }
+.phone .mAlbums { grid-template-columns: repeat(2, 1fr); gap: 6px 8px; }
+
+.mAlbums b { display: block; margin-top: 4px; font-weight: 600; }
+
+.mCover {
+  position: relative;
+  aspect-ratio: 1.25;
+  border-radius: 8px;
 }
 
-.planPrice {
-  font-size: 20px;
-  font-weight: 600;
-  white-space: nowrap;
+.mCover span {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.8em;
+  font-weight: 500;
 }
 
-.plansNote {
-  margin-top: 18px;
-  font-size: var(--fs-sm);
+/* Три преимущества под первым экраном. */
+.heroAdv {
+  margin-top: 40px;
+  display: grid;
+  gap: 16px;
 }
 
-.plansNote a { color: var(--brand); }
-
-.final {
-  background: var(--surface-alt);
-  border-radius: var(--r-card);
-  padding: 30px 20px;
-  text-align: center;
+.heroAdvCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 20px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
 }
 
-.final p {
-  margin: 8px auto 18px;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-  max-width: 44ch;
+.tile {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--brand);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.heroAdvCard b { display: block; font-size: 18px; font-weight: 600; line-height: 24px; }
+.heroAdvCard p { margin-top: 4px; font-size: 15px; line-height: 21px; color: var(--text-2); }
+
+@media (max-width: 859px) {
+  .mock { font-size: 7px; }
+  .phoneScreen { font-size: 6px; padding: 10px 6px; }
+  .browserBody { padding: 8px 10px; }
 }
 
 @media (min-width: 860px) {
-  .hero { padding: 64px 0 56px; }
-  .heroGrid { grid-template-columns: 1.15fr 0.85fr; align-items: center; gap: 48px; }
-  .heroCta { flex-direction: row; }
-  .grid2 { grid-template-columns: 1fr 1fr; gap: 14px; }
-  .steps { grid-template-columns: repeat(3, 1fr); gap: 28px; }
-  .plans { grid-template-columns: repeat(3, 1fr); }
-  .plan { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .planPrice { font-size: 24px; }
-  .final { padding: 44px 20px; }
+  .hero { padding: 72px 0 88px; }
+  .heroText h1 { max-width: 560px; margin: 0 auto; font-size: 60px; line-height: 66px; }
+  .heroText p { font-size: 19px; line-height: 29px; }
+  .heroCta { flex-direction: row; justify-content: center; align-items: center; gap: 20px; }
+  .heroAdv { grid-template-columns: repeat(3, 1fr); margin-top: 56px; }
+}
+
+@media (min-width: 1200px) {
+  .heroMain { flex-direction: row; justify-content: space-between; gap: 40px; }
+  .heroText { text-align: left; max-width: 560px; }
+  .heroText h1 { margin: 0; }
+  .heroText p { max-width: 540px; }
+  .heroCta { justify-content: flex-start; }
+}
+
+/* --- «Как это работает» --------------------------------------------------- */
+
+.videoSec { padding: 56px 0; }
+
+.videoSec h2 { margin-top: 0; }
+
+.videoLead {
+  margin-top: 12px;
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.videoCard {
+  margin-top: 24px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+}
+
+.videoBox {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1152 / 420;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-alt);
+}
+
+.video { width: 100%; height: 100%; background: #000; object-fit: contain; }
+
+.cover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+.board {
+  width: 64%;
+  height: 76%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6%;
+  padding: 3%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.boardCol { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: var(--page); border-radius: 8px; }
+.boardCol i { height: 10px; border-radius: 4px; background: var(--brand-soft); }
+.boardCol span { height: 8px; border-radius: 4px; opacity: 0.8; }
+
+.play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 10px 24px rgba(37, 71, 206, 0.19);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s, transform 0.15s;
+}
+
+.play:hover { background: #1e3cb0; transform: scale(1.125); }
+.play:active { background: #19329a; }
+
+@media (min-width: 860px) {
+  .videoSec { padding: 96px 0 104px; }
+  .videoLead { font-size: 17px; line-height: 27px; }
+  .videoCard { margin-top: 32px; padding: 24px; border-radius: 24px; }
+  .videoBox { border-radius: 20px; }
+}
+
+/* --- Преимущества --------------------------------------------------------- */
+
+.advSec { background: var(--page); padding: 56px 0; }
+
+.advGrid {
+  margin-top: 28px;
+  display: grid;
+  gap: 16px;
+  text-align: left;
+}
+
+.advCard {
+  padding: 32px;
+  background: #fff;
+  border-radius: 24px;
+}
+
+.iconBox {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--brand-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.advCard h3 { margin-top: 16px; font-size: 21px; font-weight: 600; line-height: 28px; }
+.advCard p { margin-top: 16px; font-size: 16px; line-height: 25px; color: var(--text-2); }
+
+@media (min-width: 860px) {
+  .advSec { padding: 104px 0; }
+  .advGrid { grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 48px; }
+}
+
+@media (min-width: 1200px) {
+  .advGrid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* --- Аналитика ------------------------------------------------------------ */
+
+.anSec { padding: 56px 0; }
+
+.anPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 32px 18px;
+  border-radius: 40px;
+  background: linear-gradient(135deg, var(--brand-soft), var(--page));
+}
+
+.anText h2 { margin-top: 22px; font-size: 32px; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; }
+
+.anLead { margin-top: 22px; font-size: 16px; line-height: 1.55; color: var(--text-2); }
+
+.anFeats { margin-top: 24px; display: grid; gap: 12px; }
+
+.anFeat {
+  padding: 16px;
+  background: #fff;
+  border-radius: 16px;
+}
+
+.iconSm {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anFeat b { display: block; margin-top: 12px; font-size: 15px; font-weight: 600; }
+.anFeat small { display: block; margin-top: 6px; font-size: 13.5px; color: var(--text-2); }
+
+.anNote {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.anVisual {
+  position: relative;
+  width: 100%;
+  max-width: 552px;
+  aspect-ratio: 552 / 515;
+  margin: 0 auto;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.kpi,
+.chart,
+.share {
+  position: absolute;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 15px 37px rgba(0, 0, 0, 0.12);
+}
+
+.kpi { width: 34.4%; padding: 3% 3%; }
+.kpi1 { left: 0; top: 0; z-index: 2; }
+.kpi2 { left: 39.3%; top: 3.3%; z-index: 2; }
+.kpi small { display: block; color: var(--text-2); }
+.kpi b { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 2.15em; font-weight: 700; line-height: 1.1; }
+.kpi em { padding: 2px 6px; border-radius: 999px; background: #dff3e4; color: #1b6b3a; font-size: 0.43em; font-style: normal; font-weight: 600; }
+.kpiSub { font-size: 0.92em; color: var(--text-3) !important; }
+
+.chart { left: 6.7%; top: 19.8%; width: 93.3%; height: 52.4%; padding: 3.3%; display: flex; flex-direction: column; }
+.chartHead { display: flex; justify-content: space-between; gap: 8px; }
+.chartHead b { display: block; font-size: 1.22em; }
+.chartHead small { display: block; color: var(--text-3); font-size: 0.96em; }
+.legend { display: flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 0.96em; white-space: nowrap; }
+.legend i { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; }
+.chart svg { flex: 1; width: 100%; margin-top: 8px; }
+
+.tip {
+  position: absolute;
+  left: 56%;
+  top: 22%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: #fff;
+}
+
+.tip small { display: block; color: #b9b8b3; font-size: 0.88em; }
+.tip b { display: block; font-size: 1em; }
+
+.share { right: -3.3%; bottom: 0; width: 50%; padding: 3% 3% 3%; z-index: 2; }
+.share > b { display: block; margin-bottom: 8px; font-size: 1.07em; }
+.shareRow { display: grid; grid-template-columns: 16px 1fr 1.4fr 28px; align-items: center; gap: 8px; margin-top: 7px; }
+.shareRow > i { height: 4px; border-radius: 2px; background: var(--surface-alt); }
+.shareRow > i > i { display: block; height: 100%; border-radius: 2px; }
+.shareRow > b { text-align: right; font-size: 0.96em; }
+
+@media (max-width: 859px) {
+  .anVisual { font-size: 7px; }
+  .share { right: 0; }
+}
+
+@media (min-width: 860px) {
+  .anSec { padding: 56px 0 104px; }
+  .anPanel { padding: 64px; }
+  .anText h2 { font-size: 44px; line-height: 52px; }
+  .anLead { font-size: 18px; line-height: 28px; }
+  .anFeats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1200px) {
+  .anPanel { flex-direction: row; align-items: center; justify-content: space-between; }
+  .anText { max-width: 480px; }
+  .anText h2 { white-space: nowrap; }
+  .anVisual { margin: 0; }
 }

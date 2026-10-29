@@ -253,7 +253,7 @@ func (a *API) handleAdminBlockPhoto(w http.ResponseWriter, r *http.Request) {
 		}
 		which = "фото «" + string(c) + "»"
 	}
-	a.notifyShopOwner(r.Context(), photo.ShopID, "Katalog: фото скрыто модератором",
+	a.notifyShopOwner(r.Context(), photo.ShopID, "вуад: фото скрыто модератором",
 		"по жалобе правообладателя "+which+" скрыто с витрины. В кабинете оно отмечено как заблокированное.")
 	writeJSON(w, http.StatusOK, map[string]string{"id": photo.ID.String(), "status": "blocked"})
 }
@@ -327,7 +327,7 @@ func (a *API) handleAdminHideAlbum(w http.ResponseWriter, r *http.Request) {
 		AlbumID:     uuid.NullUUID{UUID: album.ID, Valid: true},
 		Note:        req.Note,
 	}, r)
-	a.notifyShopOwner(r.Context(), album.ShopID, "Katalog: альбом скрыт модератором",
+	a.notifyShopOwner(r.Context(), album.ShopID, "вуад: альбом скрыт модератором",
 		fmt.Sprintf("по жалобе правообладателя альбом «%s» скрыт с витрины.", album.Title))
 	a.revalidateShopByID(r.Context(), album.ShopID)
 	w.WriteHeader(http.StatusNoContent)
@@ -399,7 +399,7 @@ func (a *API) handleAdminSuspendShop(w http.ResponseWriter, r *http.Request) {
 		ShopID:      uuid.NullUUID{UUID: shop.ID, Valid: true},
 		Note:        req.Note,
 	}, r)
-	a.notifyShopOwner(r.Context(), shop.ID, "Katalog: магазин заблокирован модератором",
+	a.notifyShopOwner(r.Context(), shop.ID, "вуад: магазин заблокирован модератором",
 		"по жалобе правообладателя витрина снята с публикации. "+
 			"Свяжитесь с поддержкой для выяснения обстоятельств.")
 	w.WriteHeader(http.StatusNoContent)
@@ -434,7 +434,7 @@ func (a *API) handleAdminUnsuspendShop(w http.ResponseWriter, r *http.Request) {
 		ShopID:      uuid.NullUUID{UUID: shop.ID, Valid: true},
 		Note:        "снятие блокировки: " + req.Note,
 	}, r)
-	a.notifyShopOwner(r.Context(), shop.ID, "Katalog: магазин снова опубликован",
+	a.notifyShopOwner(r.Context(), shop.ID, "вуад: магазин снова опубликован",
 		"блокировка снята, витрина снова доступна покупателям.")
 	a.Revalidate.Shop(shop.Slug)
 	w.WriteHeader(http.StatusNoContent)

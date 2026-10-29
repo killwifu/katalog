@@ -7,7 +7,7 @@ import { ErrorReporter } from '@/components/ErrorReporter'
 const SITE_URL = process.env.SITE_URL ?? 'http://localhost'
 
 export const metadata: Metadata = {
-  title: 'Katalog',
+  title: 'вуад',
   description: 'Фото-каталоги для малого бизнеса',
   // Абсолютные URL для OpenGraph-картинок (/media/... -> {SITE_URL}/media/...).
   metadataBase: new URL(SITE_URL),

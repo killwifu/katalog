@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { ComplaintForm } from '@/components/ComplaintForm'
 
-export const metadata: Metadata = { title: 'Жалоба на контент — Katalog' }
+export const metadata: Metadata = { title: 'Жалоба на контент — вуад' }
 
 export default function AbusePage() {
   return (

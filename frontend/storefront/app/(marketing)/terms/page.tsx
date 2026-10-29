@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-export const metadata: Metadata = { title: 'Оферта — Katalog' }
+export const metadata: Metadata = { title: 'Оферта — вуад' }
 
 // Текст — плейсхолдер: заменить на согласованную юристами редакцию.
 export default function TermsPage() {
@@ -8,7 +8,7 @@ export default function TermsPage() {
     <main className="page legal">
       <h1>Публичная оферта</h1>
       <p>
-        Настоящий документ является публичной офертой сервиса Katalog. Используя
+        Настоящий документ является публичной офертой сервиса «вуад». Используя
         сервис, вы принимаете условия настоящей оферты в полном объёме.
       </p>
       <h2>1. Предмет</h2>

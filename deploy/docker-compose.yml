@@ -217,6 +217,9 @@ services:
       REDIS_URL: redis://redis:6379
       REVALIDATE_SECRET: ${REVALIDATE_SECRET:-dev-revalidate-secret}
       SITE_URL: ${SITE_URL:-http://localhost}
+      # Ролик «Как это работает» на главной (mp4/webm по прямой ссылке);
+      # пусто — обложка без кнопки воспроизведения.
+      LANDING_VIDEO_URL: ${LANDING_VIDEO_URL:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 5s

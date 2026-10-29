@@ -1,0 +1,548 @@
+/* Публичные страницы по макету 01–08 (лендинг): шапка, меню, подвал, кнопки
+   и блоки, общие для главной и /pricing. Витрина магазина этот файл не
+   грузит — её подвал в site.module.css. Мобильный — база; планшет от 860,
+   десктоп от 1200. Поля: 18 (телефон), 32 (планшет), 120 при 1440. */
+
+.root {
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.in {
+  max-width: 1264px;
+  margin: 0 auto;
+  padding: 0 18px;
+}
+
+.center { text-align: center; }
+
+@media (min-width: 860px) {
+  .in { padding: 0 32px; }
+}
+
+/* --- Кнопки (лист 05: переходы 150 мс, рука над всем) --------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+}
+
+.btnLg { min-height: 50px; padding: 13px 20px; }
+.btnXl { min-height: 56px; padding: 16px 32px; font-size: 17px; }
+
+.btnPrimary { background: var(--brand); color: #fff; }
+.btnPrimary:hover { background: #1e3cb0; }
+.btnPrimary:active { background: #19329a; }
+
+.btnText { background: transparent; color: var(--text); padding: 10px 18px; }
+.btnText:hover { background: var(--surface-alt); }
+.btnText:active { background: var(--border); }
+
+.btnOutline { background: #fff; color: var(--text); border-color: var(--border-strong); }
+.btnOutline:hover { border-color: var(--text); }
+.btnOutline:active { border-color: var(--text); background: var(--surface-alt); }
+
+.btnOnBlue { background: #fff; color: var(--brand); min-height: 58px; padding: 18px 34px; font-size: 17px; }
+.btnOnBlue:hover { background: var(--brand-soft); }
+.btnOnBlue:active { background: #d6ddf8; }
+
+.textLink {
+  color: var(--brand);
+  font-size: 16px;
+  font-weight: 600;
+  transition: color 0.15s;
+}
+
+.textLink:hover { color: #1e3cb0; text-decoration: underline; }
+
+/* --- Шапка ---------------------------------------------------------------- */
+
+.head {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+
+.headIn {
+  display: flex;
+  align-items: center;
+  gap: 56px;
+  min-height: 68px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+.nav { display: none; gap: 32px; }
+
+.nav a,
+.footNav a {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: color 0.15s;
+}
+
+.nav a:hover,
+.footNav a:hover { color: var(--text); }
+
+.nav a[aria-current='page'] { color: var(--text); font-weight: 600; }
+
+.headRight { display: none; margin-left: auto; gap: 8px; }
+
+.burger {
+  margin-left: auto;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Полноэкранное меню (макет 06): под шапкой, кнопки прижаты к низу. */
+.menu {
+  position: fixed;
+  inset: 69px 0 0;
+  z-index: 30;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 18px 32px;
+}
+
+.menuNav { display: flex; flex-direction: column; }
+
+.menuNav a {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.menuNav a[aria-current='page'] { color: var(--text); font-weight: 600; }
+
+.menuActions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.menuActions .btn { min-height: 50px; font-size: 16px; }
+
+@media (min-width: 860px) {
+  .headIn { min-height: 76px; }
+  .nav,
+  .headRight { display: flex; }
+  .burger,
+  .menu { display: none; }
+}
+
+/* --- Общие элементы разделов --------------------------------------------- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 8px 10px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--brand);
+}
+
+.pillIc {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.h2 {
+  margin-top: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.brDesk { display: none; }
+
+.secLead {
+  max-width: 760px;
+  margin: 16px auto 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+@media (min-width: 860px) {
+  .h2 { font-size: 40px; line-height: 48px; }
+  .brDesk { display: inline; }
+  .secLead { font-size: 18px; line-height: 28px; }
+}
+
+/* --- Тарифы --------------------------------------------------------------- */
+
+.plansSec {
+  background: var(--page);
+  padding: 56px 0;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.swMonth { font-weight: 600; }
+.swYear { color: var(--text-2); font-weight: 500; }
+.switch:has(input:checked) .swMonth { font-weight: 500; color: var(--text-2); }
+.switch:has(input:checked) .swYear { font-weight: 600; color: var(--text); }
+
+.switch input {
+  appearance: none;
+  margin: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--border-strong);
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s;
+}
+
+.switch input:checked { background: var(--brand); }
+.switch input:checked::after { transform: translateX(20px); }
+
+.save {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #dff3e4;
+  color: #1b6b3a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Цена за месяц или за год: видна одна, по свитчу #plan-year. */
+.y { display: none !important; }
+:global(body:has(#plan-year:checked)) .m { display: none !important; }
+:global(body:has(#plan-year:checked)) .y { display: flex !important; }
+
+/* Телефон: карточки идут в ряд с прокруткой, следующая выглядывает справа. */
+.plansScroll {
+  margin-top: 28px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 18px;
+  scrollbar-width: none;
+}
+
+.plansScroll::-webkit-scrollbar { display: none; }
+
+.plans {
+  display: flex;
+  gap: 12px;
+  padding: 0 18px 4px;
+  width: max-content;
+}
+
+.plan {
+  width: 290px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.plan:hover { border-color: var(--border-strong); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08); }
+
+.planHl,
+.planHl:hover { border: 2px solid var(--brand); padding: 27px; }
+
+.planTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+}
+
+.planName { font-size: 20px; font-weight: 600; line-height: 26px; }
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.planHead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.price,
+.priceSm {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 44px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.priceSm { justify-content: center; gap: 4px; font-size: 20px; line-height: 24px; letter-spacing: 0; }
+
+.price small,
+.priceSm small {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+.priceSm small { font-size: 13px; }
+
+@media (max-width: 859px) {
+  .priceSm { flex-wrap: wrap; gap: 2px; font-size: 14px; line-height: 17px; }
+  .priceSm small { font-size: 10px; }
+}
+
+.saving { font-size: 14px; font-weight: 600; color: #1b6b3a; }
+
+.tagline { font-size: 15px; line-height: 22px; color: var(--text-2); }
+
+.feats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.feats li { display: flex; align-items: center; gap: 10px; }
+.feats li svg { flex: none; }
+.feats .off { color: var(--text-3); }
+
+.planFoot {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.trialNote { font-size: 13px; line-height: 18px; color: var(--text-3); text-align: center; }
+
+.plansSec .textLink { display: inline-block; margin-top: 32px; }
+
+@media (min-width: 860px) {
+  .plansSec { padding: 104px 0; }
+  .switch { margin-top: 28px; }
+  .plansScroll { overflow: visible; margin-top: 48px; }
+  .plans {
+    width: auto;
+    max-width: 1264px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+  .plan { width: auto; }
+}
+
+@media (min-width: 1200px) {
+  .plans { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* --- Синий баннер --------------------------------------------------------- */
+
+.ctaSec { padding: 24px 0 56px; }
+
+.banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px 24px;
+  border-radius: 28px;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 18px 48px rgba(37, 71, 206, 0.19);
+}
+
+/* Декоративные круги макета. */
+.banner::before,
+.banner::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+}
+
+.banner::before { width: 260px; height: 260px; right: -120px; top: -120px; }
+.banner::after { width: 200px; height: 200px; left: -40px; bottom: -110px; background: rgba(255, 255, 255, 0.06); }
+
+.bannerText { position: relative; max-width: 680px; }
+
+.bannerText h2 { font-size: 26px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+
+.bannerText p { margin-top: 14px; font-size: 16px; line-height: 1.55; color: #d6dcf7; }
+
+.banner .btn { position: relative; }
+
+@media (min-width: 860px) {
+  .ctaSec { padding: 24px 0 104px; }
+  .banner { padding: 64px; }
+  .bannerText h2 { font-size: 38px; line-height: 46px; }
+  .bannerText p { font-size: 18px; line-height: 28px; }
+  .banner .btn { align-self: flex-start; }
+}
+
+@media (min-width: 1200px) {
+  .banner { flex-direction: row; align-items: center; justify-content: space-between; }
+  .banner .btn { align-self: center; }
+}
+
+@media (max-width: 859px) {
+  .banner .btn { width: 100%; }
+}
+
+/* --- Подвал --------------------------------------------------------------- */
+
+.foot {
+  background: var(--page);
+  padding: 40px 0;
+}
+
+.footTop,
+.footBottom {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footLogo { font-size: 22px; font-weight: 700; line-height: 26px; letter-spacing: -0.02em; }
+
+.footTop p { margin-top: 8px; font-size: 14px; color: var(--text-3); }
+
+.footNav,
+.footLegal { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+
+.footBottom {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.footLegal a { font-size: 15px; font-weight: 500; transition: color 0.15s; }
+.footLegal a:hover { color: var(--text); }
+
+@media (min-width: 860px) {
+  .foot { padding: 48px 0; }
+  .footTop,
+  .footBottom { flex-direction: row; align-items: center; justify-content: space-between; }
+  .footNav { gap: 32px; }
+}
+
+/* --- Плашка cookie (макет 04) --------------------------------------------- */
+
+.cookie {
+  position: fixed;
+  z-index: 25;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+.cookie p { font-size: 15px; line-height: 22px; color: var(--text-2); }
+.cookie a { color: var(--brand); font-weight: 500; }
+.cookie a:hover { text-decoration: underline; }
+.cookie .btn { padding: 10px 28px; }
+
+@media (min-width: 860px) {
+  .cookie { left: 32px; right: 32px; bottom: 24px; flex-direction: row; align-items: center; gap: 24px; padding: 20px 20px 20px 24px; }
+  .cookie .btn { flex: none; }
+}
