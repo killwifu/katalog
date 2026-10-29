@@ -1,13 +1,13 @@
-import { X, Folder, FolderPlus, Upload } from 'lucide-react'
+import { Check, CircleAlert, X, Folder, FolderPlus, Pen, Upload } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type DragEvent, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type MutableRefObject } from 'react'
 import { api, ApiError, errorText, type Category, type Shop } from '../api'
 import { Icon } from '../lib/icons'
 import { foldersFromDrop, foldersFromInput, type PickedFolder } from '../lib/folders'
 import { FORMATS_HINT, formatMB, plural, uploadToAlbum } from '../lib/uploadRun'
 import { CategoryPicker } from './CategoryPicker'
 import { ConfirmDialog } from './ConfirmDialog'
-import { LimitLink, notUploaded, useLimitExcess } from '../lib/limits'
+import { LimitError, LimitLink, useLimitExcess } from '../lib/limits'
 import { WatermarkControl } from './WatermarkControl'
 import { useSingleFlight } from '../lib/singleFlight'
 
@@ -59,6 +59,10 @@ export function MassUpload({
   const dirInput = useRef<HTMLInputElement>(null)
   const [folders, setFolders] = useState<Folder[]>([])
   const [over, setOver] = useState(false)
+  // Сколько папок тащат — для «Отпустите, чтобы добавить 5 папок».
+  const [dragCount, setDragCount] = useState(0)
+  // На сколько папки превышают тариф — ошибка до загрузки (макет 10 · «Массовая · Лимит фото»).
+  const [overLimit, setOverLimit] = useState('')
   const [phase, setPhase] = useState<Phase>('pick')
   const [confirm, setConfirm] = useState<'no' | 'clear' | 'close'>('no')
   const [error, setError] = useState('')
@@ -101,6 +105,19 @@ export function MassUpload({
     setOver(false)
     if (phase !== 'pick') return
     void foldersFromDrop(e.dataTransfer.items).then(add)
+  }
+  const dragOver = (e: DragEvent) => {
+    e.preventDefault()
+    setOver(true)
+    setDragCount([...e.dataTransfer.items].filter((i) => i.kind === 'file').length)
+  }
+  const foldersWord = (n: number) => plural(n, 'папку', 'папки', 'папок')
+  const release = `Отпустите, чтобы добавить ${dragCount > 0 ? `${dragCount} ${foldersWord(dragCount)}` : 'папки'}`
+
+  // Убрать папку можно и после загрузки: её черновик удаляется вместе с ней.
+  const removeFolder = (f: Folder) => {
+    setFolders((prev) => prev.filter((x) => x.id !== f.id))
+    if (f.albumId) void api.deleteAlbum(shop.id, f.albumId).then(refresh, refresh)
   }
 
   // Пустая папка альбомом не станет, её не считаем и не грузим.
@@ -146,10 +163,11 @@ export function MassUpload({
       if (phase === 'pick') {
         const excess = limitExcess(photos, bytes)
         if (excess) {
-          setError(`${notUploaded(photos)}: ${excess}. Выберите меньше фото, удалите ненужные или смените тариф.`)
+          setOverLimit(excess)
           return
         }
       }
+      setOverLimit('')
       const controller = new AbortController()
       abort.current = controller
       setPhase('uploading')
@@ -165,7 +183,6 @@ export function MassUpload({
             const title = folder.title.trim()
             const album = await api.createAlbum(shop.id, title)
             if (album.status !== 'draft') await api.setAlbumStatus(shop.id, album.id, 'draft')
-            for (const categoryId of folder.categoryIds) await api.addAlbumToCategory(shop.id, categoryId, album.id)
             patch(folder.id, { albumId: album.id, savedTitle: title })
             folder = { ...folder, albumId: album.id }
           } catch (e) {
@@ -230,6 +247,8 @@ export function MassUpload({
         for (const f of ready) {
           const title = f.title.trim()
           if (title !== f.savedTitle) await api.updateAlbum(shop.id, f.albumId as string, { title })
+          // Категории — при создании: их можно менять и во время загрузки (макет 10).
+          for (const categoryId of f.categoryIds) await api.addAlbumToCategory(shop.id, categoryId, f.albumId as string)
           await api.setAlbumStatus(shop.id, f.albumId as string, 'published')
         }
       } catch (e) {
@@ -240,25 +259,24 @@ export function MassUpload({
         return
       }
       refresh()
-      const count = ready.reduce((sum, f) => sum + f.files.length, 0)
-      onClose(
-        `${plural(ready.length, 'Создан', 'Созданы', 'Создано')} ${ready.length} ${albumsWord(ready.length)} · ${count} фото`,
-      )
+      onClose(`${plural(ready.length, 'Создан', 'Созданы', 'Создано')} ${ready.length} ${albumsWord(ready.length)}`)
     } finally {
       flight.leave()
     }
   }
 
-  const editable = phase === 'pick' || phase === 'review'
   const busy = phase === 'uploading' || phase === 'saving'
 
+  const errCount = usable.filter((f) => f.error).length
   let footText: string
   if (error) footText = error
+  else if (phase === 'paused' && errCount > 0)
+    footText = `${doneFolders} из ${usable.length} ${plural(usable.length, 'папки', 'папок', 'папок')} ${plural(doneFolders, 'загружена', 'загружены', 'загружены')} · ${errCount === 1 ? 'в одной ошибка' : `ошибки в ${errCount}`}`
   else if (phase === 'uploading' || phase === 'paused')
     footText = `Загружено ${doneFolders} из ${usable.length} ${plural(usable.length, 'папки', 'папок', 'папок')} · ${sentPhotos} из ${photos} фото`
   else if (phase === 'review' || phase === 'saving') footText = 'Всё загружено · названия можно поправить'
   else if (usable.length === 0) footText = 'Альбомы создадутся со статусом «Опубликован»'
-  else if (invalid) footText = `Названия альбомов — до ${MAX_TITLE} символов`
+  else if (invalid) footText = 'Сократите название, чтобы продолжить'
   else footText = `${usable.length} ${albumsWord(usable.length)} · статус «Опубликован»`
 
   return (
@@ -285,19 +303,23 @@ export function MassUpload({
         {folders.length === 0 ? (
           <div
             className={`drop ${over ? 'drop--over' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setOver(true)
-            }}
+            onDragOver={dragOver}
             onDragLeave={() => setOver(false)}
             onDrop={drop}
           >
-            {canPickFolders ? (
+            {over ? (
               <>
                 <span className="drop__ico" aria-hidden="true">
                   <Icon as={FolderPlus} size={26} />
                 </span>
-                <p>{over ? 'Отпустите, чтобы добавить папки' : 'Перетащите папки сюда'}</p>
+                <p className="drop__release">{release}</p>
+              </>
+            ) : canPickFolders ? (
+              <>
+                <span className="drop__ico" aria-hidden="true">
+                  <Icon as={FolderPlus} size={26} />
+                </span>
+                <p>Перетащите папки сюда</p>
                 <small>или выберите папку на компьютере</small>
                 <button className="btn btn--ghost btn--sm" onClick={() => dirInput.current?.click()}>
                   <Icon as={Folder} size={18} />
@@ -317,13 +339,14 @@ export function MassUpload({
           </div>
         ) : (
           <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              setOver(true)
+            className="frows__wrap"
+            onDragOver={dragOver}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false)
             }}
-            onDragLeave={() => setOver(false)}
             onDrop={drop}
           >
+            {over && phase === 'pick' && <p className="upgrid__release">{release}</p>}
             <div className="updlg__listhead">
               <span>
                 Папки · {folders.length} · {photos} фото · {formatMB(bytes)}
@@ -332,10 +355,10 @@ export function MassUpload({
               {phase === 'pick' &&
                 (
                   <>
-                    <button className="btn btn--quiet btn--sm" onClick={() => dirInput.current?.click()}>
+                    <button className="btn btn--quiet btn--sm frows__act" onClick={() => dirInput.current?.click()}>
                       + Добавить папки
                     </button>
-                    <button className="btn btn--quiet btn--sm" onClick={() => setConfirm('clear')}>
+                    <button className="btn btn--quiet btn--sm frows__act" onClick={() => setConfirm('clear')}>
                       Очистить
                     </button>
                   </>
@@ -345,34 +368,31 @@ export function MassUpload({
             <ul className={`frows ${over ? 'frows--over' : ''}`}>
               {folders.map((f) => {
                 const empty = f.files.length === 0
-                const long = f.title.trim().length > MAX_TITLE
+                const stage = phase !== 'pick'
                 return (
                   <li key={f.id} className={`frow ${empty ? 'frow--empty' : ''}`}>
                     <span className="frow__ico" aria-hidden="true">
-                      ▤
+                      <Icon as={Folder} size={20} />
                     </span>
                     <div className="frow__main">
-                      <div className="frow__title">
-                        <input
-                          className="inp"
-                          value={f.title}
-                          disabled={!editable || empty}
-                          aria-invalid={!empty && titleBad(f)}
-                          aria-label="Название альбома"
-                          onChange={(e) => patch(f.id, { title: e.target.value })}
+                      {empty ? (
+                        <b className="frow__name">{f.title}</b>
+                      ) : (
+                        <FolderTitle
+                          title={f.title}
+                          disabled={phase === 'saving'}
+                          onSave={(title) => patch(f.id, { title })}
                         />
-                        {(long || f.title !== f.name) && !empty && (
-                          <span className={`field__cnt ${long ? 'text-danger' : ''}`}>
-                            {f.title.trim().length}/{MAX_TITLE}
-                          </span>
-                        )}
-                      </div>
+                      )}
                       <small>
                         {f.files.length} фото{f.bytes > 0 && ` · ${formatMB(f.bytes)}`}
                       </small>
-                      {long && !empty && <small className="text-danger" role="alert">Сократите название до {MAX_TITLE} символов</small>}
                       {!empty && f.title.trim() === '' && <small className="text-danger" role="alert">Укажите название</small>}
-                      {empty && <small className="text-danger" role="alert">Нет подходящих фото — альбом не создастся</small>}
+                      {empty && (
+                        <small className="text-danger" role="alert">
+                          Нет фото {FORMATS_HINT.split(' · ')[0]} — альбом не создастся
+                        </small>
+                      )}
                       {!empty && f.skipped > 0 && (
                         <small className="frow__warn">
                           {f.skipped} {plural(f.skipped, 'файл пропущен', 'файла пропущены', 'файлов пропущено')}: {f.skipReason}
@@ -394,28 +414,39 @@ export function MassUpload({
                       )}
                     </div>
                     <div className="frow__cat">
+                      {/* Категории можно менять и во время загрузки — они
+                          применяются при создании альбомов. */}
                       <CategoryPicker
                         categories={categories}
                         value={f.categoryIds}
-                        disabled={phase !== 'pick' || empty}
+                        disabled={phase === 'saving' || empty}
                         onChange={(ids) => patch(f.id, { categoryIds: ids })}
                       />
                     </div>
                     <span className="frow__state">
-                      {phase === 'pick' ? (
-                        <button
-                          className="btn btn--quiet btn--sm"
-                          onClick={() => setFolders((prev) => prev.filter((x) => x.id !== f.id))}
-                          aria-label={`Убрать папку «${f.name}»`}
-                        >
-                        <Icon as={X} size={20} />
-                      </button>
-                      ) : empty ? null : complete(f) ? (
-                        <span className="frow__ok">Загружено</span>
-                      ) : (
-                        <span>{f.percent}%</span>
-                      )}
+                      {empty || f.error ? (
+                        <Icon as={CircleAlert} size={20} className="frow__bad" aria-label="Ошибка" />
+                      ) : stage && complete(f) ? (
+                        <span className="frow__ok">
+                          <Icon as={Check} size={16} />
+                          Загружено
+                        </span>
+                      ) : phase === 'uploading' || phase === 'paused' ? (
+                        <span className="frow__prog">
+                          <b>{f.percent}%</b>
+                          <i style={{ '--p': `${f.percent}%` } as CSSProperties} />
+                        </span>
+                      ) : null}
                     </span>
+                    {!busy && (
+                      <button
+                        className="frow__x"
+                        onClick={() => removeFolder(f)}
+                        aria-label={`Убрать папку «${f.name}»`}
+                      >
+                        <Icon as={X} size={18} />
+                      </button>
+                    )}
                   </li>
                 )
               })}
@@ -426,10 +457,17 @@ export function MassUpload({
       </div>
 
       <div className="modal__foot">
-        <p aria-live="polite" className={`hint ${error || (invalid && phase === 'pick') ? 'text-danger' : ''}`}>
-          {footText}
-          {error && <LimitLink text={error} />}
-        </p>
+        {overLimit && phase === 'pick' ? (
+          <LimitError head="Альбомы не созданы" excess={overLimit} hint="Уберите лишние папки или" />
+        ) : (
+          <p
+            aria-live="polite"
+            className={`hint ${error || (invalid && phase === 'pick') || (phase === 'paused' && errCount > 0) ? 'text-danger' : ''}`}
+          >
+            {footText}
+            {error && <LimitLink text={error} />}
+          </p>
+        )}
         <span className="spacer" />
         {phase === 'uploading' ? (
           <>
@@ -444,10 +482,11 @@ export function MassUpload({
         ) : phase === 'paused' ? (
           <>
             <button className="btn btn--ghost" onClick={close}>
-              Отмена
+              Закрыть
             </button>
             <button className="btn btn--primary" onClick={() => void run()}>
-              Продолжить
+              {errCount > 0 && <Icon as={Upload} size={18} strokeWidth={2} />}
+              {errCount > 0 ? 'Повторить' : 'Продолжить'}
             </button>
           </>
         ) : phase === 'review' || phase === 'saving' ? (
@@ -503,4 +542,70 @@ export function MassUpload({
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Название папки — будущего альбома (макет 10 · «Загружено — создать
+// альбомы»): по карандашу — поле со счётчиком, синяя галочка сохраняет,
+// крестик отменяет. Слишком длинное имя папки открывает поле сразу.
+function FolderTitle({ title, disabled, onSave }: { title: string; disabled: boolean; onSave: (title: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const tooLong = (v: string) => v.trim().length > MAX_TITLE
+  const value = draft ?? title
+  const bad = value.trim() === '' || tooLong(value)
+  if (draft === null && !tooLong(title)) {
+    return (
+      <div className="frow__title">
+        <b className="frow__name" title={title}>
+          {title}
+        </b>
+        {!disabled && (
+          <button className="frow__pen" onClick={() => setDraft(title)} aria-label={`Изменить название «${title}»`}>
+            <Icon as={Pen} size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
+  const save = () => {
+    if (bad) return
+    onSave(value.trim())
+    setDraft(null)
+  }
+  return (
+    <>
+      <div className="frow__edit">
+        <span className={`frow__inp ${tooLong(value) ? 'frow__inp--bad' : ''}`}>
+          <input
+            value={value}
+            autoFocus={draft !== null}
+            disabled={disabled}
+            aria-label="Название альбома"
+            aria-invalid={bad}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save()
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setDraft(null)
+              }
+            }}
+          />
+          <small>
+            {value.trim().length}/{MAX_TITLE}
+          </small>
+        </span>
+        <button className="frow__save" onClick={save} disabled={bad || disabled} aria-label="Сохранить название">
+          <Icon as={Check} size={16} />
+        </button>
+        <button className="frow__cancel" onClick={() => setDraft(null)} aria-label="Отменить">
+          <Icon as={X} size={16} />
+        </button>
+      </div>
+      {tooLong(value) && (
+        <small className="text-danger" role="alert">
+          Сократите название до {MAX_TITLE} символов
+        </small>
+      )}
+    </>
+  )
 }

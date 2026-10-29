@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { CircleAlert } from 'lucide-react'
 import { api, type Shop } from '../api'
+import { Icon } from './icons'
 import { formatMB, plural } from './uploadRun'
 
 // Проверка лимита тарифа до загрузки (макеты 11–13 · «Лимит фото», «Лимит
@@ -47,5 +49,25 @@ export function LimitLink({ text }: { text: string }) {
         Сменить тариф
       </Link>
     </>
+  )
+}
+
+// Ошибка лимита в футере окна загрузки (макет 10 · «Лимит фото / объёма»):
+// красная строка «Фото не загружены: лимит тарифа превышен на 4 фото» и
+// под ней совет со ссылкой «смените тариф».
+export function LimitError({ head, excess, hint }: { head: string; excess: string; hint: string }) {
+  return (
+    <p className="limerr" role="alert">
+      <Icon as={CircleAlert} size={16} />
+      <span>
+        <b>
+          {head}: {excess}
+        </b>
+        <small>
+          {hint}{' '}
+          <Link to="/billing">смените тариф</Link>
+        </small>
+      </span>
+    </p>
   )
 }
