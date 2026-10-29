@@ -372,7 +372,9 @@ export function AlbumPage() {
     }
     setPicked(new Set(ids))
   }
-  const albumUrl = `${location.origin}/${shop.slug}/a/${albumId}`
+  // Адрес витрины по слагу; пока список альбомов грузится — старый вид
+  // /a/{uuid}, витрина редиректит его на слаг.
+  const albumUrl = `${location.origin}/${shop.slug}/${album?.slug ?? `a/${albumId}`}`
   // Пустой альбом (макет 13 · «Пустой альбом»): без статистики и строки
   // выбора — только большая зона загрузки.
   const empty = total === 0 && pending.length === 0
