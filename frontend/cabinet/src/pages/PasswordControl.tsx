@@ -125,11 +125,12 @@ export function PasswordControl({
               ? 'Пароль сохранился после окончания тарифа. На бесплатном тарифе изменить или снять его нельзя. '
               : 'Пароль доступен на платных тарифах. '}
             <Link to="/billing" className="font-medium text-brand">
-              {hasPassword ? 'Оплатить подписку' : 'Сменить тариф'}
+              Сменить тариф
             </Link>
           </span>
         </p>
-      ) : choice.mode === 'none' && !hasPassword ? null : (
+      ) : (choice.mode === 'none' && !hasPassword) || error ? null : (
+        // Под ошибкой пояснения нет — только сама ошибка (макет 10 · «пустой пароль»).
         // «Без пароля» у альбома без пароля ничего не меняет — в макете (11, 12)
         // подсказки под переключателем тогда нет.
         <p className={`hint ${many && choice.mode !== 'none' ? 'hint--warn' : 'hint--i'}`}>

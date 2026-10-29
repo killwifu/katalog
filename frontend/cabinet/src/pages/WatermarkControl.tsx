@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { api, type AlbumWatermark, type Shop, type WatermarkPosition } from '../api'
 import { Icon } from '../lib/icons'
 import { WATERMARK_POSITIONS as POSITIONS, WATERMARK_TILE, toggleWatermarkCell, watermarkCells } from '../lib/watermark'
@@ -41,6 +41,15 @@ export function WatermarkControl({
   const [tip, setTip] = useState(false)
   const tipId = useId()
   const [error, setError] = useState(false)
+  // Подсказка закрывается нажатием мимо (макет 10 · Tablet · «по нажатию»).
+  useEffect(() => {
+    if (!tip) return
+    const hide = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest('.wm__info')) setTip(false)
+    }
+    document.addEventListener('pointerdown', hide)
+    return () => document.removeEventListener('pointerdown', hide)
+  }, [tip])
   const enabled = value ? value.enabled : ownEnabled
   const position = value ? value.position : ownPosition
 
@@ -76,7 +85,7 @@ export function WatermarkControl({
 
   const tipText = onChange
     ? 'Знак для фото этого альбома. Текст — подпись витрины из настроек. После сохранения применяется и к уже загруженным фото альбома.'
-    : 'Знаком служит название витрины — текст можно поменять в настройках. Накладывается на новые фото; уже загруженные не меняются.'
+    : 'В качестве водяного знака используется название вашего аккаунта. Положение надписи задается в меню справа'
 
   return (
     <>
@@ -92,13 +101,19 @@ export function WatermarkControl({
             aria-label="Что такое водяной знак"
             aria-expanded={tip}
             aria-controls={tipId}
-            title={tipText}
+            title={onChange ? tipText : undefined}
             onClick={() => setTip((v) => !v)}
           >
             <Icon as={Info} size={14} />
           </button>
+          {/* Окно загрузки (макет 10): тёмная подсказка по наведению или нажатию. */}
+          {!onChange && (
+            <span className={`wm__pop ${tip ? 'wm__pop--on' : ''}`} role="tooltip" id={tipId}>
+              {tipText}
+            </span>
+          )}
         </span>
-        {tip && (
+        {tip && onChange && (
           <p className="wm__tip" id={tipId}>
             {tipText}
           </p>

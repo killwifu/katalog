@@ -2710,3 +2710,150 @@ textarea.ocs__inp { height: auto; min-height: 92px; padding: 11px 14px; resize: 
 }
 .ocs__toast .toast__text { white-space: nowrap; }
 .ocs__field .field__err, .ocs__logo .field__err { color: #D92D20; }
+
+/* --- Раздел «Альбомы» (макет 10): список, доступ, удаление ----------------- */
+/* Скелетон: панель живая, у карточки — название, категория и плашка статуса. */
+.skel--pill { width: 84px; height: 26px; margin-top: 4px; border-radius: 999px; }
+/* Крестик очистки поиска (макет 10 · «Поиск без результатов»). */
+.albar__clear { display: grid; flex: none; place-items: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 999px; background: none; color: #62615C; cursor: pointer; }
+.app .albar__clear:not(.hidden):not([hidden]) { min-width: 24px; min-height: 24px; }
+.albar__clear:hover { color: #1A1A18; }
+/* Бейдж числа фильтров — только на телефоне, где у кнопки нет подписи. */
+.albar .pop__btn { position: relative; }
+.al__badge { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 2px solid #fff; border-radius: 999px; background: #2547CE; font-size: 11px; font-weight: 600; line-height: 1; color: #fff; }
+@media (min-width: 641px) { .al__badge { display: none; } }
+@media (max-width: 640px) { .albar .pop__btn.pop__btn--on { border-color: #2547CE; background: #E9ECFB; color: #2547CE; } .albar .pop__btn.pop__btn--on .pop__icon .lucide { color: #2547CE; } }
+/* Пагинация: номер страницы выпадающим списком. */
+.alpager__page { position: relative; display: inline-flex; align-items: center; }
+.alpager__page select { appearance: none; padding-right: 30px; }
+.alpager__page .lucide { position: absolute; right: 10px; pointer-events: none; color: #62615C; }
+/* Подсказки на замке и скрепке: с мышью — по наведению (и на планшете с
+   трекпадом), на сенсорном экране — пока палец держит иконку. */
+@media (any-hover: hover) { .tip:hover .tip__body { display: block; } }
+@media (hover: none) { .tip:active .tip__body { display: block; } }
+.tip__body { max-width: 240px; text-align: center; }
+/* Тост на телефоне — снизу, по ширине текста (макет 10 · Mobile). */
+@media (max-width: 640px) {
+  .al__toast .toast { top: auto; bottom: 12px; left: 16px; right: 16px; width: fit-content; margin: 0 auto; transform: none; }
+  body:has(.selbar) .al__toast .toast { bottom: 84px; }
+}
+/* «Изменить доступ»: поле с ошибкой красное и в фокусе; ошибка сохранения —
+   красной плашкой (макет 10 · «ошибка сохранения»). */
+.pwdfield.pwdfield--err, .pwdfield.pwdfield--err:focus-within { border-color: #D92D20; box-shadow: none; }
+.al__err { display: flex; align-items: flex-start; gap: 8px; margin-top: 18px; padding: 10px 12px; border-radius: 10px; background: rgb(217 45 32 / 8%); font-size: 13px; line-height: 19px; color: #D92D20; }
+.al__err .lucide { flex: none; margin-top: 2px; }
+/* Телефон: кнопки окон доступа и удаления — во всю ширину пополам. */
+@media (max-width: 640px) {
+  .modal--access .modal__foot > .spacer, .al__confirm .modal__foot > .spacer { display: none; }
+  .modal--access .modal__foot > .btn, .al__confirm .modal__foot > .btn { flex: 1 1 0; justify-content: center; }
+}
+/* Подсказка замка — по центру над иконкой, скрепки — у правого края карточки. */
+.alcard .tip--lock .tip__body { right: auto; left: 50%; transform: translateX(-50%); }
+.alcard .tip--lock .tip__body::before { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--color-ink); }
+.alcard .tip__body b { font-weight: 500; }
+.tip__sub { color: rgb(255 255 255 / 72%); }
+/* Применённые фильтры — голубые чипсы (макет 10 · «Фильтр применён»). */
+.chips--applied button:not(.chips__reset) { min-height: 30px; padding: 4px 10px 4px 12px; border-color: transparent; background: #E9ECFB; font-size: 13px; font-weight: 500; color: #2547CE; }
+.chips--applied button:not(.chips__reset) .lucide { color: #2547CE; }
+
+/* --- Раздел «Альбомы» (макет 10): окно «Загрузить фото» ------------------- */
+.modal--upload .modal__foot > .hint--err::before { display: none; }
+/* Вкладка «Массовая загрузка» вне компьютера: серая; на планшете — пометка,
+   на телефоне — «i» и подсказка по нажатию. */
+.updlg__tabs { position: relative; }
+.modal--upload .updlg__tabs .segbar button.updlg__off { color: #B4B2AC; cursor: default; }
+.updlg__off > span { display: inline-flex; align-items: center; gap: 6px; }
+.updlg__i { display: none; }
+.updlg__tip { position: absolute; z-index: 5; right: 0; top: calc(100% + 6px); max-width: 260px; padding: 8px 12px; border-radius: 8px; background: #3A3936; font-size: 12px; line-height: 17px; color: #fff; box-shadow: 0 8px 20px rgb(0 0 0 / 18%); }
+@media (max-width: 640px) {
+  .updlg__off .segbar__note { display: none; }
+  .updlg__i { display: block; }
+}
+/* Перетаскивание: в зоне — только иконка и «Отпустите…» (макет 10). */
+.drop--over { border: 2px dashed #2547CE; background: #E9ECFB; }
+.drop .drop__release { margin: 0; font-size: 15px; font-weight: 600; color: #1E3AA8; }
+.upgrid { position: relative; }
+.upgrid__release { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; margin: 0; border-radius: inherit; background: rgb(233 236 251 / 92%); font-size: 15px; font-weight: 600; color: #1E3AA8; pointer-events: none; }
+.upgrid__hint { grid-column: 1 / -1; justify-content: center; margin: 0; }
+.upgrid .uptile:disabled { opacity: .5; cursor: default; }
+/* Меню фото на сенсорном экране — под плиткой (макет 10 · «Меню фото»). */
+.modal--upload .uptile2.is-menu { overflow: visible; z-index: 3; outline: 2px solid #2547CE; outline-offset: -2px; }
+.modal--upload .uptile2.is-menu::after { content: none; }
+.app .modal--upload .uptile2.is-menu .uptile2__x { display: none !important; }
+.uptile2__menu { position: absolute; z-index: 4; left: 50%; top: calc(100% - 22px); transform: translateX(-50%); padding: 4px; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(0 0 0 / 18%); }
+.uptile2__menu button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 14px; font-weight: 500; color: #1A1A18; white-space: nowrap; cursor: pointer; }
+.uptile2__menu .lucide { color: #62615C; }
+/* Ошибка лимита в футере: красная строка и совет со ссылкой. */
+.limerr { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 19px; }
+.limerr > .lucide { flex: none; margin-top: 2px; color: #D92D20; }
+.limerr b { display: block; font-weight: 400; color: #D92D20; }
+.limerr small { display: block; font-size: 13px; color: #62615C; }
+.limerr a { color: #2547CE; }
+@media (max-width: 640px) { .modal--upload .modal__foot > .limerr { flex-basis: 100%; } }
+/* Список «В какие альбомы загрузить» (макет 10 · «Выбор альбомов»). */
+.apick__search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 10px; background: #F1F0EC; color: #90908A; }
+.apick__search input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: #1A1A18; outline: none; }
+.apick__search:focus-within { box-shadow: 0 0 0 2px #2547CE; }
+.apick__newico { display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: #E9ECFB; color: #2547CE; }
+.apick__new { padding: 8px; font-size: 14px; }
+.apick__row[aria-selected="true"] { background: #E9ECFB; }
+.apick__row img, .apick__row i { width: 44px; height: 44px; }
+.apick__more { background: #F1F0EC; color: #62615C; }
+/* Подсказка водяного знака в окне загрузки — тёмная, по наведению и нажатию. */
+.wm__label { position: relative; }
+.wm__pop { position: absolute; z-index: 6; left: 0; top: calc(100% + 6px); display: none; width: 290px; padding: 8px 12px; border-radius: 8px; background: #3A3936; font-size: 12px; font-weight: 400; line-height: 17px; color: #fff; box-shadow: 0 8px 20px rgb(0 0 0 / 18%); }
+.wm__pop--on { display: block; }
+@media (any-hover: hover) { .wm__info:hover + .wm__pop { display: block; } }
+@media (max-width: 640px) { .wm__pop { width: min(290px, calc(100vw - 48px)); } }
+/* Планшет: окно 680 по центру, альбомы и водяной знак — в столбик. */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .modal.modal--upload { max-width: 680px; }
+  .modal--upload .updlg__top { flex-direction: column; align-items: stretch; }
+  .modal--upload .apick { flex-basis: auto; }
+}
+/* Телефон: «Удалить все» — ссылкой с корзиной, кнопка «Выбрать фото» — контурная. */
+@media (max-width: 640px) {
+  .modal--upload .updlg__listhead .phbar__btn { min-height: 0; height: auto; padding: 0; border: 0; background: none; color: #2547CE; }
+}
+@media (hover: none) { .modal--upload .btn.updlg__pick, .modal--upload .btn.updlg__pick .lucide { border-color: #CFCCC4; background: #fff; color: #1A1A18; } }
+.uptile2__menu { left: 0; transform: none; }
+.uptile2__menu--r { left: auto; right: 0; }
+@media (hover: none) { .modal--upload .upgrid { max-height: none; overflow: visible; } }
+.apick__search:focus-within { box-shadow: none; }
+
+/* --- Раздел «Альбомы» (макет 10): массовая загрузка ------------------------ */
+.frows__wrap { position: relative; }
+.frows__act { color: #2547CE; }
+.modal--upload .frows { gap: 0; padding: 12px; border: 1px solid #E4E2DC; border-radius: 14px; background: #fff; }
+.modal--upload .frow { flex-wrap: nowrap; align-items: center; gap: 14px; padding: 12px; border: 0; border-radius: 10px; background: none; }
+.modal--upload .frow:hover { background: #F1F0EC; }
+.modal--upload .frow__ico { width: 42px; height: 42px; border-radius: 10px; background: #E9ECFB; color: #2547CE; }
+.modal--upload .frow--empty .frow__ico { background: #F1F0EC; color: #90908A; }
+.modal--upload .frow--empty .frow__name { color: #62615C; }
+.modal--upload .frow__main { flex: 1 1 auto; gap: 2px; }
+.modal--upload .frow__main small { font-size: 13px; line-height: 18px; }
+.frow__name { overflow: hidden; font-size: 15px; line-height: 22px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; color: #1A1A18; }
+.frow__title { min-width: 0; }
+.frow__pen { display: grid; flex: none; place-items: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: none; color: #62615C; cursor: pointer; opacity: 0; }
+.frow:hover .frow__pen, .frow__pen:focus-visible { opacity: 1; }
+@media (hover: none) { .frow__pen { opacity: 1; } }
+.frow__edit { display: flex; align-items: center; gap: 8px; }
+.frow__inp { display: flex; flex: 0 1 260px; align-items: center; gap: 8px; min-width: 0; height: 36px; padding: 0 10px; border: 1.5px solid #2547CE; border-radius: 8px; background: #fff; }
+.frow__inp--bad { border-color: #D92D20; }
+.frow__inp input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: #1A1A18; outline: none; }
+.frow__inp small { flex: none; font-size: 12px !important; color: #90908A !important; }
+.frow__inp--bad small { color: #D92D20 !important; }
+.frow__save, .frow__cancel { display: grid; flex: none; place-items: center; width: 32px; height: 32px; min-height: 0; padding: 0; border: 0; border-radius: 8px; cursor: pointer; }
+.frow__save { background: #2547CE; color: #fff; }
+.frow__save:disabled { background: #A9B6EC; cursor: default; }
+.frow__cancel { background: none; color: #62615C; }
+.modal--upload .frow__cat { flex: 0 0 156px; }
+.modal--upload .frow__state { display: flex; flex: 0 0 124px; justify-content: flex-end; min-width: 0; padding: 0; }
+.frow__ok { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: #1B6B3A; }
+.frow__bad { color: #D92D20; }
+.frow__prog { display: grid; gap: 6px; width: 124px; text-align: right; }
+.frow__prog b { font-size: 12.5px; font-weight: 500; color: #62615C; }
+.frow__prog i { height: 4px; border-radius: 2px; background: linear-gradient(#2547CE, #2547CE) 0 0 / var(--p, 0%) 100% no-repeat, #E4E2DC; }
+.frow__x { display: grid; flex: none; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: none; color: #62615C; cursor: pointer; }
+.frow__x:hover { background: #E4E2DC; color: #1A1A18; }
+.modal--upload .frow__cat .pop__btn { justify-content: space-between; width: 100%; height: 36px; min-height: 36px; padding: 0 10px 0 12px; border-radius: 8px; font-size: 13.5px; }

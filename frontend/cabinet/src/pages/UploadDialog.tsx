@@ -1,7 +1,7 @@
-import { X, Check, ChevronDown, ChevronUp, Plus, Trash2, ImagePlus, Upload, CircleAlert, WifiOff } from 'lucide-react'
+import { X, Check, ChevronDown, ChevronUp, FolderPlus, Info, Plus, RefreshCw, Search, Trash2, ImagePlus, Upload, CircleAlert, WifiOff } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import { type Album, type Category, type Shop } from '../api'
 import { Icon } from '../lib/icons'
 import {
@@ -15,7 +15,7 @@ import {
 import { useDialogClose } from '../lib/useDialogClose'
 import { MassUpload } from './MassUpload'
 import { ConfirmDialog } from './ConfirmDialog'
-import { LimitLink, notUploaded, useLimitExcess } from '../lib/limits'
+import { LimitError, useLimitExcess } from '../lib/limits'
 import { Thumb } from './Thumb'
 import { WatermarkControl } from './WatermarkControl'
 import { useSingleFlight } from '../lib/singleFlight'
@@ -58,6 +58,15 @@ export function UploadDialog({
   // подтверждение — окно только передаёт ей нажатие на крестик.
   const closeRef = useRef<() => void>(() => onClose())
   const backdrop = useDialogClose(() => closeRef.current())
+  // Телефон: нажатие на недоступную вкладку показывает подсказку, нажатие
+  // мимо — скрывает (макет 10 · Mobile · «Подсказка: массовая загрузка»).
+  const [massTip, setMassTip] = useState(false)
+  useEffect(() => {
+    if (!massTip) return
+    const hide = () => setMassTip(false)
+    document.addEventListener('pointerdown', hide)
+    return () => document.removeEventListener('pointerdown', hide)
+  }, [massTip])
 
   return (
     <Portal><div className="modal__back" role="dialog" aria-modal="true" aria-label="Загрузить фото" {...backdrop}>
@@ -77,14 +86,25 @@ export function UploadDialog({
             </button>
             <button
               aria-pressed={mode === 'mass'}
-              disabled={locked || !desktop}
-              onClick={() => setMode('mass')}
-              title={desktop ? undefined : 'Массовая загрузка доступна только на компьютере'}
+              disabled={locked}
+              aria-disabled={!desktop}
+              className={desktop ? undefined : 'updlg__off'}
+              onPointerDown={(e) => !desktop && e.stopPropagation()}
+              onClick={() => (desktop ? setMode('mass') : setMassTip((v) => !v))}
+              aria-describedby={massTip ? 'updlg-masstip' : undefined}
             >
-              Массовая загрузка
+              <span>
+                Массовая загрузка
+                {!desktop && <Icon as={Info} size={14} className="updlg__i" />}
+              </span>
               {!desktop && <small className="segbar__note">только на компьютере</small>}
             </button>
           </div>
+          {massTip && (
+            <span className="updlg__tip" role="tooltip" id="updlg-masstip">
+              Массовая загрузка папками доступна только в версии для компьютера
+            </span>
+          )}
         </div>
 
         {mode === 'regular' ? (
@@ -111,8 +131,6 @@ type Item = { key: string; file: File; reject: string }
 // Миниатюры рисуем только первым: сотня полноразмерных снимков в <img>
 // съедает память телефона раньше, чем продавец нажмёт «Загрузить».
 const PREVIEW_LIMIT = 48
-// Сколько альбомов показывать плашками в поле, остальные — «Ещё N».
-const CHIPS_LIMIT = 4
 
 function RegularUpload({
   shop,
@@ -140,7 +158,11 @@ function RegularUpload({
   // «и ещё N» раскрывает следующую порцию миниатюр.
   const [previewLimit, setPreviewLimit] = useState(PREVIEW_LIMIT)
   const [menuKey, setMenuKey] = useState<string | null>(null)
+  // Меню у плитки в правой половине сетки прижимается вправо — иначе уезжает за край.
+  const [menuRight, setMenuRight] = useState(false)
   const [over, setOver] = useState(false)
+  // Сколько файлов тащат над окном — для «Отпустите, чтобы добавить 12 фото».
+  const [dragCount, setDragCount] = useState(0)
   const [phase, setPhase] = useState<'pick' | 'uploading' | 'partial'>('pick')
   // Прогресс и итог считаются по парам «альбом + файл»: одно фото,
   // выбранное в два альбома, — это две загрузки.
@@ -148,6 +170,7 @@ function RegularUpload({
   const [done, setDone] = useState<Set<string>>(new Set())
   const [failed, setFailed] = useState<Record<string, string>>({})
   const [quota, setQuota] = useState('')
+  // На сколько пачка превышает тариф («лимит тарифа превышен на 4 фото»).
   const [overLimit, setOverLimit] = useState('')
   const limitExcess = useLimitExcess(shop)
   const [needAlbum, setNeedAlbum] = useState(false)
@@ -170,6 +193,20 @@ function RegularUpload({
     setOver(false)
     if (phase === 'pick') addFiles(e.dataTransfer.files)
   }
+  const dragOver = (e: DragEvent) => {
+    e.preventDefault()
+    setOver(true)
+    setDragCount([...e.dataTransfer.items].filter((i) => i.kind === 'file').length)
+  }
+  // Меню фото на сенсорном экране закрывается нажатием мимо.
+  useEffect(() => {
+    if (!menuKey) return
+    const hide = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest('.uptile2.is-menu')) setMenuKey(null)
+    }
+    document.addEventListener('pointerdown', hide)
+    return () => document.removeEventListener('pointerdown', hide)
+  }, [menuKey])
 
   const fullyDone = (key: string, set = done) => selected.every((a) => set.has(pair(a, key)))
   const doneCount = valid.filter((i) => fullyDone(i.key)).length
@@ -198,7 +235,8 @@ function RegularUpload({
 
   // Двойной клик не запускает действие дважды.
   const flight = useSingleFlight()
-  const run = async () => {
+  // only — повторить одно фото (кнопка «Повторить» на плитке).
+  const run = async (only?: string) => {
     if (!flight.enter()) return
     try {
       if (selected.length === 0) {
@@ -212,9 +250,7 @@ function RegularUpload({
       if (phase === 'pick') {
         const excess = limitExcess(valid.length * selected.length, bytes * selected.length)
         if (excess) {
-          setOverLimit(
-            `${notUploaded(valid.length)}: ${excess}. Выберите меньше фото, удалите ненужные или смените тариф.`,
-          )
+          setOverLimit(excess)
           return
         }
       }
@@ -223,14 +259,17 @@ function RegularUpload({
       abort.current = controller
       setPhase('uploading')
       onLock(true)
-      setFailed({})
       setQuota('')
 
       const nowDone = new Set(done)
-      const nowFailed: Record<string, string> = {}
+      // Повтор одного фото не стирает ошибки остальных.
+      const nowFailed: Record<string, string> = only
+        ? Object.fromEntries(Object.entries(failed).filter(([k]) => !k.endsWith(`:${only}`)))
+        : {}
+      setFailed(nowFailed)
       let stopped = false
       for (const albumId of selected) {
-        const files = valid.filter((i) => !nowDone.has(pair(albumId, i.key)))
+        const files = valid.filter((i) => !nowDone.has(pair(albumId, i.key)) && (!only || i.key === only))
         if (files.length === 0) continue
         const result = await uploadToAlbum({
           shopId: shop.id,
@@ -282,7 +321,7 @@ function RegularUpload({
   const shown = items.slice(0, previewLimit)
 
   let footText: string
-  if (overLimit && phase === 'pick') footText = overLimit
+  if (overLimit && phase === 'pick') footText = ''
   else if (phase === 'uploading') footText = `Загружено ${doneCount} из ${valid.length}`
   else if (phase === 'partial')
     footText = quota
@@ -329,31 +368,35 @@ function RegularUpload({
         {items.length === 0 ? (
           <div
             className={`drop ${over ? 'drop--over' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setOver(true)
-            }}
+            onDragOver={dragOver}
             onDragLeave={() => setOver(false)}
             onDrop={drop}
           >
             <span className="drop__ico" aria-hidden="true">
               <Icon as={ImagePlus} size={26} />
             </span>
-            {/* Телефон: перетаскивать нечем (макет 11 · Mobile). */}
-            <p>
-              <span className="hover-only">{over ? 'Отпустите, чтобы добавить фото' : 'Перетащите фото сюда'}</span>
-              <span className="touch-only-inline">Нажмите, чтобы выбрать фото</span>
-            </p>
-            <small>
-              <span className="hover-only">или выберите файлы на компьютере</span>
-              <span className="touch-only-inline">Из галереи, файлов или камеры</span>
-            </small>
-            <button className="btn btn--ghost btn--sm drop__pick" onClick={() => fileInput.current?.click()}>
-              <Icon as={Upload} size={18} strokeWidth={2} />
-              <span className="hover-only">Выбрать файлы</span>
-              <span className="touch-only-inline">Выбрать фото</span>
-            </button>
-            <small>Можно загрузить сразу несколько фото</small>
+            {over ? (
+              // Над зоной — только призыв отпустить (макет 10 · «Перетаскивание файлов»).
+              <p className="drop__release">Отпустите, чтобы добавить {dragCount > 0 ? `${dragCount} ` : ''}фото</p>
+            ) : (
+              <>
+                {/* Телефон и планшет: перетаскивать нечем (макет 10 · Tablet/Mobile). */}
+                <p>
+                  <span className="hover-only">Перетащите фото сюда</span>
+                  <span className="touch-only-inline">Добавьте фото</span>
+                </p>
+                <small>
+                  <span className="hover-only">или выберите файлы на компьютере</span>
+                  <span className="touch-only-inline">Из галереи или файлов</span>
+                </small>
+                <button className="btn btn--ghost btn--sm drop__pick updlg__pick" onClick={() => fileInput.current?.click()}>
+                  <Icon as={Upload} size={18} strokeWidth={2} />
+                  <span className="hover-only">Выбрать файлы</span>
+                  <span className="touch-only-inline">Выбрать фото</span>
+                </button>
+                <small>Можно загрузить сразу несколько фото</small>
+              </>
+            )}
           </div>
         ) : (
           <div>
@@ -373,15 +416,18 @@ function RegularUpload({
             </div>
             <div
               className={`upgrid ${over ? 'upgrid--over' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setOver(true)
+              onDragOver={dragOver}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false)
               }}
-              onDragLeave={() => setOver(false)}
               onDrop={drop}
             >
-              {phase === 'pick' && (
-                <button className="uptile" onClick={() => fileInput.current?.click()}>
+              {over && phase === 'pick' && (
+                <p className="upgrid__release">Отпустите, чтобы добавить {dragCount > 0 ? `${dragCount} ` : ''}фото</p>
+              )}
+              {/* Во время загрузки «Добавить» остаётся на месте, но неактивна (макет 10 · «Загрузка»). */}
+              {phase !== 'partial' && (
+                <button className="uptile" onClick={() => fileInput.current?.click()} disabled={phase !== 'pick'}>
                   <i>
                     <Icon as={Plus} size={20} />
                   </i>
@@ -391,24 +437,43 @@ function RegularUpload({
               {shown.map((item) => {
                 const error = item.reject || itemError(item.key)
                 const isDone = !item.reject && selected.length > 0 && fullyDone(item.key)
+                const net = error === 'Ошибка сети'
+                const pct = itemPercent(item.key)
                 return (
                   <div
                     key={item.key}
-                    className={`uptile2 ${error ? 'uptile2--bad' : ''} ${menuKey === item.key ? 'is-menu' : ''}`}
+                    className={`uptile2 ${net ? 'uptile2--net' : error ? 'uptile2--bad' : ''} ${menuKey === item.key ? 'is-menu' : ''}`}
                     onClick={(e) => {
-                        // Тач-экран: нажатие на фото открывает меню вместо крестиков (макеты 10–12).
-                        if (!(e.target as HTMLElement).closest('button')) setMenuKey((k) => (k === item.key ? null : item.key))
-                      }}
+                      // Тач-экран: нажатие на фото открывает меню вместо крестиков (макет 10 · «Меню фото»).
+                      if (phase !== 'pick' || (e.target as HTMLElement).closest('button')) return
+                      const tile = e.currentTarget.getBoundingClientRect()
+                      const grid = e.currentTarget.parentElement?.getBoundingClientRect()
+                      setMenuRight(Boolean(grid) && tile.left + tile.width / 2 > (grid?.left ?? 0) + (grid?.width ?? 0) / 2)
+                      setMenuKey((k) => (k === item.key ? null : item.key))
+                    }}
                   >
                     <Thumb file={item.file} />
                     {error ? (
                       <span className="uptile2__msg">
-                        <Icon as={error === 'Ошибка сети' ? WifiOff : CircleAlert} size={20} />
+                        <Icon as={net ? WifiOff : CircleAlert} size={20} />
                         <b>{error}</b>
-                        <small title={item.file.name}>{item.file.name}</small>
+                        {net ? (
+                          phase === 'partial' && (
+                            <button className="uptile2__retry" onClick={() => void run(item.key)}>
+                              <Icon as={RefreshCw} size={13} />
+                              Повторить
+                            </button>
+                          )
+                        ) : (
+                          <small title={item.file.name}>{item.file.name}</small>
+                        )}
                       </span>
                     ) : busy && !isDone ? (
-                      <span className="uptile2__pct">{itemPercent(item.key)}%</span>
+                      // Затемнение, проценты и полоса (макет 10 · «Загрузка»).
+                      <span className="uptile2__up">
+                        <b>{pct}%</b>
+                        <i style={{ '--p': `${pct}%` } as CSSProperties} />
+                      </span>
                     ) : isDone ? (
                       <span className="uptile2__ok" aria-label="Загружено">
                         <Icon as={Check} />
@@ -419,10 +484,23 @@ function RegularUpload({
                         className="uptile2__x"
                         onClick={() => setItems((prev) => prev.filter((i) => i.key !== item.key))}
                         aria-label={`Убрать ${item.file.name}`}
-                        data-menu="Убрать из загрузки"
                       >
                         <Icon as={X} size={20} />
                       </button>
+                    )}
+                    {menuKey === item.key && phase === 'pick' && (
+                      <div className={`uptile2__menu ${menuRight ? 'uptile2__menu--r' : ''}`} role="menu">
+                        <button
+                          role="menuitem"
+                          onClick={() => {
+                            setItems((prev) => prev.filter((i) => i.key !== item.key))
+                            setMenuKey(null)
+                          }}
+                        >
+                          <Icon as={Trash2} size={16} />
+                          Убрать из загрузки
+                        </button>
+                      </div>
                     )}
                   </div>
                 )
@@ -433,23 +511,28 @@ function RegularUpload({
                   <small>Показать</small>
                 </button>
               )}
+              {/* Подсказка — внутри бокса с фото, под плитками (макет 10 · Tablet/Mobile). */}
+              {phase === 'pick' && (
+                <p className="hint hint--i touch-hint upgrid__hint">Чтобы убрать фото из загрузки, нажмите на него</p>
+              )}
             </div>
           </div>
-        )}
-        {items.length > 0 && phase === 'pick' && (
-          <p className="hint hint--i touch-hint">Чтобы убрать фото из загрузки, нажмите на него</p>
         )}
         <p className="hint hint--i">Форматы {FORMATS_HINT}</p>
       </div>
 
       <div className="modal__foot">
-        <p
-          aria-live="polite"
-          className={`hint ${quota || overLimit || failedCount > 0 || (rejected > 0 && phase === 'pick') ? 'hint--err' : ''}`}
-        >
-          {footText}
-          <LimitLink text={footText} />
-        </p>
+        {overLimit && phase === 'pick' ? (
+          // Макет 10 · «Лимит фото / объёма»: красная строка и совет со ссылкой.
+          <LimitError head="Фото не загружены" excess={overLimit} hint="Удалите лишние фото или" />
+        ) : (
+          <p
+            aria-live="polite"
+            className={`hint ${quota || failedCount > 0 || (rejected > 0 && phase === 'pick') ? 'hint--err' : ''}`}
+          >
+            {footText}
+          </p>
+        )}
         <span className="spacer" />
         {phase === 'uploading' ? (
           <>
@@ -487,7 +570,7 @@ function RegularUpload({
             <button
               className="btn btn--primary"
               onClick={() => void run()}
-              disabled={valid.length === 0 || (selected.length === 0 && needAlbum)}
+              disabled={valid.length === 0}
             >
               <Icon as={Upload} size={18} strokeWidth={2} />
               {valid.length > 0 ? `Загрузить ${valid.length} фото` : 'Загрузить'}
@@ -544,32 +627,35 @@ function AlbumPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const box = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const outside = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
-    }
-    // Esc закрывает только список альбомов, а не всё окно загрузки: ловим
-    // на погружении и помечаем обработанным (см. useDialogClose).
-    const escape = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.preventDefault()
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', outside)
-    document.addEventListener('keydown', escape, true)
-    return () => {
-      document.removeEventListener('mousedown', outside)
-      document.removeEventListener('keydown', escape, true)
-    }
-  }, [open])
+  const field = useRef<HTMLDivElement>(null)
+  // Выбранные альбомы — наверху списка (макет 10 · «Много альбомов»). Порядок
+  // фиксируется при открытии, иначе строка прыгала бы из-под пальца.
+  const [onTop, setOnTop] = useState<string[]>([])
+  // Плашки — не больше двух строк, остальные сворачиваются в «Ещё N».
+  // Сначала рисуем все, меряем строки и обрезаем.
+  const selectedKey = selected.join()
+  const [measured, setMeasured] = useState({ key: '', n: Infinity })
+  const limit = measured.key === selectedKey ? measured.n : Infinity
+  useLayoutEffect(() => {
+    if (measured.key === selectedKey || !field.current) return
+    const chipEls = [...field.current.querySelectorAll<HTMLElement>('.apick__chip')]
+    const rows = [...new Set(chipEls.map((el) => el.offsetTop))].sort((x, y) => x - y)
+    // Место под «Ещё N» в конце второй строки.
+    const n = rows.length <= 2 ? Infinity : Math.max(1, chipEls.filter((el) => el.offsetTop <= rows[1]).length - 1)
+    setMeasured({ key: selectedKey, n })
+  }, [selectedKey, measured.key])
 
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.title])), [categories])
   const byId = useMemo(() => new Map(albums.map((a) => [a.id, a])), [albums])
   const norm = fold(query.trim())
-  const list = albums.filter((a) => !norm || fold(a.title).includes(norm))
+  const list = albums
+    .filter((a) => !norm || fold(a.title).includes(norm))
+    .sort((x, y) => Number(onTop.includes(y.id)) - Number(onTop.includes(x.id)))
   const chips = selected.map((id) => byId.get(id)).filter((a): a is Album => Boolean(a))
+  const toggleOpen = () => {
+    if (!open) setOnTop(selected)
+    setOpen(!open)
+  }
 
   const toggle = (id: string) =>
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
@@ -577,9 +663,10 @@ function AlbumPicker({
   return (
     <div className="apick" ref={box}>
       <span className="wm__label" id={labelId}>
-        В какие альбомы загрузить{selected.length > CHIPS_LIMIT && ` · ${selected.length}`}
+        В какие альбомы загрузить{chips.length > limit && ` · ${chips.length}`}
       </span>
       <div
+        ref={field}
         className={`apick__field ${open ? 'apick__field--open' : ''} ${invalid ? 'apick__field--bad' : ''}`}
         role="combobox"
         aria-labelledby={labelId}
@@ -587,18 +674,18 @@ function AlbumPicker({
         aria-haspopup="listbox"
         aria-disabled={disabled}
         tabIndex={disabled ? -1 : 0}
-        onClick={() => !disabled && setOpen(!open)}
+        onClick={() => !disabled && toggleOpen()}
         onKeyDown={(e) => {
           if (disabled) return
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            setOpen(!open)
+            toggleOpen()
           }
           if (e.key === 'Escape') setOpen(false)
         }}
       >
         {chips.length === 0 && <span className="apick__ph">Выберите один или несколько альбомов</span>}
-        {chips.slice(0, CHIPS_LIMIT).map((a) => (
+        {chips.slice(0, limit).map((a) => (
           <span key={a.id} className="apick__chip">
             <span>{a.title}</span>
             {!disabled && (
@@ -614,7 +701,7 @@ function AlbumPicker({
             )}
           </span>
         ))}
-        {chips.length > CHIPS_LIMIT && <span className="apick__chip">Ещё {chips.length - CHIPS_LIMIT}</span>}
+        {chips.length > limit && <span className="apick__chip apick__more">Ещё {chips.length - limit}</span>}
         <span className="spacer" />
         <Icon as={open ? ChevronUp : ChevronDown} size={18} strokeWidth={2} />
       </div>
@@ -622,16 +709,20 @@ function AlbumPicker({
 
       {open && (
         <div className="apick__menu">
-          <input
-            className="inp"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по названию альбома"
-            aria-label="Поиск по названию альбома"
-            autoFocus
-          />
+          <label className="apick__search">
+            <Icon as={Search} size={16} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Поиск по названию альбома"
+              aria-label="Поиск по названию альбома"
+              autoFocus
+            />
+          </label>
           <button className="apick__new" onClick={onCreateAlbum}>
-            <Icon as={Plus} />
+            <span className="apick__newico" aria-hidden="true">
+              <Icon as={FolderPlus} size={18} />
+            </span>
             Создать альбом
           </button>
           <div className="apick__list" role="listbox" aria-multiselectable="true">
@@ -642,7 +733,11 @@ function AlbumPicker({
                 <span>
                   <b>{a.title}</b>
                   <small>
-                    {(a.category_id && catName.get(a.category_id)) || 'Без категории'} · {a.photo_count} фото
+                    {(a.category_ids ?? [])
+                      .map((id) => catName.get(id))
+                      .filter(Boolean)
+                      .join(', ') || 'Без категории'}{' '}
+                    · {a.photo_count} фото
                   </small>
                 </span>
               </label>

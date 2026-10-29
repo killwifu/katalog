@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { CircleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 import { api, type Album, type AlbumStatus, type Plan } from '../api'
 import { Icon } from '../lib/icons'
@@ -104,7 +104,7 @@ export function AccessDialog({
         // не всё, и иметь возможность повторить.
         setError(
           ok === 0
-            ? 'Не удалось сохранить. Проверьте интернет и попробуйте ещё раз'
+            ? 'Не удалось сохранить изменения. Проверьте интернет и попробуйте ещё раз'
             : `Сохранено ${ok} из ${touched.length}. Попробуйте ещё раз для остальных`,
         )
         return
@@ -165,9 +165,15 @@ export function AccessDialog({
             showError={submitted}
             disabled={busy}
           />
+          {/* Ошибка сохранения — красной плашкой над кнопками (макет 10). */}
+          {error && (
+            <p className="al__err" role="alert">
+              <Icon as={CircleAlert} size={16} />
+              {error}
+            </p>
+          )}
         </div>
         <div className="modal__foot">
-          {error && <p className="hint hint--err" role="alert">{error}</p>}
           <span className="spacer" />
           <button className="btn btn--ghost" onClick={() => onClose()} disabled={busy}>
             Отмена

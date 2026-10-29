@@ -1,4 +1,4 @@
-import { ArrowUpDown, Check, Filter, FolderPlus, Upload, Image as ImageIcon, Link as LinkIcon, Lock, Pen, Trash2, Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ArrowUpDown, Check, ChevronDown, Filter, FolderPlus, Upload, Image as ImageIcon, Link as LinkIcon, Lock, LockOpen, Pen, Trash2, Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
@@ -92,6 +92,14 @@ export function AlbumsPage() {
   const [access, setAccess] = useState<Album[] | null>(null)
   const [editing, setEditing] = useState<Album | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
+  // Срок хранения «Удаленного» задаёт сервер (TRASH_KEEP_DAYS) — в
+  // подтверждении удаления называем его числом, как в макете.
+  const trash = useQuery({
+    queryKey: ['trash', shop.id, 1],
+    queryFn: () => api.listTrash(shop.id, 1),
+    enabled: deleting !== null,
+  })
+  const keepDays = trash.data?.keep_days
   // Уведомление само уходит: это подтверждение сделанного, а не вопрос.
   // С кнопкой висит дольше — её ещё надо успеть нажать.
   useEffect(() => {
@@ -180,30 +188,6 @@ export function AlbumsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  if (albums.isPending) {
-    // Скелетон той же сетки: «Загрузка…» строкой заставляла страницу
-    // прыгать, когда приходили карточки.
-    return (
-      <div aria-busy="true" aria-label="Загрузка альбомов">
-        <div className="albar">
-          <span className="skel skel--btn" />
-          <span className="skel skel--btn" />
-          <span className="skel skel--inp" />
-        </div>
-        <div className="algrid">
-          {Array.from({ length: 12 }, (_, i) => (
-            <div key={i} className="alcard">
-              <div className="alcard__cover skel" />
-              <div className="alcard__body">
-                <span className="skel skel--line" />
-                <span className="skel skel--line skel--short" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
   if (albums.isError) {
     return (
       <div className="emptybox">
@@ -220,9 +204,13 @@ export function AlbumsPage() {
   // тарифом и целиком уже загружен — гонять за этим сервер незачем.
   const cats = categories.data ?? []
   const catName = new Map(cats.map((c: Category) => [c.id, c.title]))
-  const top = albums.data.filter((a) => !a.parent_id)
+  // Пока список грузится, панель уже живая, а на месте карточек — скелетон
+  // (макет 10 · «Загрузка списка»): страница не прыгает, когда он приходит.
+  const loading = albums.isPending
+  const all = albums.data ?? []
+  const top = all.filter((a) => !a.parent_id)
   const created = (a: Album) => new Date(a.created_at).getTime()
-  const found = applyFilter(albums.data, query, filter).sort((x, y) => {
+  const found = applyFilter(all, query, filter).sort((x, y) => {
     switch (sort) {
       case 'old':
         return created(x) - created(y)
@@ -268,7 +256,14 @@ export function AlbumsPage() {
   const copyLink = (album: Album) => {
     const url = `${location.origin}/${shop.slug}/a/${album.id}`
     void copyText(url).then((done) =>
-      setToast({ text: done ? 'Ссылка на альбом скопирована' : 'Не удалось скопировать ссылку' }),
+      setToast({
+        text: !done
+          ? 'Не удалось скопировать ссылку'
+          : // Черновик покупателям не показывается — ссылка заработает после публикации.
+            album.status === 'draft'
+            ? 'Ссылка скопирована — откроется после публикации'
+            : 'Ссылка на альбом скопирована',
+      }),
     )
   }
 
@@ -293,7 +288,7 @@ export function AlbumsPage() {
           <Icon as={Upload} size={18} />
           Загрузить фото
         </button>
-        {top.length > 0 && (
+        {(loading || top.length > 0) && (
           <>
         {/* Планшет (макет 10 · Tablet): поиск, сортировка и фильтр — второй строкой. */}
         <span className="albar__break" aria-hidden="true" />
@@ -309,6 +304,19 @@ export function AlbumsPage() {
             placeholder="Поиск по названию"
             aria-label="Поиск по названию"
           />
+          {query && (
+            <button
+              type="button"
+              className="albar__clear"
+              onClick={() => {
+                setQuery('')
+                setPage(1)
+              }}
+              aria-label="Очистить поиск"
+            >
+              <Icon as={X} size={16} />
+            </button>
+          )}
         </label>
         <Popover
           open={menu === 'sort'}
@@ -343,7 +351,13 @@ export function AlbumsPage() {
           label={filterCount > 0 ? `Фильтр · ${filterCount}` : 'Фильтр'}
           title="Фильтр"
           active={filterCount > 0}
-          icon={<Icon as={Filter} />}
+          icon={
+            <>
+              <Icon as={Filter} />
+              {/* Телефон: подписи нет — число фильтров бейджем (макет 10 · Mobile · «Фильтр применён»). */}
+              {filterCount > 0 && <span className="al__badge">{filterCount}</span>}
+            </>
+          }
           chevron={false}
           sheet
         >
@@ -351,7 +365,7 @@ export function AlbumsPage() {
             key={menu}
             value={filter}
             categories={cats}
-            count={(draft) => applyFilter(albums.data, query, draft).length}
+            count={(draft) => applyFilter(all, query, draft).length}
             onApply={(next) => {
               changeFilter(next)
               setMenu('none')
@@ -476,7 +490,7 @@ export function AlbumsPage() {
 
       {deleting && (
         <Portal><div className="modal__back" role="alertdialog" aria-modal="true" aria-label="Удаление альбомов">
-          <div className="modal modal--sm">
+          <div className="modal modal--sm al__confirm">
             <span className="confirm__ico" aria-hidden="true">
               <Icon as={Trash2} size={22} />
             </span>
@@ -493,8 +507,9 @@ export function AlbumsPage() {
                   ? `Альбом и все ${deleting[0].photo_count.toLocaleString('ru-RU')} фото в нём переместятся`
                   : 'Альбом вместе с содержимым переместится'
                 : 'Альбомы и все фото в них переместятся'}{' '}
-              в «Удаленное». Там их можно восстановить, пока не истечёт срок хранения, потом они удалятся
-              навсегда.
+              в «Удаленное». Там их можно восстановить{' '}
+              {keepDays ? `в течение ${keepDays} ${plural(keepDays, 'дня', 'дней', 'дней')}` : 'пока не истечёт срок хранения'}, потом
+              они удалятся навсегда.
             </p>
             <div className="modal__foot">
               <span className="spacer" />
@@ -516,7 +531,7 @@ export function AlbumsPage() {
       )}
 
       {toast && (
-        <Toast
+        <div className="al__toast"><Toast
           text={toast.text}
           actions={
             toast.action
@@ -532,10 +547,12 @@ export function AlbumsPage() {
               : []
           }
           onClose={() => setToast(null)}
-        />
+        /></div>
       )}
 
-      {top.length > 0 && (
+      {/* Без найденных альбомов строки «Выбрать все · 0 альбомов» нет —
+          только пустое состояние (макет 10 · «Поиск без результатов»). */}
+      {(loading || found.length > 0) && (
         <div className="alhead">
           <SelectAll picked={pickedAlbums.length} all={allPicked} onToggle={toggleAll} disabled={shown.length === 0} />
           {pickedAlbums.length > 0 && (
@@ -566,9 +583,26 @@ export function AlbumsPage() {
             </>
           )}
           <span className="spacer" />
-          <span>
-            {found.length} {albumsWord(found.length)}
-          </span>
+          {!loading && (
+            <span>
+              {found.length} {albumsWord(found.length)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {loading && (
+        <div className="algrid" aria-busy="true" aria-label="Загрузка альбомов">
+          {Array.from({ length: 12 }, (_, i) => (
+            <div key={i} className="alcard">
+              <div className="alcard__cover skel" />
+              <div className="alcard__body">
+                <span className="skel skel--line" />
+                <span className="skel skel--line skel--short" />
+                <span className="skel skel--pill" />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -595,7 +629,7 @@ export function AlbumsPage() {
         </div>
       )}
 
-      {top.length === 0 && (
+      {!loading && top.length === 0 && (
         <div className="emptybox">
           <div className="emptybox__ico emptybox__ico--brand" aria-hidden="true">
             <Icon as={FolderPlus} size={28} />
@@ -654,6 +688,22 @@ export function AlbumsPage() {
               </option>
             ))}
           </select>
+          {/* Номер страницы списком — быстрый переход к дальней странице (макет 10). */}
+          <span className="alpager__page">
+            <select
+              className="inp albar__sel"
+              value={current}
+              onChange={(e) => setPage(Number(e.target.value))}
+              aria-label="Страница"
+            >
+              {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <Icon as={ChevronDown} size={16} />
+          </span>
           <button onClick={() => setPage(current - 1)} disabled={current === 1} aria-label="Назад">
             <Icon as={ChevronLeft} />
           </button>
@@ -824,48 +874,44 @@ function AlbumCard({
             </button>
           )}
           <span className="spacer" />
-          {/* Подсказки при наведении (макет 10): замок и скрепка. На Free
-              паролей нет — в подсказке ссылка «Оплатить подписку». */}
+          {/* Подсказки при наведении (макет 10): замок и скрепка. Замок
+              открытый, если пароля нет. На Бесплатном пароль не задать —
+              в подсказке ссылка «Сменить тариф». */}
           {!album.blocked_by_moderator && (
-            <span className="tip">
-            <button
-              className={`alcard__ico ${album.has_password ? 'alcard__ico--on' : ''}`}
-              onClick={onAccess}
-              aria-label={`«${album.title}»: ${album.has_password ? 'защищён паролем' : 'без пароля'}. Изменить доступ`}
-            >
-              <Icon as={Lock} strokeWidth={2.4} />
-            </button>
+            <span className="tip tip--lock">
+              <button
+                className={`alcard__ico ${album.has_password ? 'alcard__ico--on' : ''}`}
+                onClick={onAccess}
+                aria-label={`«${album.title}»: ${album.has_password ? 'защищён паролем' : 'без пароля'}. Изменить доступ`}
+              >
+                <Icon as={album.has_password ? Lock : LockOpen} strokeWidth={2.4} />
+              </button>
               <span className="tip__body" role="tooltip">
-                {album.has_password && free ? (
-                  // Пароль остался с платного тарифа (макет 10).
+                {free ? (
                   <>
-                    <b>Защищён паролем</b>Пароль сохранён, но на вашем тарифе изменить его нельзя.{' '}
-                    <Link to="/billing">Оплатить подписку</Link>
-                  </>
-                ) : album.has_password ? (
-                  <>
-                    <b>Защищён паролем</b>Нажмите, чтобы изменить доступ
-                  </>
-                ) : free ? (
-                  <>
-                    <b>Без пароля</b>На вашем тарифе опция недоступна ·{' '}
-                    <Link to="/billing">Оплатить подписку</Link>
+                    {album.has_password
+                      ? 'Пароль сохранён, но на вашем тарифе изменить его нельзя'
+                      : 'На вашем тарифе опция недоступна'}
+                    {' · '}
+                    <Link to="/billing">Сменить тариф</Link>
                   </>
                 ) : (
                   <>
-                    <b>Без пароля</b>Нажмите, чтобы задать пароль
+                    <b>{album.has_password ? 'Защищён паролем' : 'Без пароля'}</b>
+                    <span className="tip__sub">Нажмите, чтобы изменить доступ</span>
                   </>
                 )}
               </span>
             </span>
           )}
-          {album.status !== 'draft' && !album.blocked_by_moderator && (
+          {/* Скрепка и у черновика (макет 10 · «Подсказки на иконках»). */}
+          {!album.blocked_by_moderator && (
             <span className="tip">
-            <button className="alcard__ico" onClick={onCopy} aria-label={`Скопировать ссылку на «${album.title}»`}>
-              <Icon as={LinkIcon} strokeWidth={2.4} />
-            </button>
+              <button className="alcard__ico" onClick={onCopy} aria-label={`Скопировать ссылку на «${album.title}»`}>
+                <Icon as={LinkIcon} strokeWidth={2.4} />
+              </button>
               <span className="tip__body" role="tooltip">
-                Скопировать ссылку на альбом
+                Скопировать ссылку
               </span>
             </span>
           )}
