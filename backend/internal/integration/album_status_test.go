@@ -87,3 +87,38 @@ func TestAlbumStatus(t *testing.T) {
 		}
 	})
 }
+
+// TestAlbumCreateStatus: окно «Новый альбом» создаёт черновик сразу, а не
+// «опубликован» с последующей сменой — обрыв посреди цепочки запросов
+// оставлял пустой альбом открытым на витрине.
+func TestAlbumCreateStatus(t *testing.T) {
+	c := newClient(t)
+	registerUser(c)
+	shop := createShop(c)
+
+	var al albumJSON
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": "Черновик", "status": "draft"}, http.StatusCreated, &al)
+	var got struct {
+		Status string `json:"status"`
+	}
+	c.mustJSON("GET", fmt.Sprintf("/api/v1/shops/%s/albums/%s", shop.ID, al.ID), nil, http.StatusOK, &got)
+	if got.Status != "draft" {
+		t.Fatalf("status %q, want draft", got.Status)
+	}
+	if st, _ := c.do("GET", fmt.Sprintf("/api/v1/public/shops/%s/albums/%s", shop.Slug, al.ID), nil); st != http.StatusNotFound {
+		t.Errorf("черновик по прямой ссылке: %d, want 404", st)
+	}
+
+	var albums []struct{}
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums", nil, http.StatusOK, &albums)
+	before := len(albums)
+	if st, body := c.do("POST", "/api/v1/shops/"+shop.ID+"/albums",
+		map[string]any{"title": "Плохой", "status": "hidden"}); st != http.StatusBadRequest {
+		t.Fatalf("неизвестный статус: %d, want 400; body: %s", st, body)
+	}
+	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/albums", nil, http.StatusOK, &albums)
+	if len(albums) != before {
+		t.Error("на 400 альбом всё равно создался")
+	}
+}

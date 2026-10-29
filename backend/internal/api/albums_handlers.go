@@ -156,6 +156,11 @@ type createAlbumRequest struct {
 	Title     string  `json:"title"`
 	ParentID  *string `json:"parent_id"`
 	SortOrder int32   `json:"sort_order"`
+	// Status — доступ сразу при создании (по умолчанию published). Окно
+	// «Новый альбом» создаёт черновик и публикует его, только когда пароль и
+	// остальные настройки записаны: обрыв посреди цепочки иначе оставлял
+	// пустой альбом открытым на витрине.
+	Status *string `json:"status"`
 	// Watermark — свой знак альбома (необязательно; см. albumWatermark).
 	Watermark json.RawMessage `json:"watermark"`
 }
@@ -170,6 +175,16 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 	if req.Title == "" || len([]rune(req.Title)) > 200 {
 		apiError(w, http.StatusBadRequest, "invalid_title", "title must be 1-200 characters")
 		return
+	}
+	status := db.AlbumStatusPublished
+	if req.Status != nil {
+		switch db.AlbumStatus(*req.Status) {
+		case db.AlbumStatusPublished, db.AlbumStatusUnlisted, db.AlbumStatusDraft:
+			status = db.AlbumStatus(*req.Status)
+		default:
+			apiError(w, http.StatusBadRequest, "invalid_status", "status must be published, unlisted or draft")
+			return
+		}
 	}
 
 	// Число альбомов тарифом не ограничено, а страница магазина отдаёт их
@@ -211,6 +226,16 @@ func (a *API) handleCreateAlbum(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			return fmt.Errorf("create album: %w", err)
+		}
+		// В той же транзакции: снаружи альбом не бывает виден с другим доступом.
+		if status != album.Status {
+			if album, err = q.UpdateAlbum(r.Context(), db.UpdateAlbumParams{
+				ID: album.ID, ShopID: shop.ID, ParentID: album.ParentID, Title: album.Title,
+				SortOrder: album.SortOrder, Status: status, CoverPhotoID: album.CoverPhotoID,
+				Description: album.Description,
+			}); err != nil {
+				return fmt.Errorf("set album status: %w", err)
+			}
 		}
 		if wmValue != nil {
 			if album, err = q.SetAlbumWatermark(r.Context(), db.SetAlbumWatermarkParams{
@@ -315,8 +340,10 @@ type updateAlbumRequest struct {
 // допустим; длинный ограничен, чтобы хеширование не стало способом
 // нагрузить сервер.
 const (
-	minAlbumPassword = 4
-	maxAlbumPassword = 64
+	// Предел описания — как счётчик в окнах альбома (макет 11–12 · «0 / 3 500»).
+	maxAlbumDescription = 3500
+	minAlbumPassword    = 4
+	maxAlbumPassword    = 64
 )
 
 // resolveAlbumParent разбирает parent_id. self — id альбома, который правим
@@ -405,8 +432,9 @@ func (a *API) handleUpdateAlbum(w http.ResponseWriter, r *http.Request) {
 	if req.Description != nil {
 		// Описание длинное по назначению: там условия отправки и оплаты.
 		// Ограничиваем разумной длиной, чтобы не превратить его в статью.
-		if len([]rune(*req.Description)) > 2000 {
-			apiError(w, http.StatusBadRequest, "invalid_description", "description must be at most 2000 characters")
+		if len([]rune(*req.Description)) > maxAlbumDescription {
+			apiError(w, http.StatusBadRequest, "invalid_description",
+				fmt.Sprintf("description must be at most %d characters", maxAlbumDescription))
 			return
 		}
 		description = *req.Description
