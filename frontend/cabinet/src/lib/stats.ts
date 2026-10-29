@@ -16,3 +16,20 @@ export function fillDays(daily: ShopStats['daily'], days: number, now = new Date
   }
   return out
 }
+
+// Даты аналитики — строки YYYY-MM-DD в UTC, как их считает сервер.
+export const isoDay = (d: Date) => d.toISOString().slice(0, 10)
+export const addDays = (iso: string, n: number) => isoDay(new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000))
+export const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000) + 1
+
+// fillRange — то же, что fillDays, но по явным границам (включительно):
+// для «Своего периода» и прошлого отрезка сравнения.
+export function fillRange(daily: ShopStats['daily'], from: string, to: string): ShopStats['daily'] {
+  const byDate = new Map(daily.map((d) => [d.date, d]))
+  const out: ShopStats['daily'] = []
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    out.push(byDate.get(date) ?? { date, views: 0, unique_visitors: 0, lead_clicks: 0 })
+  }
+  return out
+}
