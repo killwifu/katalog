@@ -278,11 +278,11 @@ func TestPasswordResetFlow(t *testing.T) {
 
 	c.mustJSON("POST", "/api/v1/auth/password/forgot",
 		map[string]string{"email": email}, http.StatusNoContent, nil)
-	msg := waitEmail(t, email, "Сброс пароля")
+	msg := waitEmail(t, email, "Восстановление пароля")
 	token := extractToken(t, msg.Text, "/app/reset-password?token=")
 
 	c.mustJSON("POST", "/api/v1/auth/password/reset",
-		map[string]string{"token": token, "password": "newpassword456"}, http.StatusNoContent, nil)
+		map[string]string{"token": token, "password": "newpassword456"}, http.StatusOK, nil)
 
 	// Старый пароль больше не подходит, новый — работает.
 	fresh := newClient(t)
@@ -307,10 +307,11 @@ func TestPasswordResetFlow(t *testing.T) {
 // TestEmailVerification: письмо при регистрации -> подтверждение -> флаг в /me.
 func TestEmailVerification(t *testing.T) {
 	c := newClient(t)
-	user := registerUser(c)
-	email := *user.Email
+	email := uniqueEmail()
+	c.mustJSON("POST", "/api/v1/auth/register",
+		map[string]string{"email": email, "password": "password123"}, http.StatusCreated, nil)
 
-	msg := waitEmail(t, email, "Подтвердите регистрацию")
+	msg := waitEmail(t, email, "Подтвердите почту")
 	token := extractToken(t, msg.Text, "/app/verify-email?token=")
 
 	var me struct {
@@ -322,7 +323,7 @@ func TestEmailVerification(t *testing.T) {
 	}
 
 	c.mustJSON("POST", "/api/v1/auth/verify-email",
-		map[string]string{"token": token}, http.StatusNoContent, nil)
+		map[string]string{"token": token}, http.StatusOK, nil)
 	c.mustJSON("GET", "/api/v1/auth/me", nil, http.StatusOK, &me)
 	if !me.EmailVerified {
 		t.Fatal("email not verified after confirmation")

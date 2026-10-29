@@ -50,8 +50,25 @@ paths:
     post:
       operationId: register
       summary: Регистрация по email и паролю (argon2id), создаёт сессию
+      description: >
+        Уходит письмо «Подтвердите почту» (ссылка 24 часа). Пока почта не
+        подтверждена, витрину не создать (POST /shops — 403 email_not_verified).
+        plan/period/trial — тариф с лендинга, едет в ссылку из письма.
+        В домене почты обязательна точка («a@mail» — 400 invalid_email).
       requestBody:
-        $ref: "#/components/requestBodies/Credentials"
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 128 }
+                plan: { type: string, enum: [standard, pro, business] }
+                period: { $ref: "#/components/schemas/BillingPeriod" }
+                trial: { type: boolean }
       responses:
         "201":
           description: Пользователь создан, cookie установлена
@@ -78,7 +95,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "429": { $ref: "#/components/responses/RateLimited" }
+        "429":
+          description: >
+            rate_limited (по IP) или login_locked — 5 неверных паролей подряд
+            на эту почту, вход закрыт на 15 минут (и с верным паролем).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
@@ -114,7 +137,8 @@ paths:
       summary: Запросить сброс пароля (письмо со ссылкой)
       description: >
         Всегда 204 — существование email не раскрывается. Если email
-        зарегистрирован, на него уходит одноразовая ссылка (TTL 1 час).
+        зарегистрирован, на него уходит одноразовая ссылка (TTL 1 час) —
+        не чаще раза в минуту на адрес (повтор молча не шлёт письмо).
       requestBody:
         required: true
         content:
@@ -147,7 +171,15 @@ paths:
                 token: { type: string }
                 password: { type: string, minLength: 8, maxLength: 128 }
       responses:
-        "204": { description: Пароль обновлён }
+        "200":
+          description: Пароль обновлён; почта аккаунта — для «Войти» с подставленной почтой
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email]
+                properties:
+                  email: { type: [string, "null"] }
         "400":
           description: Токен недействителен/использован (error=invalid_token) или слабый пароль
           content:
@@ -187,10 +219,170 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
+  /api/v1/auth/password/reset/check:
+    post:
+      operationId: checkResetToken
+      summary: Жива ли ссылка сброса (не расходует токен)
+      requestBody:
+        $ref: "#/components/requestBodies/Token"
+      responses:
+        "204": { description: Ссылка действует }
+        "400":
+          description: invalid_token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/verify-email/resend:
+    post:
+      operationId: resendVerification
+      summary: Отправить письмо «Подтвердите почту» ещё раз (не чаще раза в минуту)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                plan: { type: string, enum: [standard, pro, business] }
+                period: { $ref: "#/components/schemas/BillingPeriod" }
+                trial: { type: boolean }
+      responses:
+        "204": { description: Письмо отправлено (или почта уже подтверждена) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429":
+          description: resend_too_soon — прошло меньше минуты с прошлого письма
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/auth/register/cancel:
+    post:
+      operationId: cancelRegistration
+      summary: «Изменить почту» — удалить свой аккаунт с неподтверждённой почтой и без витрины
+      requestBody:
+        $ref: "#/components/requestBodies/Empty"
+      responses:
+        "204": { description: "Аккаунт удалён, сессия закрыта" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: already_verified — почта подтверждена или витрина уже есть
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/auth/email/change:
+    post:
+      operationId: changeEmail
+      summary: Сменить почту для входа — письмо «Подтвердите новую почту» на новую
+      description: >
+        Новая почта сохраняется только после перехода по ссылке (24 часа);
+        до этого она в pending_email у /auth/me. Аккаунту с паролем нужен
+        текущий пароль. Не чаще раза в минуту.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "204": { description: Письмо отправлено }
+        "400":
+          description: invalid_email, wrong_password, same_email
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/email/confirm:
+    post:
+      operationId: confirmEmailChange
+      summary: Подтвердить новую почту по ссылке из письма (без сессии)
+      requestBody:
+        $ref: "#/components/requestBodies/Token"
+      responses:
+        "204": { description: Почта для входа изменена и подтверждена }
+        "400":
+          description: invalid_token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/auth/options:
+    get:
+      operationId: authOptions
+      summary: Кнопки входа через провайдеров и цены тарифов для экранов регистрации
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers, prices]
+                properties:
+                  providers:
+                    description: Провайдеры с ключами на сервере (MAX публичного OAuth не даёт)
+                    type: array
+                    items: { type: string, enum: [yandex, vk] }
+                  prices:
+                    description: Цена в копейках за месяц и за год (−25%)
+                    type: object
+                    additionalProperties:
+                      type: object
+                      required: [month, year]
+                      properties:
+                        month: { type: integer }
+                        year: { type: integer }
+
+  /api/v1/auth/oauth/{provider}/start:
+    get:
+      operationId: oauthStart
+      summary: Начать вход через Яндекс / VK (переход браузера)
+      description: >
+        Редирект на провайдера: authorization code + PKCE S256 + state
+        (state и в cookie katalog_oauth). plan/period/trial — тариф с лендинга.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [yandex, vk] } }
+        - { name: plan, in: query, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string } }
+        - { name: trial, in: query, schema: { type: string } }
+      responses:
+        "302": { description: Редирект на страницу входа провайдера }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/auth/oauth/{provider}/callback:
+    get:
+      operationId: oauthCallback
+      summary: Возврат от провайдера (redirect_uri)
+      description: >
+        Аккаунт ищется по привязке (провайдер, id), затем по почте провайдера;
+        иначе создаётся новый — сразу с подтверждённой почтой. Привязка к
+        аккаунту с неподтверждённой почтой сбрасывает его пароль. Успех —
+        302 на /app/ (+ тариф), ошибка — 302 на /app/login?oauth_error=1.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: device_id, in: query, schema: { type: string }, description: VK ID }
+      responses:
+        "302": { description: Редирект в кабинет или на вход }
+
   /api/v1/auth/verify-email:
     post:
       operationId: verifyEmail
-      summary: Подтвердить email по токену из письма регистрации
+      summary: Подтвердить email по токену из письма регистрации (открывает сессию)
       requestBody:
         required: true
         content:
@@ -202,7 +394,12 @@ paths:
               properties:
                 token: { type: string }
       responses:
-        "204": { description: Email подтверждён }
+        "200":
+          description: Email подтверждён, cookie сессии установлена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
         "400":
           description: Токен недействителен или использован (error=invalid_token)
           content:
@@ -255,6 +452,11 @@ paths:
                 $ref: "#/components/schemas/Shop"
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: email_not_verified — почта не подтверждена
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "409": { $ref: "#/components/responses/Conflict" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
     get:
@@ -269,6 +471,26 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Shop"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/shops/slug-check:
+    get:
+      operationId: checkSlug
+      summary: Свободен ли адрес витрины (проверка при вводе)
+      description: Свой адрес и своя бронь — свободны; чужие — slug_taken.
+      parameters:
+        - { name: slug, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available]
+                properties:
+                  available: { type: boolean }
+                  error: { type: string, enum: [slug_taken, invalid_slug, slug_reserved] }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/v1/shops/{shopID}:
@@ -2174,6 +2396,21 @@ components:
       schema: { type: string, format: uuid }
 
   requestBodies:
+    Token:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [token]
+            properties:
+              token: { type: string }
+    Empty:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: false }
     Credentials:
       required: true
       content:
@@ -2255,6 +2492,12 @@ components:
         email: { type: [string, "null"], format: email }
         role: { type: string, enum: [user, admin] }
         email_verified: { type: boolean }
+        pending_email:
+          description: Новая почта из «Настроек», ждущая подтверждения по ссылке
+          type: [string, "null"]
+        has_password:
+          description: false — аккаунт создан входом через Яндекс/VK
+          type: boolean
 
     ShopStats:
       type: object

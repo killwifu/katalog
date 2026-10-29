@@ -45,11 +45,43 @@ func TestChargeFailedTellsWhatToDo(t *testing.T) {
 }
 
 func TestPaymentSucceededFormatsAmount(t *testing.T) {
-	tpl := PaymentSucceeded("Shop", "pro", 99000, "01.09.2026")
+	tpl := PaymentSucceeded("https://katalog.ru", "Shop", "pro", 99000, "01.09.2026")
 	if !strings.Contains(tpl.Text, "990 ₽") {
 		t.Errorf("копейки не переведены в рубли:\n%s", tpl.Text)
 	}
 	if !strings.Contains(tpl.Text, "01.09.2026") {
 		t.Error("нет даты окончания подписки")
+	}
+}
+
+// HTML-версия экранирует пользовательские данные (название магазина, почту)
+// и несёт ту же ссылку, что и текст.
+func TestLetterHTMLEscapesAndLinks(t *testing.T) {
+	tpl := ConfirmNewEmail("https://vuad.example", `<script>x</script>`, "https://vuad.example/app/confirm-email?token=abc")
+	if strings.Contains(tpl.HTML, "<script>x") {
+		t.Error("название магазина не экранировано в HTML")
+	}
+	for _, s := range []string{tpl.HTML, tpl.Text} {
+		if !strings.Contains(s, "token=abc") {
+			t.Errorf("нет ссылки подтверждения:\n%s", s)
+		}
+		if !strings.Contains(s, "vuad.example") || !strings.Contains(s, "© ") {
+			t.Errorf("нет футера с доменом из конфига:\n%s", s)
+		}
+	}
+	if strings.Contains(tpl.Text, "**") {
+		t.Error("разметка жирного осталась в text/plain")
+	}
+}
+
+func TestBuildRFC822Multipart(t *testing.T) {
+	raw := string(buildRFC822(`"ВУАД" <noreply@vuad.example>`, Message{To: "a@b.ru", Subject: "Тема", Text: "t", HTML: "<p>h</p>"}))
+	for _, want := range []string{"multipart/alternative", "text/plain; charset=utf-8", "text/html; charset=utf-8", "--" + mimeBoundary + "--"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("нет %q в письме:\n%s", want, raw)
+		}
+	}
+	if strings.Contains(string(buildRFC822("x", Message{Text: "t"})), "multipart") {
+		t.Error("письмо без HTML должно остаться text/plain")
 	}
 }

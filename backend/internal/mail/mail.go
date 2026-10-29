@@ -5,9 +5,11 @@ package mail
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"mime"
+	"net/mail"
 	"net/smtp"
 	"strings"
 
@@ -18,6 +20,9 @@ type Message struct {
 	To      string
 	Subject string
 	Text    string
+	// HTML — вёрстка письма; пусто = только text/plain. Text остаётся
+	// альтернативой для клиентов без HTML.
+	HTML string
 }
 
 type Sender interface {
@@ -43,22 +48,47 @@ func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 		auth = smtp.PlainAuth("", s.cfg.SMTPUser, s.cfg.SMTPPass, s.cfg.SMTPHost)
 	}
 	addr := fmt.Sprintf("%s:%d", s.cfg.SMTPHost, s.cfg.SMTPPort)
-	if err := smtp.SendMail(addr, auth, s.cfg.From, []string{msg.To}, buildRFC822(s.cfg.From, msg)); err != nil {
+	from := (&mail.Address{Name: s.cfg.FromName, Address: s.cfg.From}).String()
+	if err := smtp.SendMail(addr, auth, s.cfg.From, []string{msg.To}, buildRFC822(from, msg)); err != nil {
 		return fmt.Errorf("smtp send to %s: %w", msg.To, err)
 	}
 	return nil
 }
 
-// buildRFC822 собирает простое text/plain письмо в UTF-8.
+// mimeBoundary — граница частей multipart/alternative. Base64-тела её
+// содержать не могут (в алфавите base64 нет «=_»), поэтому одна на все письма.
+const mimeBoundary = "=_katalog_alt_boundary"
+
+// buildRFC822 собирает письмо в UTF-8: text/plain или, если есть HTML,
+// multipart/alternative (сначала текст, потом HTML — клиент берёт последнюю
+// часть, которую умеет показать). from — уже готовый заголовок «Имя <адрес>».
 func buildRFC822(from string, msg Message) []byte {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + msg.To + "\r\n")
 	b.WriteString("Subject: " + mime.QEncoding.Encode("utf-8", msg.Subject) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("\r\n")
-	b.WriteString(msg.Text)
+	if msg.HTML == "" {
+		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n\r\n")
+		b.WriteString(msg.Text)
+		return []byte(b.String())
+	}
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + mimeBoundary + "\"\r\n\r\n")
+	for _, part := range []struct{ ctype, body string }{
+		{"text/plain", msg.Text},
+		{"text/html", msg.HTML},
+	} {
+		b.WriteString("--" + mimeBoundary + "\r\n")
+		b.WriteString("Content-Type: " + part.ctype + "; charset=utf-8\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		enc := base64.StdEncoding.EncodeToString([]byte(part.body))
+		for len(enc) > 76 {
+			b.WriteString(enc[:76] + "\r\n")
+			enc = enc[76:]
+		}
+		b.WriteString(enc + "\r\n")
+	}
+	b.WriteString("--" + mimeBoundary + "--\r\n")
 	return []byte(b.String())
 }
 
@@ -68,6 +98,7 @@ type LogSender struct {
 }
 
 func (l *LogSender) Send(_ context.Context, msg Message) error {
-	l.Log.Info("email (log sender)", "to", msg.To, "subject", msg.Subject, "text", msg.Text)
+	// HTML в лог не пишем целиком — по тексту видно содержание и ссылки.
+	l.Log.Info("email (log sender)", "to", msg.To, "subject", msg.Subject, "text", msg.Text, "html_bytes", len(msg.HTML))
 	return nil
 }

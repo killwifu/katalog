@@ -292,28 +292,79 @@ select.inp:disabled { background-color: var(--color-surface-alt); }
 .stat span { font-size: var(--text-sm); color: var(--color-ink-2); }
 .stat em { font-style: normal; font-size: var(--text-xs); color: var(--color-ink-3); }
 
-/* --- Онбординг ------------------------------------------------------------
-   Ровно три шага (макет auth/onboarding). Цель — не «зарегистрировать»,
-   а довести до первой отправленной ссылки: она запускает и продажи,
-   и вирусный канал. Всё остальное отложено в кабинет.
+/* --- Вход, регистрация, восстановление, создание витрины ------------------
+   Макеты 04–08: шапка с логотипом «вуад», белая карточка 440 с тенью,
+   поля с серой заливкой, ошибки у полей (рамка #D92D20 + иконка + текст).
+   На телефоне карточка во всю ширину.
    -------------------------------------------------------------------------- */
 
-.ob { max-width: 460px; margin: 0 auto; padding: 32px 20px 48px; }
-.ob__steps { display: flex; align-items: center; gap: 5px; margin-bottom: 22px; }
-.ob__steps i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-line-strong); }
-.ob__steps i.done { background: var(--color-brand); }
-.ob__steps i.now { width: 22px; border-radius: var(--radius-pill); background: var(--color-brand); }
-.ob__steps span { margin-left: auto; font-size: var(--text-xs); color: var(--color-ink-3); }
-.ob h1 { font-size: var(--text-h1); font-weight: 600; line-height: 1.3; margin-bottom: 8px; }
-.ob__lead { font-size: var(--text-sm); line-height: 1.6; color: var(--color-ink-2); margin-bottom: 22px; }
-.ob__skip { display: block; width: 100%; text-align: center; font-size: var(--text-sm); color: var(--color-ink-3); margin-top: 16px; background: none; border: 0; cursor: pointer; }
-.ob__skip:hover { color: var(--color-ink-2); }
-.ob__done {
-  width: 48px; height: 48px; border-radius: 50%; background: #DFF3E4; color: #1B6B3A;
-  display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 16px;
+.au { min-height: 100vh; display: flex; flex-direction: column; background: var(--color-page); }
+.au__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 24px 40px; }
+.au__logo { font-size: 24px; line-height: 29px; font-weight: 700; color: var(--color-ink); }
+.au__top p { font-size: 15px; line-height: 22px; color: var(--color-ink-3); text-align: right; }
+.au .lnk { color: var(--color-brand); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.au .lnk:hover { text-decoration: underline; }
+.au__body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 16px 80px; }
+.au__card {
+  width: 100%; max-width: 440px; padding: 40px; background: var(--color-surface);
+  border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, .12);
+  display: flex; flex-direction: column; gap: 24px;
 }
-.ob__link { padding: 14px; background: var(--color-brand-soft); border-radius: var(--radius-el); margin-bottom: 16px; }
-.ob__link p { font-size: var(--text-sm); color: var(--color-brand-ink); word-break: break-all; margin-bottom: 10px; }
+.au__form { display: flex; flex-direction: column; gap: 24px; }
+.au__card h1 { font-size: 28px; line-height: 34px; font-weight: 700; color: var(--color-ink); }
+.au__lead { margin-top: 8px; font-size: 15px; line-height: 22px; color: var(--color-ink-2); }
+.au__lead b { font-weight: 400; color: var(--color-ink); }
+.au__fields { display: flex; flex-direction: column; gap: 16px; }
+.au__stack { display: flex; flex-direction: column; gap: 20px; }
+.au-field__label { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; line-height: 16px; font-weight: 500; color: var(--color-ink-2); }
+.au-inp {
+  display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px;
+  background: var(--color-page); border: 1px solid transparent; border-radius: 12px;
+}
+.au-inp:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-soft); }
+.au-inp--err, .au-inp--err:focus-within { border-color: #D92D20; }
+.au-inp--off { color: var(--color-ink-3); }
+.au-inp input { flex: 1; min-width: 0; height: 100%; padding: 0; background: none; border: 0; outline: none; font: inherit; font-size: 15px; color: inherit; }
+.au-inp input::placeholder { color: var(--color-ink-3); }
+.au-inp__pre { margin-right: -6px; font-size: 15px; color: var(--color-ink-3); }
+.au-eye { display: flex; padding: 0; background: none; border: 0; color: var(--color-ink-3); cursor: pointer; }
+.au-msg { display: flex; gap: 6px; margin-top: 8px; font-size: 13px; line-height: 18px; }
+.au-msg svg { flex: none; margin-top: 2px; }
+.au-msg--err { color: #D92D20; }
+.au-msg--ok { color: #1B6B3A; }
+.au-hint { margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--color-ink-3); }
+.au-note { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; background: var(--color-brand-soft); border-radius: 16px; }
+.au-note i { flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--color-surface); color: var(--color-brand); }
+.au-note b { display: block; font-size: 14px; font-weight: 600; color: var(--color-ink); }
+.au-note span { display: block; margin-top: 2px; font-size: 13px; color: var(--color-ink-2); }
+.au-alert { display: flex; gap: 10px; padding: 12px 14px; background: #FDECEA; border-radius: 12px; font-size: 14px; line-height: 20px; color: #A3261B; }
+.au-alert svg { flex: none; margin-top: 2px; color: #D92D20; }
+/* .au перед классом — сильнее «Кнопок v2» ниже по файлу (13.5/500). */
+.au .au-btn { width: 100%; min-height: 47px; border-radius: var(--radius-pill); font-size: 16px; line-height: 19px; font-weight: 600; }
+.au .au-btn.btn--ghost { color: var(--color-ink); border-color: var(--color-line-strong); }
+.au .au-btn.btn--primary:disabled { opacity: 1; background: #9FAEE8; }
+.au .au-btn.btn--ghost:disabled { opacity: 1; color: var(--color-ink-3); }
+.au-or { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--color-ink-3); }
+.au-or::before, .au-or::after { content: ""; flex: 1; height: 1px; background: var(--color-line); }
+.au-social { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; margin-top: 14px; }
+.au-social a { display: flex; align-items: center; justify-content: center; height: 48px; background: var(--color-surface); border: 1px solid var(--color-line-strong); border-radius: 12px; }
+.au-social a:hover { border-color: var(--color-ink-3); }
+.au-social a.is-off { pointer-events: none; opacity: .5; }
+.au-legal { font-size: 13px; line-height: 19px; color: var(--color-ink-3); }
+.au-small { font-size: 14px; line-height: 20px; color: var(--color-ink-3); }
+.au-center { display: block; align-self: center; text-align: center; font-size: 15px; }
+.au-ico { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; }
+.au-ico--mail { background: var(--color-brand-soft); color: var(--color-brand); }
+.au-ico--error { background: #FDECEA; color: #D92D20; }
+.au-ico--ok { background: #DFF3E4; color: #1B6B3A; }
+@media (max-width: 600px) {
+  .au__top { padding: 14px 18px; }
+  .au__logo { font-size: 22px; line-height: 27px; }
+  .au__top p { font-size: 14px; line-height: 20px; }
+  .au__body { padding: 24px 18px; }
+  .au__card { padding: 24px; border-radius: 20px; }
+  .au-inp input { font-size: 16px; }
+}
 
 /* --- Предпросмотр водяного знака ------------------------------------------
    Знак необратим: он впекается при загрузке. Продавец должен увидеть

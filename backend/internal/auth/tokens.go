@@ -25,12 +25,20 @@ func NewTokens(rdb *redis.Client) *Tokens {
 	return &Tokens{rdb: rdb}
 }
 
-func (t *Tokens) Create(ctx context.Context, purpose string, userID uuid.UUID, ttl time.Duration) (string, error) {
+// NewToken — случайный токен для ссылок в письмах и OAuth state (256 бит, hex).
+func NewToken() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
-	token := hex.EncodeToString(raw)
+	return hex.EncodeToString(raw), nil
+}
+
+func (t *Tokens) Create(ctx context.Context, purpose string, userID uuid.UUID, ttl time.Duration) (string, error) {
+	token, err := NewToken()
+	if err != nil {
+		return "", err
+	}
 	// Токен и его запись в индексе пользователя — одной транзакцией: по
 	// индексу RevokeAll находит все невыданные токены (см. ниже).
 	idx := indexKey(purpose, userID)
@@ -57,6 +65,18 @@ func (t *Tokens) Consume(ctx context.Context, purpose, token string) (uuid.UUID,
 		return uuid.Nil, fmt.Errorf("parse %s token user id: %w", purpose, err)
 	}
 	return userID, nil
+}
+
+// Valid — жив ли токен, не расходуя его.
+func (t *Tokens) Valid(ctx context.Context, purpose, token string) (bool, error) {
+	if token == "" {
+		return false, nil
+	}
+	n, err := t.rdb.Exists(ctx, tokenKey(purpose, token)).Result()
+	if err != nil {
+		return false, fmt.Errorf("check %s token: %w", purpose, err)
+	}
+	return n == 1, nil
 }
 
 // RevokeAll отзывает все ещё не использованные токены назначения у

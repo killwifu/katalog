@@ -50,6 +50,7 @@ func (p *Processor) mailOwner(ctx context.Context, ownerID uuid.UUID, tpl mail.T
 		To:      *user.Email,
 		Subject: tpl.Subject,
 		Text:    tpl.Text,
+		HTML:    tpl.HTML,
 	}); err != nil {
 		p.Log.Error("send owner email", "owner_id", ownerID, "subject", tpl.Subject, "error", err)
 	}
@@ -74,7 +75,7 @@ func (p *Processor) notifyStorageLimits(ctx context.Context) {
 				continue
 			}
 			tpl := mail.QuotaWarning(s.Name, p.Cfg.SiteURL, s.StorageUsed, limits.MaxStorage)
-			if err := p.Mail.Send(ctx, mail.Message{To: *s.Email, Subject: tpl.Subject, Text: tpl.Text}); err != nil {
+			if err := p.Mail.Send(ctx, mail.Message{To: *s.Email, Subject: tpl.Subject, Text: tpl.Text, HTML: tpl.HTML}); err != nil {
 				p.Log.Error("send quota warning", "shop_id", s.ID, "error", err)
 			}
 		}

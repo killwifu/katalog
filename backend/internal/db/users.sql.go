@@ -12,6 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createOAuthUser = `-- name: CreateOAuthUser :one
+INSERT INTO users (email, email_verified_at)
+VALUES ($1, now())
+RETURNING id, email, password_hash, tg_user_id, created_at, updated_at, role, email_verified_at
+`
+
+// Аккаунт, созданный входом через внешнего провайдера: почта провайдера
+// подтверждена им самим, пароля нет.
+func (q *Queries) CreateOAuthUser(ctx context.Context, email *string) (User, error) {
+	row := q.db.QueryRow(ctx, createOAuthUser, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.TgUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Role,
+		&i.EmailVerifiedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, tg_user_id)
 VALUES ($1, $2, $3)
@@ -38,6 +62,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.EmailVerifiedAt,
 	)
 	return i, err
+}
+
+const createUserIdentity = `-- name: CreateUserIdentity :exec
+INSERT INTO user_identities (provider, subject, user_id)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type CreateUserIdentityParams struct {
+	Provider string    `json:"provider"`
+	Subject  string    `json:"subject"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) CreateUserIdentity(ctx context.Context, arg CreateUserIdentityParams) error {
+	_, err := q.db.Exec(ctx, createUserIdentity, arg.Provider, arg.Subject, arg.UserID)
+	return err
 }
 
 const deleteUser = `-- name: DeleteUser :exec
@@ -92,6 +133,40 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const getUserIdentity = `-- name: GetUserIdentity :one
+SELECT user_id FROM user_identities
+WHERE provider = $1 AND subject = $2
+`
+
+type GetUserIdentityParams struct {
+	Provider string `json:"provider"`
+	Subject  string `json:"subject"`
+}
+
+func (q *Queries) GetUserIdentity(ctx context.Context, arg GetUserIdentityParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getUserIdentity, arg.Provider, arg.Subject)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const updateUserEmail = `-- name: UpdateUserEmail :exec
+UPDATE users
+SET email = $2, email_verified_at = now(), updated_at = now()
+WHERE id = $1
+`
+
+type UpdateUserEmailParams struct {
+	ID    uuid.UUID `json:"id"`
+	Email *string   `json:"email"`
+}
+
+// Смена почты по ссылке из письма: новая почта сразу подтверждена.
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
+	_, err := q.db.Exec(ctx, updateUserEmail, arg.ID, arg.Email)
+	return err
+}
+
 const updateUserPassword = `-- name: UpdateUserPassword :exec
 UPDATE users
 SET password_hash = $2, updated_at = now()
@@ -105,5 +180,19 @@ type UpdateUserPasswordParams struct {
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
+	return err
+}
+
+const verifyUserDropPassword = `-- name: VerifyUserDropPassword :exec
+UPDATE users
+SET email_verified_at = now(), password_hash = NULL, updated_at = now()
+WHERE id = $1
+`
+
+// Привязка входа через провайдера к аккаунту с неподтверждённой почтой:
+// пароль сбрасывается. Иначе чужой человек мог заранее зарегистрировать
+// адрес владельца со своим паролем и сохранить доступ после его входа.
+func (q *Queries) VerifyUserDropPassword(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, verifyUserDropPassword, id)
 	return err
 }

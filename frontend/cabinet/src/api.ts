@@ -38,6 +38,11 @@ export const API_ERRORS: Record<string, string> = {
   shop_suspended: 'Магазин заблокирован модератором — загрузка недоступна',
   shop_limit: 'На один аккаунт — не больше 5 магазинов',
   invalid_token: 'Ссылка недействительна или устарела',
+  email_taken: 'Эта почта уже зарегистрирована',
+  invalid_email: 'Проверьте адрес почты — похоже, в нём ошибка',
+  same_email: 'Это и есть текущая почта',
+  resend_too_soon: 'Письмо уже отправлено — повторить можно через минуту',
+  email_not_verified: 'Сначала подтвердите почту',
   rate_limited: 'Слишком много запросов — подождите минуту',
   internal: 'Ошибка на сервере. Попробуйте ещё раз чуть позже',
   wrong_password: 'Неверный пароль',
@@ -97,6 +102,19 @@ export type User = {
   email: string | null
   role: 'user' | 'admin'
   email_verified: boolean
+  // Новая почта из «Настроек», ждущая подтверждения по ссылке.
+  pending_email?: string | null
+  // false — аккаунт создан входом через Яндекс/VK, пароля нет.
+  has_password?: boolean
+}
+
+// Тариф, с которым продавец пришёл на регистрацию (см. lib/signupIntent).
+export type SignupIntent = { plan?: Plan; period?: BillingPeriod; trial?: boolean }
+
+export type AuthOptions = {
+  providers: ('yandex' | 'vk')[]
+  // Цена тарифа в копейках за месяц и за год.
+  prices: Partial<Record<Plan, { month: number; year: number }>>
 }
 
 export type AdminComplaint = {
@@ -359,8 +377,18 @@ export type ShopStats = {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    request<User>('POST', '/auth/register', { email, password }),
+  register: (email: string, password: string, intent: SignupIntent = {}) =>
+    request<User>('POST', '/auth/register', { email, password, ...intent }),
+  cancelRegistration: () => request<void>('POST', '/auth/register/cancel', {}),
+  resendVerification: (intent: SignupIntent = {}) =>
+    request<void>('POST', '/auth/verify-email/resend', intent),
+  authOptions: () => request<AuthOptions>('GET', '/auth/options'),
+  checkResetToken: (token: string) => request<void>('POST', '/auth/password/reset/check', { token }),
+  changeEmail: (email: string, password: string) =>
+    request<void>('POST', '/auth/email/change', { email, password }),
+  confirmEmailChange: (token: string) => request<void>('POST', '/auth/email/confirm', { token }),
+  checkSlug: (slug: string) =>
+    request<{ available: boolean; error?: string }>('GET', `/shops/slug-check?slug=${encodeURIComponent(slug)}`),
   login: (email: string, password: string) =>
     request<User>('POST', '/auth/login', { email, password }),
   logout: () => request<void>('POST', '/auth/logout'),
@@ -368,13 +396,13 @@ export const api = {
   forgotPassword: (email: string) =>
     request<void>('POST', '/auth/password/forgot', { email }),
   resetPassword: (token: string, password: string) =>
-    request<void>('POST', '/auth/password/reset', { token, password }),
+    request<{ email: string | null }>('POST', '/auth/password/reset', { token, password }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>('POST', '/auth/password/change', {
       current_password: currentPassword,
       new_password: newPassword,
     }),
-  verifyEmail: (token: string) => request<void>('POST', '/auth/verify-email', { token }),
+  verifyEmail: (token: string) => request<User>('POST', '/auth/verify-email', { token }),
 
   listShops: () => request<Shop[]>('GET', '/shops'),
   createShop: (slug: string, name: string) => request<Shop>('POST', '/shops', { slug, name }),

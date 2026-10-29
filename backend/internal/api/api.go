@@ -91,8 +91,16 @@ func (a *API) Router() http.Handler {
 			r.Post("/auth/login", a.handleLogin)
 			r.Post("/auth/password/forgot", a.handleForgotPassword)
 			r.Post("/auth/password/reset", a.handleResetPassword)
+			r.Post("/auth/password/reset/check", a.handleCheckResetToken)
 			r.Post("/auth/verify-email", a.handleVerifyEmail)
+			r.Post("/auth/email/confirm", a.handleConfirmEmailChange)
+			// Вход через Яндекс / VK: переходы браузера, не fetch.
+			r.Get("/auth/oauth/{provider}/start", a.handleOAuthStart)
+			r.Get("/auth/oauth/{provider}/callback", a.handleOAuthCallback)
 		})
+		// Что показать на экранах входа: кнопки провайдеров и цены тарифов
+		// для плашки «Тариф … — N ₽» (магазина ещё нет).
+		r.Get("/auth/options", a.handleAuthOptions)
 		r.Group(func(r chi.Router) {
 			r.Use(a.requireAuth)
 			r.Post("/auth/logout", a.handleLogout)
@@ -100,10 +108,14 @@ func (a *API) Router() http.Handler {
 			// Подбор текущего пароля чужой открытой сессией ограничен тем же
 			// лимитом, что и вход.
 			r.With(a.rateLimit("auth", a.Cfg.AuthRateLimit)).Post("/auth/password/change", a.handleChangePassword)
+			r.With(a.rateLimit("auth", a.Cfg.AuthRateLimit)).Post("/auth/email/change", a.handleChangeEmail)
+			r.Post("/auth/verify-email/resend", a.handleResendVerification)
+			r.Post("/auth/register/cancel", a.handleCancelRegistration)
 
 			r.Route("/shops", func(r chi.Router) {
-				r.Post("/", a.handleCreateShop)
+				r.With(a.requireVerifiedEmail).Post("/", a.handleCreateShop)
 				r.Get("/", a.handleListShops)
+				r.Get("/slug-check", a.handleSlugCheck)
 				r.Route("/{shopID}", func(r chi.Router) {
 					r.Use(a.requireShop)
 					r.Get("/", a.handleGetShop)

@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type client struct {
@@ -33,6 +36,7 @@ func main() {
 	photos := flag.Int("photos", 12, "сколько фото загрузить при сидинге")
 	e2e := flag.Bool("e2e", false, "прогнать проверку «фото на витрине ≤ 60 сек»")
 	out := flag.String("out", "", "файл для JSON-результата (по умолчанию stdout)")
+	dbURL := flag.String("db", envOr("DATABASE_URL", "postgres://katalog:katalog@localhost:5432/katalog?sslmode=disable"), "Postgres стенда — подтвердить почту сид-пользователя")
 	flag.Parse()
 
 	jar, err := cookiejar.New(nil)
@@ -47,6 +51,9 @@ func main() {
 
 	c.must("POST", "/api/v1/auth/register",
 		map[string]string{"email": email, "password": "seed-password-1"}, nil)
+	// Без подтверждённой почты магазин не создать, а письмо на стенде
+	// уходит в лог воркера — подтверждаем прямо в БД.
+	verifyEmail(*dbURL, email)
 
 	var shop struct {
 		ID   string `json:"id"`
@@ -261,4 +268,23 @@ func makeJPEG(seed int) []byte {
 		log.Fatalf("encode jpeg: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func verifyEmail(dbURL, email string) {
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("postgres: %v", err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx, `UPDATE users SET email_verified_at = now() WHERE email = $1`, email); err != nil {
+		log.Fatalf("подтвердить почту: %v", err)
+	}
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }

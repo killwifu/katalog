@@ -208,7 +208,7 @@ func TestResetPasswordRevokesSessions(t *testing.T) {
 	token := resetTokenFor(t, ctx, email)
 	c := newClient(t)
 	c.mustJSON("POST", "/api/v1/auth/password/reset",
-		map[string]string{"token": token, "password": "newpassword456"}, http.StatusNoContent, nil)
+		map[string]string{"token": token, "password": "newpassword456"}, http.StatusOK, nil)
 
 	for name, cl := range map[string]*client{"owner": owner, "intruder": intruder} {
 		if status, _ := cl.do("GET", "/api/v1/auth/me", nil); status != http.StatusUnauthorized {
@@ -235,6 +235,8 @@ func TestResetRevokesOtherResetTokens(t *testing.T) {
 	anon := newClient(t)
 	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
 	first := resetTokenFor(t, ctx, email)
+	// Второе письмо — не раньше чем через минуту (макет 07); «прошла минута».
+	env.rdb.Del(ctx, "resend:reset:"+email)
 	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
 	var second string
 	for _, k := range env.rdb.Keys(ctx, "tok:pwreset:*").Val() {
@@ -252,10 +254,11 @@ func TestResetRevokesOtherResetTokens(t *testing.T) {
 		t.Fatal("second reset token not found")
 	}
 	anon.mustJSON("POST", "/api/v1/auth/password/reset",
-		map[string]string{"token": second, "password": "owner-new-pass"}, http.StatusNoContent, nil)
+		map[string]string{"token": second, "password": "owner-new-pass"}, http.StatusOK, nil)
 	anon.mustJSON("POST", "/api/v1/auth/password/reset",
 		map[string]string{"token": first, "password": "attacker-pass"}, http.StatusBadRequest, nil)
 	// Смена пароля в кабинете тоже отзывает ссылки на сброс.
+	env.rdb.Del(ctx, "resend:reset:"+email)
 	anon.mustJSON("POST", "/api/v1/auth/password/forgot", map[string]string{"email": email}, http.StatusNoContent, nil)
 	pending := resetTokenFor(t, ctx, email)
 	owner := newClient(t)
