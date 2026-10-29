@@ -12,6 +12,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = 'Отмена',
   icon,
+  danger,
   onConfirm,
   onCancel,
 }: {
@@ -22,6 +23,8 @@ export function ConfirmDialog({
   // Значок над заголовком (макет 10 · «Удалить N альбомов?»): корзина —
   // у удаления, треугольник — у «Закрыть без сохранения?».
   icon?: 'trash' | 'warn'
+  // Необратимое действие (макет 20 · «Удалить навсегда»): красная кнопка и значок.
+  danger?: boolean
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -46,7 +49,7 @@ export function ConfirmDialog({
     >
       <div className="modal modal--sm">
         {icon && (
-          <span className="confirm__ico" aria-hidden="true">
+          <span className={`confirm__ico${danger ? ' confirm__ico--danger' : ''}`} aria-hidden="true">
             <Icon as={icon === 'trash' ? Trash2 : TriangleAlert} size={22} />
           </span>
         )}
@@ -59,7 +62,7 @@ export function ConfirmDialog({
           <button className="btn btn--ghost" onClick={onCancel} autoFocus>
             {cancelLabel}
           </button>
-          <button className="btn btn--primary" onClick={onConfirm}>
+          <button className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`} onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

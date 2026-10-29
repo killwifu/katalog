@@ -241,7 +241,15 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 }
 
 const listDeletedAlbums = `-- name: ListDeletedAlbums :many
-SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark FROM albums a
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark,
+       coalesce(t.photos, 0)::bigint AS tree_photos,
+       coalesce(t.bytes, 0)::bigint  AS tree_bytes
+FROM albums a
+LEFT JOIN LATERAL (
+    SELECT count(*) AS photos, sum(p.orig_size + p.drv_size) AS bytes
+    FROM photos p JOIN albums c ON c.id = p.album_id
+    WHERE (c.id = a.id OR c.parent_id = a.id) AND p.deleted_at = a.deleted_at
+) t ON true
 WHERE a.shop_id = $1 AND a.deleted_at IS NOT NULL
   AND NOT EXISTS (
         SELECT 1 FROM albums p
@@ -249,35 +257,45 @@ WHERE a.shop_id = $1 AND a.deleted_at IS NOT NULL
 ORDER BY a.deleted_at DESC, a.id
 `
 
+type ListDeletedAlbumsRow struct {
+	Album      Album `json:"album"`
+	TreePhotos int64 `json:"tree_photos"`
+	TreeBytes  int64 `json:"tree_bytes"`
+}
+
 // Удалённые альбомы для «Удаленного». Подальбом, уехавший вместе с
 // родителем, отдельной строкой не показываем — он вернётся вместе с ним.
-func (q *Queries) ListDeletedAlbums(ctx context.Context, shopID uuid.UUID) ([]Album, error) {
+// tree_photos/tree_bytes — фото альбома с подальбомами, уехавшие вместе
+// с ним: «Альбом и 12 фото… Освободится 16 МБ» (макет 20).
+func (q *Queries) ListDeletedAlbums(ctx context.Context, shopID uuid.UUID) ([]ListDeletedAlbumsRow, error) {
 	rows, err := q.db.Query(ctx, listDeletedAlbums, shopID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Album
+	var items []ListDeletedAlbumsRow
 	for rows.Next() {
-		var i Album
+		var i ListDeletedAlbumsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ShopID,
-			&i.ParentID,
-			&i.Title,
-			&i.CoverPhotoID,
-			&i.SortOrder,
-			&i.PasswordHash,
-			&i.PhotoCount,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.CategoryID,
-			&i.Status,
-			&i.HiddenByPlan,
-			&i.Description,
-			&i.BlockedByModerator,
-			&i.DeletedAt,
-			&i.Watermark,
+			&i.Album.ID,
+			&i.Album.ShopID,
+			&i.Album.ParentID,
+			&i.Album.Title,
+			&i.Album.CoverPhotoID,
+			&i.Album.SortOrder,
+			&i.Album.PasswordHash,
+			&i.Album.PhotoCount,
+			&i.Album.CreatedAt,
+			&i.Album.UpdatedAt,
+			&i.Album.CategoryID,
+			&i.Album.Status,
+			&i.Album.HiddenByPlan,
+			&i.Album.Description,
+			&i.Album.BlockedByModerator,
+			&i.Album.DeletedAt,
+			&i.Album.Watermark,
+			&i.TreePhotos,
+			&i.TreeBytes,
 		); err != nil {
 			return nil, err
 		}

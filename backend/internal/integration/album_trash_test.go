@@ -11,9 +11,15 @@ type trashWithAlbums struct {
 		ID         string `json:"id"`
 		Title      string `json:"title"`
 		PhotoCount int32  `json:"photo_count"`
+		Photos     int64  `json:"photos"`
+		Bytes      int64  `json:"bytes"`
 	} `json:"albums"`
 	Photos []photoJSON `json:"photos"`
 	Total  int64       `json:"total"`
+	Usage  struct {
+		Photos int64 `json:"photos"`
+		Bytes  int64 `json:"bytes"`
+	} `json:"usage"`
 }
 
 // TestAlbumTrash: удаление альбома обратимо. Альбом с фотографиями уходит
@@ -72,6 +78,14 @@ func TestAlbumTrash(t *testing.T) {
 	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/trash", nil, http.StatusOK, &trash)
 	if len(trash.Albums) != 1 || trash.Albums[0].ID != album.ID {
 		t.Fatalf("альбома нет в корзине: %+v", trash)
+	}
+	// Объём альбома — только фото, уехавшие вместе с ним (early удалено раньше);
+	// плашка сверху — всё «Удаленное» целиком.
+	if trash.Albums[0].Photos != 1 || trash.Albums[0].Bytes <= 0 {
+		t.Errorf("объём альбома в корзине: %+v, want 1 фото и bytes > 0", trash.Albums[0])
+	}
+	if trash.Usage.Photos != 2 || trash.Usage.Bytes <= trash.Albums[0].Bytes {
+		t.Errorf("usage корзины: %+v, want 2 фото и больше объёма альбома", trash.Usage)
 	}
 	if len(trash.Photos) != 0 {
 		t.Errorf("фото удалённого альбома показаны в корзине по отдельности: %+v", trash.Photos)

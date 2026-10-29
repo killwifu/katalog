@@ -6,7 +6,12 @@ import (
 )
 
 type trashJSON struct {
-	Photos   []photoJSON `json:"photos"`
+	Photos []struct {
+		photoJSON
+		AlbumTitle string `json:"album_title"`
+		DeletedAt  string `json:"deleted_at"`
+		Bytes      int64  `json:"bytes"`
+	} `json:"photos"`
 	Total    int64       `json:"total"`
 	KeepDays int64       `json:"keep_days"`
 }
@@ -72,6 +77,10 @@ func TestTrashLifecycle(t *testing.T) {
 	c.mustJSON("GET", "/api/v1/shops/"+shop.ID+"/trash", nil, http.StatusOK, &trash)
 	if trash.Total != 1 || len(trash.Photos) != 1 || trash.Photos[0].ID != dropID {
 		t.Fatalf("корзина: %+v", trash)
+	}
+	if p := trash.Photos[0]; p.AlbumTitle != album.Title || p.DeletedAt == "" || p.Bytes <= 0 {
+		t.Errorf("карточка фото в корзине: album_title %q (want %q), deleted_at %q, bytes %d",
+			p.AlbumTitle, album.Title, p.DeletedAt, p.Bytes)
 	}
 	if trash.KeepDays <= 0 {
 		t.Errorf("keep_days = %d, want > 0", trash.KeepDays)

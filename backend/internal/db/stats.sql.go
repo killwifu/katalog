@@ -286,7 +286,10 @@ func (q *Queries) GetShopStatsTotals(ctx context.Context, arg GetShopStatsTotals
 }
 
 const getShopTopAlbums = `-- name: GetShopTopAlbums :many
-SELECT d.album_id, a.title, sum(d.views)::bigint AS views
+SELECT d.album_id, a.title, sum(d.views)::bigint AS views,
+       (SELECT count(*) FROM lead_clicks l JOIN photos p ON p.id = l.photo_id
+        WHERE l.shop_id = $1 AND p.album_id = d.album_id
+          AND l.created_at >= $4 AND l.created_at < $5)::bigint AS clicks
 FROM daily_stats d
 JOIN albums a ON a.id = d.album_id AND a.deleted_at IS NULL
 WHERE d.shop_id = $1 AND d.album_id IS NOT NULL AND d.date >= $2 AND d.date <= $3
@@ -296,19 +299,30 @@ LIMIT 5
 `
 
 type GetShopTopAlbumsParams struct {
-	ShopID uuid.UUID   `json:"shop_id"`
-	Date   pgtype.Date `json:"date"`
-	Date_2 pgtype.Date `json:"date_2"`
+	ShopID      uuid.UUID          `json:"shop_id"`
+	Date        pgtype.Date        `json:"date"`
+	Date_2      pgtype.Date        `json:"date_2"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CreatedAt_2 pgtype.Timestamptz `json:"created_at_2"`
 }
 
 type GetShopTopAlbumsRow struct {
 	AlbumID uuid.NullUUID `json:"album_id"`
 	Title   string        `json:"title"`
 	Views   int64         `json:"views"`
+	Clicks  int64         `json:"clicks"`
 }
 
+// clicks — клики «Написать» с фото альбома за тот же период, в реальном
+// времени из lead_clicks (макет 19 · колонка «Клики»).
 func (q *Queries) GetShopTopAlbums(ctx context.Context, arg GetShopTopAlbumsParams) ([]GetShopTopAlbumsRow, error) {
-	rows, err := q.db.Query(ctx, getShopTopAlbums, arg.ShopID, arg.Date, arg.Date_2)
+	rows, err := q.db.Query(ctx, getShopTopAlbums,
+		arg.ShopID,
+		arg.Date,
+		arg.Date_2,
+		arg.CreatedAt,
+		arg.CreatedAt_2,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +330,12 @@ func (q *Queries) GetShopTopAlbums(ctx context.Context, arg GetShopTopAlbumsPara
 	var items []GetShopTopAlbumsRow
 	for rows.Next() {
 		var i GetShopTopAlbumsRow
-		if err := rows.Scan(&i.AlbumID, &i.Title, &i.Views); err != nil {
+		if err := rows.Scan(
+			&i.AlbumID,
+			&i.Title,
+			&i.Views,
+			&i.Clicks,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -328,11 +347,12 @@ func (q *Queries) GetShopTopAlbums(ctx context.Context, arg GetShopTopAlbumsPara
 }
 
 const getShopTopPhotos = `-- name: GetShopTopPhotos :many
-SELECT l.photo_id, p.caption, p.status, count(*)::bigint AS clicks
+SELECT l.photo_id, p.caption, p.status, a.title AS album_title, count(*)::bigint AS clicks
 FROM lead_clicks l
 JOIN photos p ON p.id = l.photo_id
+JOIN albums a ON a.id = p.album_id
 WHERE l.shop_id = $1 AND l.created_at >= $2 AND l.created_at < $3
-GROUP BY l.photo_id, p.caption, p.status
+GROUP BY l.photo_id, p.caption, p.status, a.title
 ORDER BY clicks DESC, l.photo_id
 LIMIT 10
 `
@@ -344,10 +364,11 @@ type GetShopTopPhotosParams struct {
 }
 
 type GetShopTopPhotosRow struct {
-	PhotoID uuid.NullUUID `json:"photo_id"`
-	Caption string        `json:"caption"`
-	Status  PhotoStatus   `json:"status"`
-	Clicks  int64         `json:"clicks"`
+	PhotoID    uuid.NullUUID `json:"photo_id"`
+	Caption    string        `json:"caption"`
+	Status     PhotoStatus   `json:"status"`
+	AlbumTitle string        `json:"album_title"`
+	Clicks     int64         `json:"clicks"`
 }
 
 func (q *Queries) GetShopTopPhotos(ctx context.Context, arg GetShopTopPhotosParams) ([]GetShopTopPhotosRow, error) {
@@ -363,6 +384,7 @@ func (q *Queries) GetShopTopPhotos(ctx context.Context, arg GetShopTopPhotosPara
 			&i.PhotoID,
 			&i.Caption,
 			&i.Status,
+			&i.AlbumTitle,
 			&i.Clicks,
 		); err != nil {
 			return nil, err
