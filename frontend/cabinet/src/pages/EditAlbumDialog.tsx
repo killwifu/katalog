@@ -48,6 +48,7 @@ export function EditAlbumDialog({
   album,
   categories,
   withPhotos = true,
+  watermark = withPhotos,
   onClose,
 }: {
   shopId: string
@@ -56,6 +57,9 @@ export function EditAlbumDialog({
   // Со страницы альбома форма открывается без фото — их меняют на самой
   // странице; карандаш в списке альбомов открывает полное окно (макет 13).
   withPhotos?: boolean
+  // Блок «Водяной знак»: в форме без фото его нет (макет 13 · «Редактировать
+  // альбом (без фото)»), он есть, когда окно открыто из «Водяной знак · Настроить».
+  watermark?: boolean
   // saved — изменения применены; страница покажет уведомление.
   onClose: (saved?: boolean) => void
 }) {
@@ -632,7 +636,7 @@ export function EditAlbumDialog({
             />
 
             {/* Знак альбома (макет 11–12 · «Водяной знак · Положение»). */}
-            <WatermarkControl shop={shop} disabled={busy} value={wm} onChange={setWm} />
+            {watermark && <WatermarkControl shop={shop} disabled={busy} value={wm} onChange={setWm} />}
             </div>
           </div>
         </div>

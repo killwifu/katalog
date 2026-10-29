@@ -1,13 +1,15 @@
 import { Check, Download, EyeOff, Info, GripVertical, Trash2, Folder, ChevronLeft, Ellipsis, Lock, Pen, Share2, Upload, X, Plus, CircleAlert, ImagePlus, LoaderCircle, RefreshCw, WifiOff } from 'lucide-react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from '@tanstack/react-router'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { api, errorText, type Photo } from '../api'
 import { Icon } from '../lib/icons'
 import { setFlash } from '../lib/flash'
 import { plural } from '../lib/uploadRun'
-import { LimitLink, notUploaded, useLimitExcess } from '../lib/limits'
-import { ACCEPT_ATTR, rejectReason, rejectSummary, uploadToAlbum } from '../lib/uploadRun'
+import { LimitError, notUploaded, useLimitExcess } from '../lib/limits'
+import { ACCEPT_ATTR, FORMATS_HINT, rejectReason, uploadToAlbum } from '../lib/uploadRun'
+import { usePointerReorder } from '../lib/pointerReorder'
+import { TileMenu, tileOnRight, useTileMenuDismiss } from './NewAlbumDialog'
 import { Thumb } from './Thumb'
 import { useShop } from './AppLayout'
 import { Toast } from './Toast'
@@ -94,9 +96,13 @@ export function AlbumPage() {
   // Загрузка прямо в сетку (макет 13): плитки с процентами встают сразу
   // после обложки, загруженные становятся обычными фото, статус — над
   // сеткой. Пачка проверяется по лимиту целиком.
-  type Pending = { key: string; file: File; pct: number; error?: string }
+  // reject — файл не прошёл проверку формата/размера: красная плитка с
+  // именем файла, убирается крестиком (макет 13 · «Ошибки загрузки фото»).
+  type Pending = { key: string; file: File; pct: number; error?: string; reject?: boolean }
   const [pending, setPending] = useState<Pending[]>([])
-  const [upError, setUpError] = useState('')
+  // Пачка не влезла в тариф (макет 13 · «Лимит фото / объёма»): красная
+  // строка над сеткой вместо подсказки.
+  const [limit, setLimit] = useState<{ head: string; excess: string; hint: string } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   // Перестановка фото — плавным переездом плиток (макет 13 · Изменить порядок).
   const gallery = useRef<HTMLDivElement>(null)
@@ -112,19 +118,18 @@ export function AlbumPage() {
   }
   const startUpload = async (list: File[]) => {
     const files = list.filter((f) => !rejectReason(f))
-    const skipped = list.length - files.length
-    if (files.length === 0) {
-      if (skipped) setUpError(`${notUploaded(skipped)}: ${rejectSummary(list)}`)
-      return
-    }
     const excess = limitExcess(files.length, files.reduce((sum, f) => sum + f.size, 0))
     if (excess) {
-      setUpError(`${notUploaded(files.length)}: ${excess}. Выберите меньше фото, удалите ненужные или смените тариф.`)
+      setLimit({ head: notUploaded(files.length), excess, hint: 'Выберите меньше фото, удалите ненужные или' })
       return
     }
-    setUpError(skipped ? `${notUploaded(skipped)}: ${rejectSummary(list)}` : '')
+    setLimit(null)
+    const rejected = list
+      .filter((f) => rejectReason(f))
+      .map((file) => ({ key: crypto.randomUUID(), file, pct: 0, error: rejectReason(file), reject: true }))
     const batch = files.map((file) => ({ key: crypto.randomUUID(), file, pct: 0 }))
-    setPending((prev) => [...batch, ...prev])
+    setPending((prev) => [...batch, ...rejected, ...prev])
+    if (batch.length === 0) return
     const result = await uploadToAlbum({
       shopId: shop.id,
       albumId,
@@ -142,7 +147,7 @@ export function AlbumPage() {
         .filter((p) => !result.ok.includes(p.key))
         .map((p) => (reasons.has(p.key) ? { ...p, error: reasons.get(p.key) } : p)),
     )
-    if (result.quota) setUpError(`${notUploaded(result.failed.length)}: ${result.quota}. Смените тариф или удалите лишнее.`)
+    if (result.quota) setLimit({ head: notUploaded(result.failed.length), excess: result.quota, hint: 'Удалите ненужные или' })
     refreshQuota()
   }
   const uploading = pending.some((p) => !p.error)
@@ -153,30 +158,15 @@ export function AlbumPage() {
   const [ordering, setOrdering] = useState(false)
   // Тач-экран (макет 13 · «Меню фото»): нажатие на фото открывает меню
   // «Сделать обложкой» / «Удалить»; выбор — чекбоксом.
-  const [menuId, setMenuId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
-  const handleProps = (id: string) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      e.preventDefault()
-      e.currentTarget.setPointerCapture(e.pointerId)
-      setDragId(id)
-    },
-    onPointerMove: (e: React.PointerEvent) => {
-      if (dragId !== id) return
-      const under = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-photo-id]')
-      setOverId(under?.dataset.photoId ?? null)
-    },
-    onPointerUp: () => {
-      if (overId) dropOn(overId, id)
-      setDragId(null)
-      setOverId(null)
-    },
-    onPointerCancel: () => {
-      setDragId(null)
-      setOverId(null)
-    },
-  })
+  // Меню открывается под плиткой, в сторону середины сетки.
+  const [menu, setMenu] = useState<{ id: string; right: boolean } | null>(null)
+  useTileMenuDismiss(menu?.id ?? null, () => setMenu(null))
+  // Телефон (макет 13 · Mobile · «Изменить порядок»): фото «поднимается»
+  // долгим нажатием на ручку; на планшете — сразу.
+  const [phone] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const photoReorder = usePointerReorder('photo-id', phone ? 350 : 0)
   const upDone = pending.filter((p) => p.pct >= 100).length
+  const failedTiles = pending.filter((p) => p.error).length
 
   const albums = useQuery({ queryKey: ['albums', shop.id], queryFn: () => api.listAlbums(shop.id) })
   const album = albums.data?.find((a) => a.id === albumId)
@@ -191,7 +181,8 @@ export function AlbumPage() {
     enabled: shop.plan !== 'free',
   })
 
-  const [editing, setEditing] = useState(false)
+  // 'wm' — открыто из «Водяной знак · Настроить»: в окне есть блок знака.
+  const [editing, setEditing] = useState<false | 'form' | 'wm'>(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [sharing, setSharing] = useState(false)
 
@@ -245,6 +236,13 @@ export function AlbumPage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [access, setAccess] = useState(false)
   const [deletingAlbum, setDeletingAlbum] = useState(false)
+  // Срок «Удаленного» (TRASH_KEEP_DAYS) — числом, как в макете.
+  const trash = useQuery({
+    queryKey: ['trash', shop.id, 1],
+    queryFn: () => api.listTrash(shop.id, 1),
+    enabled: deletingAlbum,
+  })
+  const keepDays = trash.data?.keep_days
   const removeAlbum = useMutation({
     mutationFn: () => api.deleteAlbum(shop.id, albumId),
     onSuccess: () => {
@@ -267,7 +265,7 @@ export function AlbumPage() {
   // Одно выбранное фото сервер отдаёт файлом — без тоста про архив.
   const download = async (ids?: string[]) => {
     const single = ids?.length === 1
-    const count = ids?.length ?? total
+    const count = ids?.length ?? album?.photo_count ?? total
     if (!single) {
       setToast({ text: count ? `Готовим архив из ${count} фото…` : 'Готовим архив…', spin: true })
     }
@@ -375,6 +373,28 @@ export function AlbumPage() {
     setPicked(new Set(ids))
   }
   const albumUrl = `${location.origin}/${shop.slug}/a/${albumId}`
+  // Пустой альбом (макет 13 · «Пустой альбом»): без статистики и строки
+  // выбора — только большая зона загрузки.
+  const empty = total === 0 && pending.length === 0
+  // Что сказать над сеткой вместо подсказки про порядок: лимит, ход
+  // загрузки или ошибки на плитках (макет 13 · «Загрузка», «Ошибки», «Лимит»).
+  const status = limit ? (
+    <LimitError head={limit.head} excess={limit.excess} hint={limit.hint} />
+  ) : uploading ? (
+    <span className="alhead__loading">
+      <Icon as={LoaderCircle} className="spin" />
+      Загружается {pending.filter((p) => !p.error).length} фото · {upDone} готово
+    </span>
+  ) : failedTiles > 0 ? (
+    <p className="limerr" role="alert">
+      <Icon as={CircleAlert} size={16} />
+      <span>
+        <b>
+          {failedTiles} фото не {plural(failedTiles, 'загрузилось', 'загрузились', 'загрузились')} · JPEG, PNG, WebP или HEIC до 10 МБ
+        </b>
+      </span>
+    </p>
+  ) : null
   const views = stats.data?.views_week
   // «+12% к прошлой неделе» из макета: сравнить есть с чем, только если
   // на прошлой неделе альбом вообще смотрели.
@@ -424,8 +444,8 @@ export function AlbumPage() {
             <i>
               <Icon as={Upload} size={24} />
             </i>
-            <b>Отпустите, чтобы загрузить фото</b>
-            <small>Они встанут сразу после обложки · JPEG, PNG, WebP или HEIC, до 10 МБ</small>
+            <b>Отпустите, чтобы загрузить в «{album?.title ?? 'альбом'}»</b>
+            <small>{FORMATS_HINT} · можно сразу несколько</small>
           </div>
         </div>
       )}
@@ -465,7 +485,7 @@ export function AlbumPage() {
       )}
       {deletingAlbum && album && (
         <Portal><div className="modal__back" role="alertdialog" aria-modal="true" aria-label="Удаление альбома">
-          <div className="modal modal--sm">
+          <div className="modal modal--sm al__confirm">
             <span className="confirm__ico" aria-hidden="true">
               <Icon as={Trash2} size={22} />
             </span>
@@ -476,7 +496,8 @@ export function AlbumPage() {
               {album.photo_count > 1
                 ? `Альбом и все ${album.photo_count.toLocaleString('ru-RU')} фото в нём переместятся`
                 : 'Альбом вместе с содержимым переместится'}{' '}
-              в «Удаленное». Там их можно восстановить, пока не истечёт срок хранения.
+              в «Удаленное». Там их можно восстановить{' '}
+              {keepDays ? `в течение ${keepDays} ${plural(keepDays, 'дня', 'дней', 'дней')}` : 'пока не истечёт срок хранения'}.
             </p>
             <div className="modal__foot">
               <span className="spacer" />
@@ -539,7 +560,7 @@ export function AlbumPage() {
           <Icon as={Share2} size={18} />
           Поделиться
         </button>
-        <button className="btn btn--ghost btn--sm" onClick={() => setEditing(true)} disabled={!album}>
+        <button className="btn btn--ghost btn--sm" onClick={() => setEditing('form')} disabled={!album}>
           <Icon as={Pen} size={18} />
           Редактировать
         </button>
@@ -584,7 +605,7 @@ export function AlbumPage() {
         album && (
           // Макет 13 · «Пустой альбом»: описания нет — ссылка, чтобы добавить.
           <p className="alpage__desc">
-            <button className="font-medium text-brand" onClick={() => setEditing(true)}>
+            <button className="font-medium text-brand" onClick={() => setEditing('form')}>
               + Добавить описание
             </button>
           </p>
@@ -604,7 +625,7 @@ export function AlbumPage() {
 
       {/* Бесплатный (макет 13 · «Бесплатный тариф»): вместо статистики
           и блока «Водяной знак» — заглушка со ссылкой на тарифы. */}
-      {shop.plan === 'free' ? (
+      {empty ? null : shop.plan === 'free' ? (
         <PaidLock />
       ) : (
       <div className="alstats">
@@ -641,7 +662,7 @@ export function AlbumPage() {
         <div className="alstat">
           <span>Водяной знак</span>
           <b className="alstat__wm">{watermark?.enabled ? 'Включён' : 'Выключен'}</b>
-          <button className="alstat__link" onClick={() => setEditing(true)} disabled={!album}>
+          <button className="alstat__link" onClick={() => setEditing('wm')} disabled={!album}>
             Настроить
           </button>
         </div>
@@ -661,19 +682,7 @@ export function AlbumPage() {
           void startUpload(files)
         }}
       />
-      {upError && (
-        <div className="alert alert--warn" role="alert">
-          <span className="flex-1">
-            {upError}
-            <LimitLink text={upError} />
-          </span>
-          <button className="alert__x" onClick={() => setUpError('')} aria-label="Закрыть">
-            <Icon as={X} />
-          </button>
-        </div>
-      )}
-
-      <div className="alhead">
+      <div className="alhead" hidden={empty}>
         <SelectAll
           picked={picked.size}
           all={allPicked}
@@ -682,18 +691,34 @@ export function AlbumPage() {
         />
         {picked.size > 0 && (
           <>
-            <button className="alhead__act" onClick={() => void download([...picked])}>
+            <button className="alhead__act alhead__act--wide" onClick={() => void download([...picked])}>
               <Icon as={Download} />
               Скачать
             </button>
-            <button className="alhead__act" onClick={() => remove.mutate([...picked])}>
+            <button className="alhead__act alhead__act--wide" onClick={() => remove.mutate([...picked])}>
               <Icon as={Trash2} />
               Удалить
             </button>
+            <button className="alhead__act alhead__act--narrow" onClick={() => setPicked(new Set())}>
+              Снять выбор
+            </button>
+            {/* Телефон (макет 13 · Mobile · «Выбраны фото»): действия —
+                закреплённой панелью внизу. */}
+            <div className="selbar">
+              <button className="btn btn--primary" onClick={() => void download([...picked])}>
+                <Icon as={Download} size={18} />
+                Скачать
+              </button>
+              <button className="btn btn--primary" onClick={() => remove.mutate([...picked])}>
+                <Icon as={Trash2} size={18} />
+                Удалить
+              </button>
+            </div>
           </>
         )}
         <span className="spacer" />
-        {shown.length > 1 && (
+        {status && <span className="ap__status">{status}</span>}
+        {shown.length > 1 && !status && (
           <span className="alhead__tip">
             <Icon as={GripVertical} size={14} />
             Перетащите фото, чтобы поменять порядок
@@ -705,12 +730,7 @@ export function AlbumPage() {
             {ordering ? 'Готово' : 'Изменить порядок'}
           </button>
         )}
-        {uploading ? (
-          <span className="alhead__loading">
-            <Icon as={LoaderCircle} className="spin" />
-            Загружается {pending.filter((p) => !p.error).length} фото · {upDone} готово
-          </span>
-        ) : (
+        {!status && (
           total !== undefined && (
             <span className="alhead__count">
               {album?.photo_count ?? total} фото
@@ -729,6 +749,8 @@ export function AlbumPage() {
             : 'Чтобы удалить или изменить обложку, нажмите на фото'}
         </p>
       )}
+      {/* Телефон (макет 13 · Mobile): тот же статус — под подсказкой. */}
+      {status && <div className="ap__status-m">{status}</div>}
 
       {photos.isPending && <p className="text-ink-2">Загрузка…</p>}
       {photos.isError && <p className="text-danger" role="alert">Не удалось загрузить фото.</p>}
@@ -736,29 +758,34 @@ export function AlbumPage() {
       {/* Пустой альбом (макет 13 · «Пустой альбом-черновик»): вместо сетки
           большая зона загрузки, у черновика — плашка с «Изменить доступ». */}
       {total === 0 && album?.status === 'draft' && (
-        <div className="alert alert--warn mb-4">
-          <span className="flex-1">Альбом в черновике — покупатели его не видят.</span>
-          <button className="font-medium underline" onClick={() => setAccess(true)}>
-            Изменить доступ
-          </button>
+        <div className="ap__draft">
+          <Icon as={Info} size={18} />
+          <span>
+            Альбом в черновике — покупатели его не видят. <button onClick={() => setAccess(true)}>Изменить доступ</button>
+          </span>
         </div>
       )}
-      {total === 0 && pending.length === 0 && (
-        <button className="bigdrop" onClick={() => fileInput.current?.click()}>
+      {empty && (
+        // Вся зона нажимается; «Выбрать файлы» — видимая кнопка внутри неё.
+        <div className="bigdrop" onClick={() => fileInput.current?.click()}>
           <i aria-hidden="true">
             <Icon as={ImagePlus} size={28} />
           </i>
           <b>В альбоме пока нет фото</b>
           <span className="hover-only">Перетащите фото сюда или выберите файлы на компьютере</span>
-          <span className="touch-only-inline">Нажмите, чтобы выбрать фото из галереи или камеры</span>
-          <small>JPEG, PNG, WebP или HEIC, до 10 МБ</small>
-        </button>
+          <span className="touch-only-inline">Нажмите «Выбрать файлы» — из галереи, файлов или камеры</span>
+          <button type="button" className="btn btn--primary btn--sm">
+            <Icon as={Upload} size={18} strokeWidth={2} />
+            Выбрать файлы
+          </button>
+          <small>{FORMATS_HINT} · можно сразу несколько</small>
+        </div>
       )}
 
       <div
         ref={gallery}
         className={`algallery ${ordering ? 'algallery--order' : ''}`}
-        hidden={total === 0 && pending.length === 0}
+        hidden={empty}
       >
         {/* Плитка загрузки — первой в сетке, как в макете. */}
         <button className="uptile" hidden={ordering} onClick={() => fileInput.current?.click()}>
@@ -790,10 +817,11 @@ export function AlbumPage() {
             }}
             onSetCover={() => setCover.mutate(p.id)}
             onDelete={() => remove.mutate([p.id])}
-            handle={ordering ? handleProps(p.id) : undefined}
-            menuOpen={menuId === p.id && !ordering}
-            onMenu={() => setMenuId((cur) => (cur === p.id ? null : p.id))}
-            over={overId === p.id && dragId !== p.id}
+            handle={ordering ? photoReorder.handle(p.id, (from, to) => dropOn(to, from)) : undefined}
+            menu={menu?.id === p.id && !ordering ? menu : null}
+            onMenu={(right) => setMenu((cur) => (cur?.id === p.id ? null : { id: p.id, right }))}
+            onMenuClose={() => setMenu(null)}
+            over={photoReorder.over === p.id}
           />
           {/* Новые фото встают сразу после обложки — там и их плитки. */}
           {i === 0 && pending.map((u) => <PendingTile key={u.key} item={u} onRetry={() => retryPending(u.key)} onDismiss={() => setPending((prev) => prev.filter((x) => x.key !== u.key))} />)}
@@ -821,6 +849,7 @@ export function AlbumPage() {
           album={album}
           categories={categories.data ?? []}
           withPhotos={false}
+          watermark={editing === 'wm'}
           onClose={(saved) => {
             setEditing(false)
             if (saved) {
@@ -862,13 +891,16 @@ function PhotoTile({
   picked,
   handle,
   over,
-  menuOpen,
+  menu,
   onMenu,
+  onMenuClose,
 }: {
-  menuOpen?: boolean
-  onMenu?: () => void
+  // Меню фото на тач-экране открыто у этой плитки; right — раскрыть влево.
+  menu: { right: boolean } | null
+  onMenu: (right: boolean) => void
+  onMenuClose: () => void
   // Режим «Изменить порядок»: ручка для перетаскивания указателем.
-  handle?: React.HTMLAttributes<HTMLButtonElement>
+  handle?: React.HTMLAttributes<HTMLElement>
   // Сюда встанет перетаскиваемое фото — подсветка пунктиром.
   over?: boolean
   photo: Photo
@@ -884,14 +916,14 @@ function PhotoTile({
 }) {
   return (
     <figure
-      className={`group relative overflow-hidden rounded-[10px] bg-surface-alt ${dragging ? 'is-dragging' : ''} ${over ? 'photo--over' : ''}`}
+      className={`group relative overflow-hidden rounded-[10px] bg-surface-alt ${dragging ? 'is-dragging' : ''} ${over ? 'photo--over' : ''} ${picked ? 'is-picked' : ''} ${menu ? 'is-menu' : ''}`}
       data-photo-id={photo.id}
       title={photo.caption || undefined}
       draggable={!handle}
       // Клик по фото — выбор (макет 13); кнопки на фото работают сами по себе.
       onClick={(e) => {
-        if (handle || (e.target as HTMLElement).closest('button, input, a')) return
-        if (onMenu && window.matchMedia('(hover: none)').matches) onMenu()
+        if (handle || (e.target as HTMLElement).closest('button, input, a, [role="menu"]')) return
+        if (window.matchMedia('(hover: none)').matches) onMenu(tileOnRight(e.currentTarget))
         else onPick()
       }}
       onDragStart={(e) => {
@@ -926,30 +958,13 @@ function PhotoTile({
           aria-label="Выбрать фото"
         />
       )}
-      {menuOpen && (
-        <div className="photo__menu" role="menu">
-          {!isCover && photo.status === 'ready' && (
-            <button
-              role="menuitem"
-              onClick={() => {
-                onSetCover()
-                onMenu?.()
-              }}
-            >
-              Сделать обложкой
-            </button>
-          )}
-          <button
-            role="menuitem"
-            className="photo__menu--danger"
-            onClick={() => {
-              onDelete()
-              onMenu?.()
-            }}
-          >
-            Удалить
-          </button>
-        </div>
+      {menu && (
+        <TileMenu
+          right={menu.right}
+          onCover={!isCover && photo.status === 'ready' ? onSetCover : undefined}
+          onRemove={onDelete}
+          onDone={onMenuClose}
+        />
       )}
       <div className="aspect-square bg-surface-alt">
         {photo.status === 'ready' && photo.urls ? (
@@ -990,7 +1005,7 @@ function PhotoTile({
         onClick={onDelete}
         title="Удалить"
         aria-label="Удалить фото"
-        className="photo-tile__act photo__del hidden group-hover:grid"
+        className="photo-tile__act photo__del"
       >
         <Icon as={X} size={14} />
       </button>
@@ -1055,19 +1070,21 @@ function PendingTile({
   onRetry,
   onDismiss,
 }: {
-  item: { file: File; pct: number; error?: string }
+  item: { file: File; pct: number; error?: string; reject?: boolean }
   onRetry: () => void
   onDismiss: () => void
 }) {
   return (
     <figure className={`uptile2 ${item.error === 'Ошибка сети' ? 'uptile2--net' : item.error ? 'uptile2--bad' : ''}`}>
-      <Thumb file={item.file} />
+      {/* Отклонённый файл — без превью: картинку браузер может и не показать. */}
+      {!item.reject && <Thumb file={item.file} />}
       {item.error ? (
         <>
           <span className="uptile2__msg">
             <Icon as={item.error === 'Ошибка сети' ? WifiOff : CircleAlert} size={20} />
             <b>{item.error}</b>
             {/* Сеть — повод повторить; тариф — нет, там нужен другой тариф. */}
+            {item.reject && <small title={item.file.name}>{item.file.name}</small>}
             {item.error === 'Ошибка сети' && (
               <button className="uptile2__retry" onClick={onRetry}>
                 <Icon as={RefreshCw} size={13} />
@@ -1080,10 +1097,11 @@ function PendingTile({
           </button>
         </>
       ) : (
-        <>
-          <span className="uptile2__pct">{item.pct}%</span>
-          <span className="uptile2__bar" style={{ width: `${item.pct}%` }} />
-        </>
+        // Затемнённая плитка, крупный процент и полоса (макет 13 · «Загрузка фото»).
+        <span className="uptile2__up">
+          <b>{item.pct}%</b>
+          <i style={{ '--p': `${item.pct}%` } as CSSProperties} />
+        </span>
       )}
     </figure>
   )

@@ -119,7 +119,18 @@ export function ShareDialog({
               <span>{label}</span>
               <span className="share__inp">
                 <Icon as={LinkIcon} />
-                <input ref={field} value={url} readOnly onFocus={(e) => e.target.select()} />
+                {/* Окно открывается с фокусом в поле: курсор в начало, чтобы был виден
+                    адрес, а не его хвост (макет 13); нажатие выделяет всю ссылку. */}
+                <input
+                  ref={field}
+                  value={url}
+                  readOnly
+                  onFocus={(e) => {
+                    e.target.setSelectionRange(0, 0)
+                    e.target.scrollLeft = 0
+                  }}
+                  onClick={(e) => e.currentTarget.select()}
+                />
               </span>
             </label>
             <button
