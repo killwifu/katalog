@@ -1195,6 +1195,8 @@ paths:
                 title: { type: string, maxLength: 200 }
                 parent_id: { type: string, format: uuid }
                 sort_order: { type: integer, format: int32 }
+                # Доступ сразу при создании, по умолчанию published.
+                status: { $ref: "#/components/schemas/AlbumStatus" }
                 watermark: { $ref: "#/components/schemas/AlbumWatermark" }
       responses:
         "201":
@@ -1263,7 +1265,7 @@ paths:
                 status: { $ref: "#/components/schemas/AlbumStatus" }
                 description:
                   type: string
-                  maxLength: 2000
+                  maxLength: 3500
                   description: Условия покупки; на витрине показывается над фотографиями
                 cover_photo_id:
                   type: [string, "null"]
@@ -2910,7 +2912,7 @@ components:
         status: { $ref: "#/components/schemas/AlbumStatus" }
         description:
           type: string
-          maxLength: 2000
+          maxLength: 3500
           description: Условия покупки; на витрине показывается над фотографиями
         category_id:
           type: string

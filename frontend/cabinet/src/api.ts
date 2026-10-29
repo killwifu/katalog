@@ -449,11 +449,13 @@ export const api = {
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, patch),
   setAlbumStatus: (shopId: string, albumId: string, status: AlbumStatus) =>
     request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}`, { status }),
-  createAlbum: (shopId: string, title: string, parentId?: string, watermark?: AlbumWatermark) =>
+  // status — доступ сразу при создании; без него альбом опубликован.
+  createAlbum: (shopId: string, title: string, parentId?: string, watermark?: AlbumWatermark, status?: AlbumStatus) =>
     request<Album>('POST', `/shops/${shopId}/albums`, {
       title,
       ...(parentId ? { parent_id: parentId } : {}),
       ...(watermark ? { watermark } : {}),
+      ...(status ? { status } : {}),
     }),
   // Страницами: альбом может содержать тысячи фото, выдача целиком
   // вешала кабинет.
@@ -556,10 +558,6 @@ export const api = {
 
   deleteCategory: (shopId: string, id: string, moveTo?: string) =>
     request<void>('DELETE', `/shops/${shopId}/categories/${id}${moveTo ? `?move_to=${moveTo}` : ''}`),
-  setAlbumCategory: (shopId: string, albumId: string, categoryId: string | null) =>
-    request<Album>('PATCH', `/shops/${shopId}/albums/${albumId}/category`, {
-      category_id: categoryId,
-    }),
 
   presign: (shopId: string, albumId: string, size: number) =>
     request<{ photo_id: string; url: string }>('POST', '/uploads/presign', {

@@ -9,6 +9,7 @@ export function Popover({
   open,
   onToggle,
   label,
+  badge,
   title,
   active,
   plain,
@@ -29,6 +30,8 @@ export function Popover({
   open: boolean
   onToggle: (open: boolean) => void
   label: string
+  // Приписка справа от подписи, приглушённая: «+2» у категорий (макет 11).
+  badge?: string
   title: string
   active?: boolean
   // Без стрелки и без подписи значения — для меню действий.
@@ -73,7 +76,7 @@ export function Popover({
         className={`btn btn--ghost pop__btn ${active ? 'pop__btn--on' : ''} ${plain && icon ? 'pop__btn--icon' : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
-        aria-label={plain ? title : `${title}: ${label}`}
+        aria-label={plain ? title : `${title}: ${label}${badge ? ` ${badge}` : ''}`}
         onClick={() => onToggle(!open)}
       >
         {icon && (
@@ -82,6 +85,7 @@ export function Popover({
           </span>
         )}
         {!(plain && icon) && <span className={icon ? 'pop__label' : undefined}>{label}</span>}
+        {badge && <span className="pop__badge">{badge}</span>}
         {!plain && chevron && (
           <span className="pop__chev">
             <Icon as={open ? ChevronUp : ChevronDown} size={14} />

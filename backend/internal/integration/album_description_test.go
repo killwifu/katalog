@@ -58,9 +58,17 @@ func TestAlbumDescription(t *testing.T) {
 		}
 	})
 
+	t.Run("3 500 символов — как счётчик в окне альбома — принимается", func(t *testing.T) {
+		status, body := c.do("PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s", shop.ID, album.ID),
+			map[string]any{"description": strings.Repeat("я", 3500)})
+		if status != http.StatusOK {
+			t.Fatalf("status %d, want 200; body: %s", status, body)
+		}
+	})
+
 	t.Run("слишком длинное отклоняется", func(t *testing.T) {
 		status, _ := c.do("PATCH", fmt.Sprintf("/api/v1/shops/%s/albums/%s", shop.ID, album.ID),
-			map[string]any{"description": strings.Repeat("я", 2001)})
+			map[string]any{"description": strings.Repeat("я", 3501)})
 		if status != http.StatusBadRequest {
 			t.Fatalf("status %d, want 400", status)
 		}
