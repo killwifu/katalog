@@ -56,7 +56,7 @@ func (p *Processor) HandleStatsDigest(ctx context.Context, t *asynq.Task) error 
 		}
 		msg := mail.Message{
 			To:      *cur.Email,
-			Subject: fmt.Sprintf("Katalog: итоги %s для «%s»", monthStart.Format("01.2006"), cur.Name),
+			Subject: fmt.Sprintf("вуад: итоги %s для «%s»", monthStart.Format("01.2006"), cur.Name),
 			Text:    digestText(p.Cfg.SiteURL, cur, prev, monthStart),
 		}
 		if err := p.Mail.Send(ctx, msg); err != nil {
@@ -78,7 +78,7 @@ func digestText(siteURL string, cur, prev db.ListShopsStatsRangeRow, monthStart 
 			"  Уникальные посетители: %d (%s)\n"+
 			"  Клики «написать»: %d (%s)\n\n"+
 			"Подробная статистика: %s/app/stats\n\n"+
-			"Команда Katalog",
+			"Команда вуад",
 		cur.Name, monthStart.Format("01.2006"),
 		cur.Views, compareDelta(cur.Views, prev.Views),
 		cur.UniqueVisitors, compareDelta(cur.UniqueVisitors, prev.UniqueVisitors),
@@ -155,7 +155,7 @@ func (p *Processor) HandleTrafficAlert(ctx context.Context, t *asynq.Task) error
 
 	if err := p.Mail.Send(ctx, mail.Message{
 		To:      p.Cfg.Mail.AdminEmail,
-		Subject: fmt.Sprintf("Katalog: аномальный CDN-трафик (%d магазинов)", len(anomalies)),
+		Subject: fmt.Sprintf("вуад: аномальный CDN-трафик (%d магазинов)", len(anomalies)),
 		Text:    text,
 	}); err != nil {
 		return fmt.Errorf("send traffic alert: %w", err)

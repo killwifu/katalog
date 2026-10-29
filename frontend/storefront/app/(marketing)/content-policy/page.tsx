@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-export const metadata: Metadata = { title: 'Политика контента — Katalog' }
+export const metadata: Metadata = { title: 'Политика контента — вуад' }
 
 // Текст — плейсхолдер: заменить на согласованную юристами редакцию.
 export default function ContentPolicyPage() {
@@ -8,7 +8,7 @@ export default function ContentPolicyPage() {
     <main className="page legal">
       <h1>Политика контента</h1>
       <p>
-        Katalog — площадка для публикации фото-каталогов. Продавец обязуется
+        «вуад» — площадка для публикации фото-каталогов. Продавец обязуется
         размещать только контент, правами на который он обладает. [Плейсхолдер:
         полный текст политики.]
       </p>

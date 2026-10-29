@@ -67,7 +67,7 @@ func (a *API) handleCreateComplaint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Уведомление админу (если сконфигурирован адрес).
-	a.sendEmail(r.Context(), a.Cfg.Mail.AdminEmail, "Katalog: новая жалоба на контент",
+	a.sendEmail(r.Context(), a.Cfg.Mail.AdminEmail, "вуад: новая жалоба на контент",
 		fmt.Sprintf("Поступила жалоба %s.\n\nСсылка: %s\nЗаявитель: %s <%s>\n\nПретензия:\n%s\n\n"+
 			"Открыть админ-зону: %s/app/admin",
 			complaint.ID, req.URL, req.ReporterName, req.ReporterEmail, req.Reason, a.Cfg.SiteURL))
