@@ -595,6 +595,7 @@ type Album struct {
 	BlockedByModerator bool               `json:"blocked_by_moderator"`
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 	Watermark          []byte             `json:"watermark"`
+	Slug               string             `json:"slug"`
 }
 
 type AlbumCategory struct {

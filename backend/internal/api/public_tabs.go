@@ -71,6 +71,9 @@ func (a *API) publicSections(r *http.Request, shopID uuid.UUID, tabSlug string) 
 		if row.Title != nil {
 			item.Title = *row.Title
 		}
+		if row.Slug != nil {
+			item.Slug = *row.Slug
+		}
 		if row.PhotoCount.Valid {
 			item.PhotoCount = row.PhotoCount.Int32
 		}

@@ -33,6 +33,12 @@ const (
 	albumUnlockTTL    = 12 * time.Hour
 	albumTokenHeader  = "X-Album-Token"
 	albumUnlockPrefix = "albumunlock:"
+	// Защита от перебора (макет 15 · «много попыток»): 5 неверных паролей
+	// подряд с одного адреса — ввод закрыт на 15 минут. Общий лимит
+	// unlock (AuthRateLimit в минуту) остаётся поверх.
+	albumFailPrefix  = "albumfail:"
+	albumFailMax     = 5
+	albumFailLockout = 15 * time.Minute
 )
 
 // albumPassFingerprint привязывает пропуск к текущему паролю: сменил
@@ -65,7 +71,7 @@ func (a *API) albumLock(ctx context.Context, album db.Album) (db.Album, error) {
 	if album.PasswordHash != nil || !album.ParentID.Valid {
 		return album, nil
 	}
-	parent, err := a.Q.GetPublicAlbum(ctx, db.GetPublicAlbumParams{ID: album.ParentID.UUID, ShopID: album.ShopID})
+	parent, err := a.Q.GetPublicAlbum(ctx, db.GetPublicAlbumParams{ID: album.ParentID, ShopID: album.ShopID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Не бывает: GetPublicAlbum не отдаёт подальбом скрытого родителя.
 		return album, nil
@@ -90,7 +96,7 @@ func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "album not found")
 		return
 	}
-	album, err := a.Q.GetPublicAlbum(r.Context(), db.GetPublicAlbumParams{ID: albumID, ShopID: shop.ID})
+	album, err := a.Q.GetPublicAlbum(r.Context(), db.GetPublicAlbumParams{ID: uuid.NullUUID{UUID: albumID, Valid: true}, ShopID: shop.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusNotFound, "not_found", "album not found")
 		return
@@ -114,21 +120,34 @@ func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusBadRequest, "not_protected", "album has no password")
 		return
 	}
+	failKey := albumFailPrefix + album.ID.String() + ":" + clientIP(r)
+	if n, _ := a.RDB.Get(r.Context(), failKey).Int(); n >= albumFailMax {
+		a.albumLockedOut(w, r, failKey)
+		return
+	}
 	// Слишком длинное не хешируем: argon2 дорогой, и это был бы способ
 	// нагрузить сервер без подбора.
-	if req.Password == "" || len([]rune(req.Password)) > maxAlbumPassword {
-		apiError(w, http.StatusForbidden, "wrong_password", "wrong password")
-		return
-	}
-	match, err := auth.VerifyPassword(req.Password, *album.PasswordHash)
-	if err != nil {
-		a.internalError(w, "verify album password", err)
-		return
+	match := false
+	if req.Password != "" && len([]rune(req.Password)) <= maxAlbumPassword {
+		if match, err = auth.VerifyPassword(req.Password, *album.PasswordHash); err != nil {
+			a.internalError(w, "verify album password", err)
+			return
+		}
 	}
 	if !match {
+		// Счётчик живёт 15 минут с последней ошибки; пятая закрывает ввод.
+		n, err := a.RDB.Incr(r.Context(), failKey).Result()
+		if err == nil {
+			a.RDB.Expire(r.Context(), failKey, albumFailLockout)
+		}
+		if n >= albumFailMax {
+			a.albumLockedOut(w, r, failKey)
+			return
+		}
 		apiError(w, http.StatusForbidden, "wrong_password", "wrong password")
 		return
 	}
+	a.RDB.Del(r.Context(), failKey)
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		a.internalError(w, "album token", err)
@@ -142,5 +161,20 @@ func (a *API) handlePublicAlbumUnlock(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"token":      token,
 		"expires_in": int(albumUnlockTTL.Seconds()),
+	})
+}
+
+// albumLockedOut — ввод пароля закрыт: 429 и сколько секунд ждать.
+func (a *API) albumLockedOut(w http.ResponseWriter, r *http.Request, failKey string) {
+	ttl, err := a.RDB.TTL(r.Context(), failKey).Result()
+	if err != nil || ttl <= 0 {
+		ttl = albumFailLockout
+	}
+	secs := int(ttl.Seconds())
+	w.Header().Set("Retry-After", fmt.Sprint(secs))
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"error":       "too_many_attempts",
+		"message":     "too many wrong passwords, try later",
+		"retry_after": secs,
 	})
 }

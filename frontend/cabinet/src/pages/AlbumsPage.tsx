@@ -254,7 +254,7 @@ export function AlbumsPage() {
   const pickedAlbums = top.filter((a) => picked.has(a.id))
 
   const copyLink = (album: Album) => {
-    const url = `${location.origin}/${shop.slug}/a/${album.id}`
+    const url = `${location.origin}/${shop.slug}/${album.slug}`
     void copyText(url).then((done) =>
       setToast({
         text: !done

@@ -1,117 +1,92 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import {
-  getShopPage,
-  loadOrUnavailable,
-  searchPhotos,
-  ShopUnavailableError,
-  type PhotoPublic,
-} from '@/lib/api'
+import { notFound, redirect } from 'next/navigation'
+import { getCategories, getShopPage, loadOrUnavailable, withAlbumCounts } from '@/lib/api'
+import { messageText } from '@/lib/links'
+import { sortAlbums } from '@/lib/sort'
+import { AlbumGrid } from '@/components/AlbumGrid'
+import { ContactMenu } from '@/components/ContactMenu'
+import { EmptyState } from '@/components/EmptyState'
+import { albumsWord, ShopHeader } from '@/components/ShopHeader'
+import { EmptyShop } from '@/components/ShopHome'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
-import { ContactBar } from '@/components/ContactBar'
-import { PhotoGrid } from '@/components/PhotoGrid'
-import { SearchForm } from '@/components/SearchForm'
 import { TrackView } from '@/components/TrackView'
-import { CHANNEL_LABELS, contactHref, shopChannels } from '@/lib/links'
 
-// Поиск по подписям в рамках магазина (FTS + trgm-фолбэк на бэкенде).
-// Результаты кешируются data cache по полному URL (включая q).
+// Поиск по названиям опубликованных альбомов витрины, без учёта регистра
+// (макет 15 · «Поиск»). Альбомы уже есть в ответе магазина (data cache,
+// тег shop:{slug}) — отдельного запроса к API и к Postgres не нужно.
+// Результаты — той же сеткой, от новых к старым; вкладки не подсвечены.
 
 type Props = {
   params: { slug: string }
-  searchParams: { q?: string }
+  searchParams: { q?: string; from?: string }
 }
 
 export function generateMetadata({ searchParams }: Props): Metadata {
   const { q } = searchParams
-  return {
-    title: q ? `Поиск «${q}»` : 'Поиск',
-    robots: { index: false },
-  }
-}
-
-// Контакты в тупике поиска: без них покупателю остаётся только уйти.
-function NotFoundContacts({ shop }: { shop: Awaited<ReturnType<typeof getShopPage>> extends null ? never : NonNullable<Awaited<ReturnType<typeof getShopPage>>>['shop'] }) {
-  const channels = shopChannels(shop.contacts)
-  if (channels.length === 0) return null
-  return (
-    <div className="center">
-      <p className="empty">Спросите продавца — возможно, товар есть, но подписан иначе.</p>
-      <div className="lead-buttons">
-        {channels.map(({ channel, value }) => (
-          <a
-            key={channel}
-            href={contactHref(channel, value, 'Здравствуйте!')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`btn btn-${channel}`}
-          >
-            {CHANNEL_LABELS[channel]}
-          </a>
-        ))}
-      </div>
-      {shop.reply_time && <p className="reply-time">{shop.reply_time}</p>}
-    </div>
-  )
+  return { title: q ? `Поиск «${q}»` : 'Поиск', robots: { index: false } }
 }
 
 export default async function SearchPage({ params, searchParams }: Props) {
   const { slug } = params
   const q = (searchParams.q ?? '').trim().slice(0, 100)
+  const base = `/${encodeURIComponent(slug)}`
+  // «Сбросить поиск» возвращает на прежнюю вкладку — только внутри витрины.
+  const from =
+    searchParams.from && searchParams.from.startsWith(`${base}`) && !searchParams.from.startsWith('//')
+      ? searchParams.from
+      : base
+  if (!q) redirect(from)
 
-  const res = await loadOrUnavailable(() => getShopPage(slug))
+  const res = await loadOrUnavailable(() => Promise.all([getShopPage(slug), getCategories(slug)]))
   if (!res.ok) return <ShopUnavailable payload={res.payload} />
-  const shopData = res.data
-  if (!shopData) notFound()
-  const { shop } = shopData
-  // Названия альбомов берём из уже загруженной страницы магазина: выдача
-  // поиска отдаёт только album_id, а второй запрос ради заголовка не нужен.
-  const albumTitles = Object.fromEntries(shopData.albums.map((a) => [a.id, a.title]))
-
-  // Сбой поиска не должен превращаться в страницу ошибки: покупатель
-  // на витрине, а не в кабинете, и ему нужен хотя бы каталог и контакты.
-  // ShopUnavailableError пропускаем наверх — это не сбой, а состояние магазина.
-  let photos: PhotoPublic[] = []
-  let failed = false
-  if (q) {
-    try {
-      photos = (await searchPhotos(slug, q))?.photos ?? []
-    } catch (err) {
-      if (err instanceof ShopUnavailableError) throw err
-      console.error('search failed', err)
-      failed = true
-    }
-  }
+  const [data, categories] = res.data
+  if (!data) notFound()
+  const { shop } = data
+  const top = data.albums.filter((a) => !a.parent_id)
+  const needle = q.toLocaleLowerCase('ru')
+  const found = sortAlbums(
+    data.albums.filter((a) => a.title.toLocaleLowerCase('ru').includes(needle)),
+    'new',
+  )
 
   return (
     <main className="page">
       <TrackView shopId={shop.id} />
-      <header className="album-header">
-        <nav className="breadcrumbs">
-          <a href={`/${encodeURIComponent(slug)}`}>{shop.name}</a> / <span>Поиск</span>
-        </nav>
-        <h1>{q ? `Поиск: ${q}` : 'Поиск по каталогу'}</h1>
-        <SearchForm slug={slug} initial={q} />
-      </header>
-      {q === '' ? (
-        <p className="empty">Введите запрос — например, название товара или артикул.</p>
-      ) : failed ? (
-        <>
-          <p className="empty">Поиск сейчас недоступен — попробуйте ещё раз чуть позже.</p>
-          <NotFoundContacts shop={shop} />
-        </>
-      ) : photos.length === 0 ? (
-        <>
-          <p className="empty">По запросу «{q}» ничего не найдено.</p>
-          {/* Покупатель, который искал и не нашёл, — ровно тот, кому стоит
-              написать продавцу: возможно, товар есть, но подписан иначе. */}
-          <NotFoundContacts shop={shop} />
-        </>
+      <ShopHeader
+        shop={shop}
+        albumCount={top.length}
+        nav={{
+          tabs: data.tabs,
+          categories: withAlbumCounts(categories ?? [], data.albums),
+          active: '',
+          empty: top.length === 0,
+        }}
+        search={q}
+        from={from}
+      />
+      {top.length === 0 ? (
+        <EmptyShop shop={shop} />
+      ) : found.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title={`Ничего не нашлось по «${q}»`}
+          text="Проверьте написание или посмотрите все альбомы продавца. Если нужной вещи нет — спросите продавца, возможно, она есть в наличии."
+        >
+          <a className="btn btn--primary" href={`${base}/t/albums`}>
+            Все альбомы
+          </a>
+          <ContactMenu shop={shop} text={messageText(shop.msg_template, '')} about="" variant="ghost" />
+        </EmptyState>
       ) : (
         <>
-          <p className="muted search-count">Найдено: {photos.length}</p>
-          <PhotoGrid photos={photos} shop={shop} albumTitles={albumTitles} />
-          <ContactBar shop={shop} />
+          <div className="cathead cathead--all">
+            <h2>Результаты по «{q}»</h2>
+            <span>
+              {found.length} {albumsWord(found.length)}
+            </span>
+            <a href={from}>Сбросить поиск</a>
+          </div>
+          <AlbumGrid shopSlug={slug} albums={found} />
         </>
       )}
     </main>

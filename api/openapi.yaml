@@ -2102,16 +2102,38 @@ paths:
         "403":
           description: Неверный пароль (wrong_password)
         "404": { $ref: "#/components/responses/NotFound" }
-        "429": { $ref: "#/components/responses/RateLimited" }
+        "429":
+          description: >
+            Общий лимит попыток (rate_limited) или блокировка ввода
+            (too_many_attempts): 5 неверных паролей подряд с одного адреса
+            закрывают ввод для этого альбома на 15 минут, даже верный пароль.
+            retry_after и заголовок Retry-After — сколько секунд ждать.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string, enum: [rate_limited, too_many_attempts] }
+                  message: { type: string }
+                  retry_after: { type: integer, description: Секунды до конца блокировки }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
   /api/v1/public/shops/{slug}/albums/{albumID}:
     get:
       operationId: getPublicAlbum
       summary: Фото альбома (только ready) с пагинацией
+      description: >
+        albumID — слаг альбома (адрес витрины /{shop}/{album_slug}) или его
+        uuid (старые ссылки /{shop}/a/{uuid}; витрина отвечает на них 308 на
+        адрес по слагу).
       parameters:
         - $ref: "#/components/parameters/ShopSlug"
-        - $ref: "#/components/parameters/AlbumID"
+        - name: albumID
+          in: path
+          required: true
+          schema: { type: string }
+          description: Слаг альбома или его uuid
         - name: X-Album-Token
           in: header
           required: false
@@ -2940,11 +2962,16 @@ components:
 
     Album:
       type: object
-      required: [id, parent_id, title, cover_photo_id, sort_order, status, photo_count]
+      required: [id, parent_id, title, slug, cover_photo_id, sort_order, status, photo_count]
       properties:
         id: { type: string, format: uuid }
         parent_id: { type: [string, "null"], format: uuid }
         title: { type: string }
+        slug:
+          type: string
+          description: >
+            Адрес альбома на витрине (/{shop}/{slug}): транслит названия при
+            создании, уникален в магазине, при переименовании не меняется.
         cover_photo_id: { type: [string, "null"], format: uuid }
         sort_order: { type: integer, format: int32 }
         status: { $ref: "#/components/schemas/AlbumStatus" }
@@ -3158,12 +3185,17 @@ components:
 
     PublicAlbum:
       type: object
-      required: [id, parent_id, title, photo_count]
+      required: [id, slug, parent_id, title, photo_count]
       properties:
         id: { type: string, format: uuid }
+        slug: { type: string, description: "Адрес альбома: /{shop}/{slug}" }
         parent_id: { type: [string, "null"], format: uuid }
         title: { type: string }
         photo_count: { type: integer }
+        updated_at:
+          type: string
+          format: date-time
+          description: Только на странице альбома — «обновлён 27 сентября 2026»
         unlisted:
           type: boolean
           description: >

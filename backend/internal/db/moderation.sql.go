@@ -51,7 +51,7 @@ const adminHideAlbum = `-- name: AdminHideAlbum :one
 UPDATE albums
 SET blocked_by_moderator = true, updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 // Блокировка альбома модератором — отдельным флагом, а не статусом:
@@ -77,6 +77,7 @@ func (q *Queries) AdminHideAlbum(ctx context.Context, id uuid.UUID) (Album, erro
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -242,7 +243,7 @@ const adminUnhideAlbum = `-- name: AdminUnhideAlbum :one
 UPDATE albums
 SET blocked_by_moderator = false, updated_at = now()
 WHERE id = $1
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 func (q *Queries) AdminUnhideAlbum(ctx context.Context, id uuid.UUID) (Album, error) {
@@ -266,6 +267,7 @@ func (q *Queries) AdminUnhideAlbum(ctx context.Context, id uuid.UUID) (Album, er
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }

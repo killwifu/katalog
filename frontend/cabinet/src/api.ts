@@ -280,6 +280,8 @@ export type Album = {
   id: string
   parent_id: string | null
   title: string
+  // Адрес на витрине: /{shop}/{slug}; при переименовании не меняется.
+  slug: string
   cover_photo_id: string | null
   sort_order: number
   status: AlbumStatus

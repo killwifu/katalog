@@ -1,4 +1,4 @@
-import type { AlbumPublic } from '@/lib/api'
+import { albumHref, type AlbumPublic } from '@/lib/api'
 import { LockIcon } from './LockIcon'
 
 // Сетка альбомов: одна разметка для главной, секций, вкладок и категорий.
@@ -20,7 +20,7 @@ export function AlbumGrid({
     <ul className={row ? 'album-grid album-grid--row' : 'album-grid'}>
       {albums.map((album) => (
         <li key={album.id} className="album-card">
-          <a href={`/${encodeURIComponent(shopSlug)}/a/${album.id}`}>
+          <a href={albumHref(shopSlug, album)}>
             <span className="album-cover">
               {album.cover_urls ? (
                 <img
@@ -32,15 +32,17 @@ export function AlbumGrid({
                   width={300}
                   height={300}
                 />
-              ) : album.has_password ? (
-                // Обложки у закрытого альбома нет намеренно: она выдала бы
-                // содержимое до ввода пароля.
-                <span className="album-placeholder album-placeholder--lock">
-                  <LockIcon />
-                  <span>По паролю</span>
-                </span>
               ) : (
+                // Обложки у закрытого альбома нет намеренно: она выдала бы
+                // содержимое до ввода пароля (в макете — размытая обложка).
                 <span className="album-placeholder" aria-hidden="true" />
+              )}
+              {/* Замок в левом верхнем углу обложки (макет 15). */}
+              {album.has_password && (
+                <span className="album-lock" title="По паролю">
+                  <LockIcon />
+                  <span className="sr-only">По паролю</span>
+                </span>
               )}
               <span className="album-count">{album.photo_count} фото</span>
             </span>
