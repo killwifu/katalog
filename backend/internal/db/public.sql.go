@@ -78,8 +78,8 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 }
 
 const getPublicAlbum = `-- name: GetPublicAlbum :one
-SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark FROM albums a
-WHERE a.id = $1 AND a.shop_id = $2 AND a.status <> 'draft' AND NOT a.hidden_by_plan
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark, a.slug FROM albums a
+WHERE (a.id = $1 OR a.slug = $2) AND a.shop_id = $3 AND a.status <> 'draft' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
   -- Подальбом по прямой ссылке не открывается, если родитель снят с витрины
   -- (черновик, тариф, модератор, корзина). Пароль родителя проверяет handler.
@@ -89,12 +89,15 @@ WHERE a.id = $1 AND a.shop_id = $2 AND a.status <> 'draft' AND NOT a.hidden_by_p
 `
 
 type GetPublicAlbumParams struct {
-	ID     uuid.UUID `json:"id"`
-	ShopID uuid.UUID `json:"shop_id"`
+	ID     uuid.NullUUID `json:"id"`
+	Slug   *string       `json:"slug"`
+	ShopID uuid.UUID     `json:"shop_id"`
 }
 
+// Альбом по слагу (адрес /{shop}/{slug}) или по id (старые ссылки
+// /{shop}/a/{uuid} и пропуск пароля): задаётся ровно одно из двух.
 func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) (Album, error) {
-	row := q.db.QueryRow(ctx, getPublicAlbum, arg.ID, arg.ShopID)
+	row := q.db.QueryRow(ctx, getPublicAlbum, arg.ID, arg.Slug, arg.ShopID)
 	var i Album
 	err := row.Scan(
 		&i.ID,
@@ -114,6 +117,7 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -187,7 +191,7 @@ func (q *Queries) ListFirstReadyPhotos(ctx context.Context, shopID uuid.UUID) ([
 
 const listPublicAlbums = `-- name: ListPublicAlbums :many
 
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count, a.category_id,
+SELECT a.id, a.parent_id, a.title, a.slug, a.sort_order, a.photo_count, a.category_id,
        a.created_at,
        (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
@@ -213,6 +217,7 @@ type ListPublicAlbumsRow struct {
 	ID          uuid.UUID          `json:"id"`
 	ParentID    uuid.NullUUID      `json:"parent_id"`
 	Title       string             `json:"title"`
+	Slug        string             `json:"slug"`
 	SortOrder   int32              `json:"sort_order"`
 	PhotoCount  int32              `json:"photo_count"`
 	CategoryID  uuid.NullUUID      `json:"category_id"`
@@ -243,6 +248,7 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 			&i.ID,
 			&i.ParentID,
 			&i.Title,
+			&i.Slug,
 			&i.SortOrder,
 			&i.PhotoCount,
 			&i.CategoryID,
@@ -261,7 +267,7 @@ func (q *Queries) ListPublicAlbums(ctx context.Context, shopID uuid.UUID) ([]Lis
 }
 
 const listPublicChildAlbums = `-- name: ListPublicChildAlbums :many
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+SELECT a.id, a.parent_id, a.title, a.slug, a.sort_order, a.photo_count,
        (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a
@@ -279,6 +285,7 @@ type ListPublicChildAlbumsRow struct {
 	ID          uuid.UUID     `json:"id"`
 	ParentID    uuid.NullUUID `json:"parent_id"`
 	Title       string        `json:"title"`
+	Slug        string        `json:"slug"`
 	SortOrder   int32         `json:"sort_order"`
 	PhotoCount  int32         `json:"photo_count"`
 	HasPassword bool          `json:"has_password"`
@@ -301,6 +308,7 @@ func (q *Queries) ListPublicChildAlbums(ctx context.Context, parentID uuid.NullU
 			&i.ID,
 			&i.ParentID,
 			&i.Title,
+			&i.Slug,
 			&i.SortOrder,
 			&i.PhotoCount,
 			&i.HasPassword,

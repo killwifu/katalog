@@ -20,9 +20,12 @@ import (
 )
 
 type albumResponse struct {
-	ID           string  `json:"id"`
-	ParentID     *string `json:"parent_id"`
-	Title        string  `json:"title"`
+	ID       string  `json:"id"`
+	ParentID *string `json:"parent_id"`
+	Title    string  `json:"title"`
+	// Slug — адрес альбома на витрине (/{shop}/{slug}); задаётся при
+	// создании и при переименовании не меняется.
+	Slug         string  `json:"slug"`
 	CoverPhotoID *string `json:"cover_photo_id"`
 	SortOrder    int32   `json:"sort_order"`
 	Status       string  `json:"status"`
@@ -82,6 +85,7 @@ func (a *API) toAlbumResponse(al db.Album, rev int32) albumResponse {
 	resp := albumResponse{
 		ID:          al.ID.String(),
 		Title:       al.Title,
+		Slug:        al.Slug,
 		SortOrder:   al.SortOrder,
 		Status:      string(al.Status),
 		Description: al.Description,

@@ -6,7 +6,7 @@
 -- от того, сколько их успел наделать продавец. Совпадает с потолком на
 -- создание альбомов, так что честный каталог не обрезается.
 -- name: ListPublicAlbums :many
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count, a.category_id,
+SELECT a.id, a.parent_id, a.title, a.slug, a.sort_order, a.photo_count, a.category_id,
        a.created_at,
        (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
@@ -38,9 +38,11 @@ FROM photos
 WHERE shop_id = $1 AND status = 'ready' AND deleted_at IS NULL
 ORDER BY album_id, sort_order, created_at;
 
+-- Альбом по слагу (адрес /{shop}/{slug}) или по id (старые ссылки
+-- /{shop}/a/{uuid} и пропуск пароля): задаётся ровно одно из двух.
 -- name: GetPublicAlbum :one
 SELECT a.* FROM albums a
-WHERE a.id = $1 AND a.shop_id = $2 AND a.status <> 'draft' AND NOT a.hidden_by_plan
+WHERE (a.id = sqlc.narg(id) OR a.slug = sqlc.narg(slug)) AND a.shop_id = @shop_id AND a.status <> 'draft' AND NOT a.hidden_by_plan
   AND NOT a.blocked_by_moderator AND a.deleted_at IS NULL
   -- Подальбом по прямой ссылке не открывается, если родитель снят с витрины
   -- (черновик, тариф, модератор, корзина). Пароль родителя проверяет handler.
@@ -129,7 +131,7 @@ LIMIT 50000;
 -- родительскую категорию, и без них видит пустую страницу — вложенные
 -- альбомы показывались только на главной магазина.
 -- name: ListPublicChildAlbums :many
-SELECT a.id, a.parent_id, a.title, a.sort_order, a.photo_count,
+SELECT a.id, a.parent_id, a.title, a.slug, a.sort_order, a.photo_count,
        (a.password_hash IS NOT NULL)::boolean AS has_password,
        c.id AS cover_id
 FROM albums a

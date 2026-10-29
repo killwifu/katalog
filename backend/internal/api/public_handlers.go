@@ -46,7 +46,9 @@ type publicShopResponse struct {
 }
 
 type publicAlbumResponse struct {
-	ID       string  `json:"id"`
+	ID string `json:"id"`
+	// Slug — адрес альбома на витрине: /{shop}/{slug}.
+	Slug     string  `json:"slug"`
 	ParentID *string `json:"parent_id"`
 	Title    string  `json:"title"`
 	// Description отдаётся только на странице альбома: в сетке он не нужен,
@@ -69,6 +71,8 @@ type publicAlbumResponse struct {
 	// HasPassword — альбом закрыт паролем: в сетке у него замок вместо
 	// обложки (обложка выдала бы содержимое).
 	HasPassword bool `json:"has_password,omitempty"`
+	// UpdatedAt — только на странице альбома: «обновлён 27 сентября».
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// Locked — содержимое не отдано: пароль не введён или пропуск истёк.
 	// Витрина показывает форму ввода пароля.
 	Locked bool `json:"locked,omitempty"`
@@ -222,6 +226,7 @@ func (a *API) handlePublicShop(w http.ResponseWriter, r *http.Request) {
 	for _, al := range albums {
 		resp := publicAlbumResponse{
 			ID:          al.ID.String(),
+			Slug:        al.Slug,
 			Title:       al.Title,
 			PhotoCount:  al.PhotoCount,
 			HasPassword: al.HasPassword,
@@ -291,15 +296,14 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	albumID, err := uuid.Parse(chi.URLParam(r, "albumID"))
-	if err != nil {
-		apiError(w, http.StatusNotFound, "not_found", "album not found")
-		return
+	// Ключ — слаг альбома (адрес /{shop}/{slug}) или его id (старые
+	// ссылки /{shop}/a/{uuid}: витрина редиректит их на слаг).
+	key := chi.URLParam(r, "albumID")
+	params := db.GetPublicAlbumParams{Slug: &key, ShopID: shop.ID}
+	if id, err := uuid.Parse(key); err == nil {
+		params = db.GetPublicAlbumParams{ID: uuid.NullUUID{UUID: id, Valid: true}, ShopID: shop.ID}
 	}
-	album, err := a.Q.GetPublicAlbum(r.Context(), db.GetPublicAlbumParams{
-		ID:     albumID,
-		ShopID: shop.ID,
-	})
+	album, err := a.Q.GetPublicAlbum(r.Context(), params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		apiError(w, http.StatusNotFound, "not_found", "album not found")
 		return
@@ -328,6 +332,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 			"shop": a.toPublicShopResponse(shop),
 			"album": publicAlbumResponse{
 				ID:          album.ID.String(),
+				Slug:        album.Slug,
 				ParentID:    parentID,
 				Title:       album.Title,
 				PhotoCount:  album.PhotoCount,
@@ -368,12 +373,17 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 	albumOut := publicAlbumResponse{
 		ID:          album.ID.String(),
+		Slug:        album.Slug,
 		Title:       album.Title,
 		Description: album.Description,
 		PhotoCount:  album.PhotoCount,
 		Unlisted:    album.Status == db.AlbumStatusUnlisted,
 		HasPassword: lock.PasswordHash != nil,
 		ParentID:    parentID,
+	}
+	if album.UpdatedAt.Valid {
+		updated := album.UpdatedAt.Time
+		albumOut.UpdatedAt = &updated
 	}
 	// Подальбомы: покупатель приходит по прямой ссылке на родительскую
 	// категорию, и без них видит пустую страницу — вложенные альбомы
@@ -387,6 +397,7 @@ func (a *API) handlePublicAlbum(w http.ResponseWriter, r *http.Request) {
 	for _, ch := range children {
 		child := publicAlbumResponse{
 			ID:          ch.ID.String(),
+			Slug:        ch.Slug,
 			Title:       ch.Title,
 			PhotoCount:  ch.PhotoCount,
 			HasPassword: ch.HasPassword,

@@ -39,7 +39,7 @@ func (q *Queries) CountAlbumsByShop(ctx context.Context, shopID uuid.UUID) (int6
 const createAlbum = `-- name: CreateAlbum :one
 INSERT INTO albums (shop_id, parent_id, title, sort_order)
 VALUES ($1, $2, $3, $4)
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 type CreateAlbumParams struct {
@@ -75,6 +75,7 @@ func (q *Queries) CreateAlbum(ctx context.Context, arg CreateAlbumParams) (Album
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -114,7 +115,7 @@ func (q *Queries) FirstAlbumPhotoAny(ctx context.Context, albumID uuid.UUID) (uu
 }
 
 const getAlbumForShop = `-- name: GetAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug FROM albums
 WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
 `
 
@@ -145,6 +146,7 @@ func (q *Queries) GetAlbumForShop(ctx context.Context, arg GetAlbumForShopParams
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -162,7 +164,7 @@ func (q *Queries) GetAlbumWatermark(ctx context.Context, id uuid.UUID) ([]byte, 
 }
 
 const getDeletedAlbumForShop = `-- name: GetDeletedAlbumForShop :one
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug FROM albums
 WHERE id = $1 AND shop_id = $2 AND deleted_at IS NOT NULL
 `
 
@@ -192,12 +194,13 @@ func (q *Queries) GetDeletedAlbumForShop(ctx context.Context, arg GetDeletedAlbu
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
 
 const listAlbumsByShop = `-- name: ListAlbumsByShop :many
-SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark FROM albums
+SELECT id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug FROM albums
 WHERE shop_id = $1 AND deleted_at IS NULL
 ORDER BY sort_order, created_at
 `
@@ -229,6 +232,7 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 			&i.BlockedByModerator,
 			&i.DeletedAt,
 			&i.Watermark,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
@@ -241,7 +245,7 @@ func (q *Queries) ListAlbumsByShop(ctx context.Context, shopID uuid.UUID) ([]Alb
 }
 
 const listDeletedAlbums = `-- name: ListDeletedAlbums :many
-SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark,
+SELECT a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark, a.slug,
        coalesce(t.photos, 0)::bigint AS tree_photos,
        coalesce(t.bytes, 0)::bigint  AS tree_bytes
 FROM albums a
@@ -294,6 +298,7 @@ func (q *Queries) ListDeletedAlbums(ctx context.Context, shopID uuid.UUID) ([]Li
 			&i.Album.BlockedByModerator,
 			&i.Album.DeletedAt,
 			&i.Album.Watermark,
+			&i.Album.Slug,
 			&i.TreePhotos,
 			&i.TreeBytes,
 		); err != nil {
@@ -405,7 +410,7 @@ const setAlbumPassword = `-- name: SetAlbumPassword :one
 UPDATE albums
 SET password_hash = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 type SetAlbumPasswordParams struct {
@@ -437,6 +442,7 @@ func (q *Queries) SetAlbumPassword(ctx context.Context, arg SetAlbumPasswordPara
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -445,7 +451,7 @@ const setAlbumWatermark = `-- name: SetAlbumWatermark :one
 UPDATE albums
 SET watermark = $3, updated_at = now()
 WHERE id = $1 AND shop_id = $2 AND deleted_at IS NULL
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 type SetAlbumWatermarkParams struct {
@@ -476,6 +482,7 @@ func (q *Queries) SetAlbumWatermark(ctx context.Context, arg SetAlbumWatermarkPa
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }
@@ -534,7 +541,7 @@ SET title          = $3,
     parent_id      = $8,
     updated_at     = now()
 WHERE id = $1 AND shop_id = $2
-RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark
+RETURNING id, shop_id, parent_id, title, cover_photo_id, sort_order, password_hash, photo_count, created_at, updated_at, category_id, status, hidden_by_plan, description, blocked_by_moderator, deleted_at, watermark, slug
 `
 
 type UpdateAlbumParams struct {
@@ -578,6 +585,7 @@ func (q *Queries) UpdateAlbum(ctx context.Context, arg UpdateAlbumParams) (Album
 		&i.BlockedByModerator,
 		&i.DeletedAt,
 		&i.Watermark,
+		&i.Slug,
 	)
 	return i, err
 }

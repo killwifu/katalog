@@ -75,6 +75,7 @@ func (a *API) handlePublicCategory(w http.ResponseWriter, r *http.Request) {
 	for _, al := range albums {
 		item := publicAlbumResponse{
 			ID:         al.ID.String(),
+			Slug:       al.Slug,
 			Title:      al.Title,
 			PhotoCount: al.PhotoCount,
 			// Замок на плитке: обложки у закрытого альбома нет.

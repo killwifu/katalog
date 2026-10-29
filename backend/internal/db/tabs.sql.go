@@ -214,7 +214,7 @@ func (q *Queries) GetTabForShop(ctx context.Context, arg GetTabForShopParams) (T
 
 const listPublicSectionAlbums = `-- name: ListPublicSectionAlbums :many
 SELECT s.id AS section_id, s.title AS section_title, s.sort_order AS section_order,
-       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark
+       a.id, a.shop_id, a.parent_id, a.title, a.cover_photo_id, a.sort_order, a.password_hash, a.photo_count, a.created_at, a.updated_at, a.category_id, a.status, a.hidden_by_plan, a.description, a.blocked_by_moderator, a.deleted_at, a.watermark, a.slug
 FROM sections s
 JOIN tabs t ON t.id = s.tab_id
 LEFT JOIN album_sections asec ON asec.section_id = s.id
@@ -258,6 +258,7 @@ type ListPublicSectionAlbumsRow struct {
 	BlockedByModerator pgtype.Bool        `json:"blocked_by_moderator"`
 	DeletedAt          pgtype.Timestamptz `json:"deleted_at"`
 	Watermark          []byte             `json:"watermark"`
+	Slug               *string            `json:"slug"`
 }
 
 // Публичная выкладка: секции вкладки со своими альбомами, одним запросом.
@@ -292,6 +293,7 @@ func (q *Queries) ListPublicSectionAlbums(ctx context.Context, arg ListPublicSec
 			&i.BlockedByModerator,
 			&i.DeletedAt,
 			&i.Watermark,
+			&i.Slug,
 		); err != nil {
 			return nil, err
 		}
