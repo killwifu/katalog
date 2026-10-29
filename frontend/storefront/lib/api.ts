@@ -24,6 +24,8 @@ export type AlbumPublic = {
   // Описание отдаётся только на странице альбома, в сетке его нет.
   description?: string
   id: string
+  // Адрес альбома на витрине: /{shop}/{slug}.
+  slug: string
   parent_id: string | null
   title: string
   photo_count: number
@@ -36,6 +38,8 @@ export type AlbumPublic = {
   // Когда альбом создан — только в сетке магазина; «Альбомы» показывают
   // их от новых к старым.
   created_at?: string
+  // Только на странице альбома: «обновлён 27 сентября 2026».
+  updated_at?: string
   // Альбом закрыт паролем: в сетке у него замок вместо обложки.
   has_password?: boolean
   // Содержимое не отдано — нужен пароль (см. LockedAlbum).
@@ -131,19 +135,18 @@ export function getShopPage(slug: string): Promise<ShopPage | null> {
   return getJSON<ShopPage>(`/api/v1/public/shops/${encodeURIComponent(slug)}`, slug)
 }
 
-export function getAlbumPage(slug: string, albumId: string, page: number): Promise<AlbumPage | null> {
+// albumKey — слаг альбома или его id (старые ссылки /{shop}/a/{uuid}).
+export function getAlbumPage(slug: string, albumKey: string, page: number): Promise<AlbumPage | null> {
   const params = page > 1 ? `?page=${page}` : ''
   return getJSON<AlbumPage>(
-    `/api/v1/public/shops/${encodeURIComponent(slug)}/albums/${encodeURIComponent(albumId)}${params}`,
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/albums/${encodeURIComponent(albumKey)}${params}`,
     slug,
   )
 }
 
-export function searchPhotos(slug: string, q: string): Promise<{ photos: PhotoPublic[] } | null> {
-  return getJSON<{ photos: PhotoPublic[] }>(
-    `/api/v1/public/shops/${encodeURIComponent(slug)}/search?q=${encodeURIComponent(q)}`,
-    slug,
-  )
+// Адрес альбома на витрине.
+export function albumHref(shopSlug: string, album: { slug: string }): string {
+  return `/${encodeURIComponent(shopSlug)}/${encodeURIComponent(album.slug)}`
 }
 
 export function getTabSections(slug: string, tabSlug: string): Promise<SectionPublic[] | null> {
@@ -193,3 +196,6 @@ export function withAlbumCounts(categories: CategoryPublic[], albums: AlbumPubli
     return { ...c, album_count: top.filter((a) => a.category_slugs?.some((s) => slugs.has(s))).length }
   })
 }
+
+// Адрес витрины — для ссылок в сообщении продавцу и в 404.
+export const SITE_URL = process.env.SITE_URL ?? 'http://localhost'

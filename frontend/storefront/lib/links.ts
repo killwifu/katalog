@@ -83,3 +83,20 @@ export function shopChannels(contacts: Record<string, string>): { channel: Chann
     .filter((ch) => typeof contacts[ch] === 'string' && contacts[ch].trim() !== '')
     .map((ch) => ({ channel: ch, value: contacts[ch] }))
 }
+
+// Как канал подписан в списке «Написать продавцу» и во вкладке «Контакты»
+// (макет 15): «@seoulwear», «+7 999 123-45-67», «vk.com/seoulwear».
+export function channelHandle(channel: Channel, value: string): string {
+  const v = value.trim()
+  if (channel === 'telegram') return `@${telegramHandle(v.replace(/^@/, '')).replace(/\/$/, '')}`
+  if (channel === 'whatsapp') {
+    const ru = v.replace(/\D/g, '').match(/^[78](\d{3})(\d{3})(\d{2})(\d{2})$/)
+    return ru ? `+7 ${ru[1]} ${ru[2]}-${ru[3]}-${ru[4]}` : v
+  }
+  // Полная ссылка — без схемы и www: так короче и узнаваемо.
+  return v.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, '')
+}
+
+// VK, MAX и Авито не принимают текст в ссылке: витрина копирует его в
+// буфер, а Авито открывает только профиль продавца.
+export const NO_TEXT_CHANNELS: Channel[] = ['vk', 'max', 'avito']

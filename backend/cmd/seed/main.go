@@ -70,7 +70,8 @@ func main() {
 	}, nil)
 
 	var album struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Slug string `json:"slug"`
 	}
 	c.must("POST", "/api/v1/shops/"+shop.ID+"/albums",
 		map[string]any{"title": "Каталог"}, &album)
@@ -87,7 +88,8 @@ func main() {
 	log.Printf("all %d photos ready", len(ids))
 
 	shopURL := fmt.Sprintf("%s/%s", strings.TrimRight(*storefront, "/"), shop.Slug)
-	albumURL := fmt.Sprintf("%s/a/%s", shopURL, album.ID)
+	// Адрес альбома на витрине — по слагу (/{shop}/{album_slug}).
+	albumURL := fmt.Sprintf("%s/%s", shopURL, album.Slug)
 
 	if *e2e {
 		runE2E(c, shop.ID, album.ID, albumURL)

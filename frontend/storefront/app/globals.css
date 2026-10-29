@@ -152,7 +152,6 @@ img {
    края и перекрыла бы подвал: страницы, где она есть, получают отступ снизу. */
 @media (max-width: 859px) {
   body:has(.stickybar) { padding-bottom: 76px; }
-  body:has(.contactbar) { padding-bottom: 80px; }
 }
 
 .muted  { color: var(--text-2); }
@@ -518,67 +517,6 @@ img {
 
 .pagination a:hover { color: var(--brand); }
 
-/* Лайтбокс */
-.lightbox {
-  position: fixed;
-  inset: 0;
-  background: rgb(0 0 0 / 0.85);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.lightbox-body {
-  position: relative;
-  max-width: min(1600px, 96vw);
-  max-height: 96vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.lightbox-body img {
-  max-height: 76vh;
-  width: auto;
-  max-width: 100%;
-  margin: 0 auto;
-  object-fit: contain;
-  border-radius: var(--r-el);
-}
-
-.lb-info {
-  text-align: center;
-  padding: 10px;
-}
-
-.lb-info .caption { color: #E8E7E3; }
-.lb-info .lead-buttons { justify-content: center; }
-
-.lb-close,
-.lb-nav {
-  position: absolute;
-  z-index: 2;
-  border: 0;
-  background: rgb(0 0 0 / 0.4);
-  color: #fff;
-  font-size: 1.8rem;
-  line-height: 1;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  cursor: pointer;
-}
-
-.lb-close { top: 8px; right: 8px; }
-
-.lb-nav {
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.lb-prev { left: 8px; }
-.lb-next { right: 8px; }
-
 /* ==========================================================================
    Юридические страницы и форма жалобы
    ========================================================================== */
@@ -639,81 +577,6 @@ img {
   font-size: var(--fs-sm);
 }
 
-/* --- Категории ------------------------------------------------------------
-   Одна структура данных — три раскладки (CategoryMenu): выпадающее меню
-   в шапке, дерево слева на странице категории, шторка на телефоне.
-   -------------------------------------------------------------------------- */
-
-.catlayout {
-  display: grid;
-  gap: 16px;
-}
-
-/* min-width: 0 обязателен: без него grid-элемент не даёт содержимому
-   сжиматься и сетка альбомов наезжает на дерево категорий. */
-.catlayout__main {
-  min-width: 0;
-}
-
-.catmenu {
-  position: relative;
-}
-
-.cattree {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.cattree a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--r-el);
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-
-.cattree a:hover {
-  color: var(--brand);
-}
-
-.cattree a[aria-current='page'] {
-  background: var(--brand-soft);
-  color: var(--brand-ink);
-  font-weight: 500;
-}
-
-.cattree ul {
-  list-style: none;
-  padding-left: 18px;
-  font-size: var(--fs-xs);
-}
-
-/* Выпадающая панель: в потоке на телефоне, наложением на десктопе. */
-.catpick {
-  margin-top: 6px;
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-}
-
-@media (min-width: 860px) {
-  .catlayout {
-    grid-template-columns: 220px 1fr;
-    gap: 28px;
-  }
-
-  .catmenu--dropdown .catpick {
-    position: absolute;
-    z-index: 20;
-    min-width: 260px;
-    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
-  }
-}
-
 /* Описание альбома: условия отправки и оплаты над фотографиями.
    Переносы строк расставляет продавец — сохраняем их как есть. */
 .albumdesc {
@@ -724,12 +587,6 @@ img {
   line-height: 1.6;
   color: var(--text-2);
 }
-
-/* Полоса связи вне лайтбокса: покупатель приходит из мессенджера прямо
-   в альбом, и главное действие витрины не должно требовать открытия фото.
-   На телефоне — липкая у нижнего края, на десктопе — блок в потоке. */
-.contactbar { margin: 16px 0; }
-.contactbar .lead-buttons { margin: 0; }
 
 /* Время ответа продавца под кнопками связи. */
 .reply-time {
@@ -758,37 +615,13 @@ img {
   .btn--sm { height: 44px; padding: 0 18px; }
 
   .pagination a,
-  .shop-tab,
-  .cattree a {
+  .shop-tab {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
   }
 
   .pagination a { padding: 0 12px; }
-
-  .contactbar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 30;
-    margin: 0;
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-  }
-
-  .contactbar .lead-buttons { flex-wrap: nowrap; gap: 6px; }
-
-  .contactbar .lead-buttons .btn {
-    flex: 1;
-    min-width: 0;
-    padding: 0 8px;
-    font-size: var(--fs-xs);
-  }
-
-  .contactbar .reply-time { display: none; }
 }
 
 /* --- Вкладки витрины ------------------------------------------------------
@@ -985,8 +818,6 @@ body:has(.shopbar) {
 /* pre-line: продавец пишет описание в несколько строк (доставка, часы),
    а витрина склеивала их в одну. */
 .shophead__about { margin: 4px 0 0; color: var(--text-2); font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
-.shophead__contacts { margin: 4px 0 0; color: var(--text-3); font-size: 13px; }
-.shophead__contacts a:hover { color: var(--brand); }
 
 .shophead .search-form {
   flex: none;
@@ -1224,8 +1055,6 @@ body:has(.shopbar) {
 .powered a:hover { color: var(--brand); }
 .contacts-tab { padding-top: 12px; }
 
-/* Страница категории: рядом дерево, колонка уже — альбомы по ширине. */
-.catlayout .album-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 .page:has(.shopbar) .breadcrumbs { margin-top: 20px; }
 
 /* Планшет: поля 32, альбомы по 4 в ряд, поиск 280. */
@@ -1345,18 +1174,6 @@ body:has(.shopbar) {
     no-repeat 14px center;
 }
 
-/* Страница категории уже экрана 860px: дерево категорий слева уходило над
-   альбомами и отодвигало их на полэкрана, хотя те же категории есть
-   в шапке («Категории ▾», шторка). Дерево — только рядом с сеткой. */
-@media (max-width: 859px) {
-  .catlayout > .catmenu--tree { display: none; }
-}
-
-/* Кнопки лайтбокса: svg — блочный, и в кнопке он прижимался к левому
-   краю (крестик на 5px, стрелки на 3px мимо центра круга). */
-.lb-close,
-.lb-nav { display: grid; place-items: center; padding: 0; }
-
 /* ==========================================================================
    Витрина v2 — по «15 · Desktop · Главная · страница 1» (аудит Figma):
    шапка магазина 28 сверху, имя 24/30, описание 14/20, контакты 13/18; поиск
@@ -1369,7 +1186,6 @@ body:has(.shopbar) {
   .page:has(.shopbar) .shophead { padding-top: 28px; }
   .shophead h1 { line-height: 30px; letter-spacing: 0; }
   .shophead__about { line-height: 20px; }
-  .shophead__contacts { line-height: 18px; }
   .shophead .search-form { width: 340px; }
   .shophead .search-form input {
     height: 42px;
@@ -1430,7 +1246,6 @@ body:has(.shopbar) {
   .shophead__ava { width: 48px; height: 48px; font-size: 16px; }
   .shophead h1 { font-size: 20px; line-height: 26px; letter-spacing: 0; }
   .shophead__about { margin-top: 3px; font-size: 13.5px; line-height: 19px; }
-  .shophead__contacts { margin-top: 3px; font-size: 12.5px; line-height: 18px; }
   .shophead .search-form input {
     height: 44px;
     padding-left: 51px;
@@ -1462,7 +1277,6 @@ body:has(.shopbar) {
   .shophead__ava { width: 56px; height: 56px; font-size: 19px; }
   .shophead h1 { font-size: 22px; line-height: 28px; letter-spacing: 0; }
   .shophead__about { line-height: 20px; }
-  .shophead__contacts { line-height: 18px; }
   .shophead .search-form { width: 280px; }
   .shophead .search-form input {
     height: 44px;
@@ -1497,5 +1311,311 @@ body:has(.shopbar) {
 .back-to-cabinet:hover { background: var(--brand-hover); }
 /* На телефоне внизу закреплены полосы действий — плашка встаёт над ними. */
 @media (max-width: 859px) {
-  body:has(.stickybar) .back-to-cabinet, body:has(.contactbar) .back-to-cabinet { bottom: 92px; }
+  body:has(.stickybar) .back-to-cabinet { bottom: 92px; }
+}
+
+/* ==========================================================================
+   Витрина v3 — перенос «15 · Витрина (покупатель)» целиком: шапка без
+   контактов с описанием в одну строку и «О магазине», «Написать продавцу»
+   одной кнопкой со списком каналов, «Поделиться», страница альбома под
+   шапкой витрины, просмотр фото на тёмном фоне, «Контакты» списком,
+   сортировка, чипы подкатегорий, заглушки и 404.
+   ========================================================================== */
+
+/* Шапка: число альбомов рядом с именем, описание одной строкой с «ещё». */
+.shophead h1 { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 10px; }
+.shophead__n { font-size: 13.5px; line-height: 20px; font-weight: 400; color: var(--text-3); }
+.shabout { position: relative; }
+.shophead__about { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
+.shabout__line { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.shabout__more {
+  flex: none; padding: 0; border: 0; background: none; font: inherit; font-weight: 500;
+  color: var(--brand); cursor: pointer;
+}
+.shabout__text { max-height: 300px; overflow-y: auto; font-size: 14px; line-height: 21px; color: var(--text); white-space: pre-line; }
+.shabout__text p + p { margin-top: 20px; }
+.sflink { padding: 0; border: 0; background: none; font: inherit; font-size: 13.5px; line-height: 20px; font-weight: 500; color: var(--brand); cursor: pointer; }
+.sflink:hover { color: var(--brand-hover); }
+
+/* Поиск: крестик в поле, когда в нём запрос. */
+.search-form { position: relative; }
+.search-form input::-webkit-search-cancel-button { display: none; }
+.search-form__clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--text-3);
+}
+.search-form__clear:hover { color: var(--text); background: var(--page); }
+
+/* Всплывающий список: панель под кнопкой; на телефоне — нижняя шторка. */
+.sfpop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 120;
+  width: 284px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 24px 56px rgb(26 26 23 / 18%);
+  text-align: left;
+}
+.sfpop__shade { display: none; }
+.sfpop__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 8px 10px 14px; }
+.sfpop__head strong { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--text); }
+.sfpop__head button {
+  display: grid; place-items: center; width: 32px; height: 32px; margin: -6px -4px -6px 0;
+  border: 0; border-radius: 50%; background: none; color: var(--text-2); cursor: pointer;
+}
+.sfpop--menu .sfpop__head, .sfpop--sort .sfpop__head { display: none; }
+.sfpop--about { left: 0; right: auto; width: 480px; padding: 14px 20px 18px; }
+.sfpop--about .sfpop__head { padding: 0 0 10px; }
+.sfpop--about .sflink { display: inline-block; margin-top: 14px; }
+.sfpop--sort { width: 220px; }
+
+/* «Написать продавцу» */
+.sfcm { position: relative; display: inline-block; }
+.sfcm__btn { height: 42px; padding: 0 18px 0 16px; font-size: 13.5px; }
+.btn--ghost.sfcm__btn { background: var(--surface); }
+.sfcm__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.sfcm__list a { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 10px; border-radius: 8px; color: var(--text); }
+.sfcm__list a:hover, .sfcm__list a:focus-visible { background: var(--page); }
+.sfcm__list span { display: grid; min-width: 0; }
+.sfcm__list b { font-size: 14px; line-height: 20px; font-weight: 500; }
+.sfcm__list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; line-height: 18px; color: var(--text-3); }
+.sfcm__hint { margin: 2px 0 0; padding: 10px 12px 6px; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 18px; color: var(--text-3); }
+.sfcm__none { padding: 14px 12px; font-size: 14px; line-height: 20px; color: var(--text-2); }
+.chico { flex: none; }
+
+/* Уведомление «Ссылка скопирована» */
+.sftoast {
+  position: fixed; top: 18px; left: 50%; z-index: 200; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 11px 18px;
+  border-radius: 12px; background: #1A1A18; color: #fff;
+  font-size: 13.5px; line-height: 20px; font-weight: 500; white-space: nowrap;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 22%);
+}
+
+/* Крошки витрины: ‹ Альбомы / Название */
+.sfcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 28px 0 20px; font-size: 13.5px; line-height: 20px; color: var(--text-2); }
+.page:has(.shopbar) .sfcrumbs { margin-top: 28px; }
+.sfcrumbs svg { color: var(--text-3); }
+.sfcrumbs a { color: var(--text-3); font-weight: 500; text-decoration: none; }
+.sfcrumbs a:hover { color: var(--text); }
+.sfcrumbs > span[aria-hidden] { color: var(--border-strong); }
+
+/* Шапка альбома */
+.sfalbum { display: flex; align-items: flex-start; gap: 32px; padding-bottom: 8px; }
+.sfalbum__main { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.sfalbum h1 { font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: 0; }
+.sfalbum__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; font-size: 13.5px; line-height: 20px; color: var(--text-3); }
+.sfalbum__cat { padding: 3px 10px; border-radius: var(--r-pill); background: var(--surface-alt); color: var(--text-2); font-size: 12px; line-height: 18px; font-weight: 500; }
+.sfalbum__cat:hover { color: var(--text); }
+.sfalbum .albumdesc { margin: 0; max-width: 720px; font-size: 15px; line-height: 23px; }
+.sfalbum__actions { flex: none; display: flex; gap: 10px; }
+.sfshare { height: 44px; padding: 0 18px 0 16px; font-size: 13.5px; }
+.sfalbum .sfcm__btn { height: 44px; }
+
+/* Фото альбома: 6 в ряд (186), 5 на планшете, 3 на телефоне. */
+.page:has(.shopbar) .photo-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin: 20px 0 0; }
+.page:has(.shopbar) .photo-card { border: 0; border-radius: 12px; background: none; }
+.page:has(.shopbar) .photo-card img { border-radius: 12px; }
+.page:has(.shopbar) .photo-card .caption { padding: 8px 0 0; }
+.photo-more { height: 1px; }
+
+/* Замок на обложке закрытого альбома — в левом верхнем углу. */
+.album-lock {
+  position: absolute; left: 8px; top: 8px; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 50%; background: rgb(26 26 24 / 72%); color: #fff;
+}
+.album-lock svg { width: 13px; height: 13px; }
+
+/* Просмотр фото: тёмный экран, верхняя панель, лента превью. */
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  background: #121211; color: #fff;
+}
+.lb-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; }
+.lb-title { display: grid; gap: 2px; min-width: 0; }
+.lb-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; line-height: 22px; font-weight: 500; }
+.lb-title span { font-size: 13px; line-height: 18px; color: #A3A29D; }
+.lb-actions { display: flex; align-items: center; gap: 8px; }
+.lb-icon, .lb-nav {
+  display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%;
+  background: rgb(255 255 255 / 10%); color: #fff; cursor: pointer;
+}
+.lb-icon { width: 40px; height: 40px; }
+.lb-icon:hover, .lb-nav:hover { background: rgb(255 255 255 / 18%); }
+.lb-toast { position: absolute; top: 82px; left: 50%; transform: translateX(-50%); z-index: 3; }
+.lb-toast .sftoast { position: static; transform: none; background: #fff; color: var(--text); }
+.lb-stage {
+  position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+  padding: 6px 112px; overflow: hidden; touch-action: pan-y pinch-zoom;
+}
+.lb-stage img {
+  max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain;
+  border-radius: 6px; cursor: zoom-in; transition: transform 0.2s;
+}
+.lb-stage img.is-zoomed { transform: scale(2); cursor: zoom-out; }
+.lb-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 52px; height: 52px; }
+.lb-prev { left: 32px; }
+.lb-next { right: 32px; }
+.lb-caption { flex: none; max-width: 720px; margin: 10px auto 0; padding: 0 24px; text-align: center; font-size: 13.5px; line-height: 20px; color: #E8E7E3; white-space: pre-line; overflow-wrap: anywhere; }
+.lb-thumbs {
+  flex: none; display: flex; gap: 8px; max-width: 100%; margin: 0 auto; padding: 40px 24px 24px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.lb-thumbs::-webkit-scrollbar { display: none; }
+.lb-thumbs button { flex: none; width: 56px; height: 56px; padding: 0; border: 2px solid transparent; border-radius: 6px; background: none; opacity: 0.7; cursor: pointer; overflow: hidden; }
+.lb-thumbs button[aria-current] { border-color: #fff; opacity: 1; }
+.lb-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.lb-bottom { display: none; }
+.lightbox .sfpop { color: var(--text); }
+
+/* Карточка пароля (макет 15 · «Альбом под паролем»): 420 по центру. */
+.lockgate { max-width: 420px; margin: 40px auto 64px; padding: 32px 32px 28px; border-radius: 16px; display: grid; gap: 16px; }
+.lockgate__ico { width: 88px; height: 88px; margin: 0 auto; border-radius: 16px; background: var(--page); color: var(--text); }
+.lockgate__ico svg { width: 22px; height: 22px; }
+.lockgate h2 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; }
+.lockgate p { margin: 0; font-size: 14.5px; line-height: 21px; }
+.lockgate__field { margin: 0; }
+.lockgate__field span { font-size: 12.5px; line-height: 18px; font-weight: 500; margin-bottom: 8px; }
+.lockgate__field input { height: 44px; padding: 0 14px; border-radius: 12px; background: var(--page); }
+.lockgate__field input:disabled { opacity: 0.6; }
+.lockgate p.lockgate__err { margin: -8px 0 0; font-size: 13px; line-height: 18px; }
+.lockgate p.lockgate__alert {
+  display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; text-align: left;
+  background: #FDECEC; color: #B00020; font-size: 13.5px !important; line-height: 20px !important;
+}
+.lockgate__alert svg { flex: none; margin-top: 1px; }
+.lockgate .btn { height: 42px; font-size: 13.5px; }
+.lockgate__ask { justify-self: center; }
+.lockgate__ask .sfpop { left: 50%; right: auto; transform: translateX(-50%); }
+
+/* Заглушки: пустая витрина, категория, поиск, альбом недоступен. */
+.sfempty { max-width: 440px; margin: 72px auto 80px; display: grid; justify-items: center; gap: 10px; text-align: center; }
+.sfempty__ico { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 8px; border-radius: 50%; background: var(--page); color: var(--text-3); }
+.sfempty h2 { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: 0; }
+.sfempty p { font-size: 14.5px; line-height: 22px; color: var(--text-2); }
+.sfempty__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+.sfempty__actions .btn { height: 42px; font-size: 13.5px; }
+.sfempty .sfcm .sfpop { left: 50%; right: auto; transform: translateX(-50%); }
+.catempty {
+  margin-top: 16px; padding: 40px 20px; border-radius: 16px; background: var(--page);
+  text-align: center; font-size: 15px; line-height: 22px; color: var(--text-2);
+}
+
+/* Заголовок списка: сортировка и «Сбросить поиск» справа. */
+.sfsort { position: relative; margin-left: auto; }
+.sfsort__btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text-2); cursor: pointer;
+}
+.sfsort__btn:hover { color: var(--text); }
+.sfsort__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.sfsort__list a { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: 8px; font-size: 14px; line-height: 20px; color: var(--text); }
+.sfsort__list a:hover, .sfsort__list a[aria-current] { background: var(--page); }
+.sfsort__list svg { color: var(--brand); }
+.cathead .sfsort span { display: inline; }
+
+/* Чипы подкатегорий: листаются вбок на телефоне. */
+.sfchips { display: flex; gap: 8px; margin-top: 20px; overflow-x: auto; scrollbar-width: none; }
+.sfchips::-webkit-scrollbar { display: none; }
+.sfchips .chip { flex: none; padding: 7px 14px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text); }
+.sfchips .chip.is-on { color: var(--surface); }
+.sfchips .chip span { margin-left: 4px; font-weight: 400; color: var(--text-3); }
+.sfchips .chip.is-on span { color: rgb(255 255 255 / 70%); }
+.sfchips + .album-grid { margin-top: 20px; }
+
+/* «Контакты» */
+.sfcontacts { padding-top: 36px; }
+.sfcontacts__sub { margin-top: 8px; font-size: 15px; line-height: 22px; color: var(--text-2); }
+.sfcontacts__list { list-style: none; max-width: 792px; margin: 24px 0 0; padding: 4px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.sfcontacts__list li { display: flex; align-items: center; gap: 16px; padding: 16px 20px; }
+.sfcontacts__list li + li { border-top: 1px solid var(--border); }
+.sfcontacts__who { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.sfcontacts__who b { font-size: 15px; line-height: 22px; font-weight: 500; }
+.sfcontacts__who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; line-height: 20px; color: var(--text-2); }
+.sfcontacts__who small { font-size: 12px; line-height: 18px; color: var(--text-3); }
+/* Цвета мессенджеров — затемнённые до 4.5:1 с белым (как .btn-*). */
+.sfch { height: 42px; padding: 0 18px; color: #fff; font-size: 13.5px; }
+.sfch:hover { filter: brightness(0.93); }
+.sfch--telegram { background: #1C7CB0; }
+.sfch--whatsapp { background: #107F71; }
+.sfch--vk       { background: #0062D6; }
+.sfch--max      { background: #7B3FF2; }
+.sfch--avito    { background: #D9363E; }
+
+/* 404 «Витрина не найдена» */
+.sf404 { display: flex; flex-direction: column; min-height: 100vh; padding-top: 0; }
+body:has(.sf404) { background: var(--surface); }
+.sf404__body { flex: 1; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 48px 0; text-align: center; }
+.sf404__code { font-size: 72px; line-height: 1; font-weight: 700; color: #CFCCC4; margin-bottom: 12px; }
+.sf404 h1 { font-size: 24px; line-height: 30px; letter-spacing: 0; }
+.sf404__body p:not(.sf404__code) { max-width: 400px; font-size: 15px; line-height: 22px; color: var(--text-2); }
+.sf404__actions { display: flex; gap: 10px; margin-top: 14px; }
+.sf404__actions .btn { height: 42px; font-size: 13.5px; }
+.sf404__domain { padding: 24px 0; text-align: center; font-size: 13px; color: var(--text-3); }
+
+/* Планшет: фото по 5 в ряд, поповер «О магазине» 480. */
+@media (max-width: 1199px) {
+  .page:has(.shopbar) .photo-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .lb-stage { padding: 6px 24px; }
+  .lb-prev { left: 16px; }
+  .lb-next { right: 16px; }
+}
+
+/* Телефон: шторки, «Написать продавцу» во всю ширину, фото по 3. */
+@media (max-width: 640px) {
+  .sfpop__shade { display: block; position: fixed; inset: 0; z-index: 119; background: rgb(0 0 0 / 40%); }
+  .sfpop, .sfpop--about, .lockgate__ask .sfpop, .sfempty .sfcm .sfpop {
+    position: fixed; inset: auto 0 0; top: auto; left: 0; right: 0; transform: none;
+    width: auto; max-height: 80vh; overflow-y: auto;
+    padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+    border: 0; border-radius: 20px 20px 0 0;
+  }
+  .sfpop::before {
+    content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
+    border-radius: 2px; background: var(--border-strong);
+  }
+  .sfpop--menu .sfpop__head, .sfpop--sort .sfpop__head { display: flex; }
+  .sfpop__head { padding: 4px 0 10px; }
+  .sfpop__head strong { font-size: 18px; line-height: 24px; }
+  .sfcm__list a { padding: 10px 4px; }
+  .sfcm__list b { font-size: 16px; line-height: 22px; }
+  .sfcm__list small { font-size: 13.5px; line-height: 20px; }
+  .sfcm__hint { border-top: 0; padding: 12px 4px 0; font-size: 13px; line-height: 19px; }
+  .sfsort__list a { padding: 13px 4px; font-size: 16px; }
+
+  .sfcrumbs { margin: 20px 0 14px; font-size: 13px; }
+  .page:has(.shopbar) .sfcrumbs { margin-top: 20px; }
+  .sfalbum { flex-direction: column; gap: 14px; }
+  .sfalbum h1 { font-size: 22px; line-height: 28px; }
+  .sfalbum__meta { gap: 8px; }
+  .sfalbum__meta > span { flex-basis: 100%; }
+  .sfalbum .albumdesc { font-size: 14px; line-height: 20px; }
+  .sfalbum__actions { width: 100%; }
+  .sfalbum__write { order: -1; flex: 1; }
+  .sfalbum__write .sfcm__btn, .sfalbum a.sfalbum__write { width: 100%; }
+  .sfalbum .sfcm__chev { display: none; }
+  .sfshare { width: 44px; padding: 0; }
+  .sfshare span { display: none; }
+  .page:has(.shopbar) .photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+  .page:has(.shopbar) .photo-card img { border-radius: 8px; }
+
+  .lb-top { padding: 12px 16px; }
+  .lb-top .lb-write { display: none; }
+  .lb-stage { padding: 0; }
+  .lb-stage img { border-radius: 0; }
+  .lb-nav { display: none; }
+  .lb-thumbs { margin: 0; padding: 24px 16px 16px; justify-content: flex-start; }
+  .lb-thumbs button { width: 48px; height: 48px; }
+  .lb-bottom { display: block; flex: none; padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+  .lb-bottom .sfcm, .lb-bottom .sfcm__btn, .lb-bottom a.lb-write { display: flex; width: 100%; }
+  .lb-bottom .sfcm__chev { display: none; }
+  .lb-toast { top: 72px; }
+
+  .lockgate { margin: 20px 0 40px; padding: 24px 20px; }
+  .sfempty { margin: 48px auto 56px; }
+  .catempty { padding: 28px 16px; font-size: 14px; }
+  .sfcontacts { padding-top: 24px; }
+  .sfcontacts__list li { padding: 14px 16px; gap: 12px; }
+  .sf404__actions { flex-direction: column; width: 100%; max-width: 340px; }
+  .sf404__actions .btn { width: 100%; }
+  .cathead .sfsort span { display: inline; }
 }

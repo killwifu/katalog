@@ -1,44 +1,106 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Link2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PhotoPublic, ShopPublic } from '@/lib/api'
-import { CHANNEL_LABELS, contactHref, messageText, shopChannels } from '@/lib/links'
-import { LeadLink } from './LeadLink'
+import type { AlbumPage, PhotoPublic, ShopPublic } from '@/lib/api'
+import { messageText } from '@/lib/links'
+import { ContactMenu } from './ContactMenu'
+import { copyText, useToast } from './Toast'
 
-// Сетка фото (srcset по деривативам, lazy-load) + лайтбокс с кнопками
-// «написать по товару». Покупателю уходят только WebP-деривативы.
+// Сетка фото альбома (макет 15): все фото одной сеткой, следующие порции
+// подгружаются при прокрутке; клик — просмотр. Покупателю уходят только
+// WebP-деривативы (srcset), скачивания нет.
+//
+// Откуда брать следующие порции: открытый альбом — с витрины
+// (/{shop}/{album}/photos, тот же data cache, что у страницы, Postgres на
+// горячем пути не трогаем); закрытый паролем — из API с пропуском.
+export type PhotoSource = { shopSlug: string; albumSlug: string; albumId: string; token?: string }
+
+async function fetchPhotos(src: PhotoSource, page: number): Promise<PhotoPublic[] | null> {
+  const url = src.token
+    ? `/api/v1/public/shops/${encodeURIComponent(src.shopSlug)}/albums/${encodeURIComponent(src.albumId)}?page=${page}`
+    : `/${encodeURIComponent(src.shopSlug)}/${encodeURIComponent(src.albumSlug)}/photos?page=${page}`
+  try {
+    const res = await fetch(url, src.token ? { headers: { 'X-Album-Token': src.token }, cache: 'no-store' } : undefined)
+    if (!res.ok) return null
+    const data = (await res.json()) as Pick<AlbumPage, 'photos'> & { album?: { locked?: boolean } }
+    return data.album?.locked ? null : data.photos
+  } catch {
+    return null
+  }
+}
 
 type Props = {
   photos: PhotoPublic[]
+  total: number
+  perPage: number
   shop: ShopPublic
-  // Выдача поиска: показываем, в каком альбоме лежит найденное фото —
-  // иначе покупатель нашёл товар и не знает, где смотреть остальное.
-  albumTitles?: Record<string, string>
+  albumTitle: string
+  source: PhotoSource
 }
 
-export function PhotoGrid({ photos, shop, albumTitles }: Props) {
+export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, source }: Props) {
+  const [photos, setPhotos] = useState(first)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
-  // Открытое фото живёт в адресе и в истории. Без этого ссылку на конкретный
-  // товар переслать было нельзя, а «Назад» на Android с открытым лайтбоксом
-  // уносил покупателя из магазина вместо закрытия окна.
+  const loading = useRef(false)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const hasMore = photos.length < total
+  // Открытое фото живёт в адресе (?p=) и в истории: ссылку на товар можно
+  // переслать, а «Назад» на Android закрывает просмотр, а не уводит из магазина.
   const pushed = useRef(false)
 
+  // Актуальный список для обработчиков, подписанных один раз (popstate).
+  const list = useRef(first)
+  list.current = photos
+  const loadMore = useCallback(async (): Promise<PhotoPublic[]> => {
+    const have = list.current
+    if (loading.current) return have
+    loading.current = true
+    const next = await fetchPhotos(source, Math.floor(have.length / perPage) + 1)
+    loading.current = false
+    if (!next || next.length === 0) return have
+    const seen = new Set(have.map((p) => p.id))
+    const merged = [...have, ...next.filter((p) => !seen.has(p.id))]
+    list.current = merged
+    setPhotos(merged)
+    return merged
+  }, [perPage, source])
+
+  // Подгрузка при прокрутке: за экран до конца сетки.
   useEffect(() => {
-    const sync = () => {
+    const el = sentinel.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver((entries) => entries[0].isIntersecting && void loadMore(), {
+      rootMargin: '800px 0px',
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, loadMore])
+
+  // ?p= из адреса: фото может лежать дальше первой порции — догружаем.
+  useEffect(() => {
+    const sync = async () => {
       const id = new URLSearchParams(location.search).get('p')
-      const i = id ? photos.findIndex((p) => p.id === id) : -1
+      let have = list.current
+      let i = id ? have.findIndex((p) => p.id === id) : -1
+      while (id && i < 0 && have.length < total) {
+        const more = await loadMore()
+        if (more.length === have.length) break
+        have = more
+        i = have.findIndex((p) => p.id === id)
+      }
       if (i < 0) pushed.current = false
       setOpenIndex(i >= 0 ? i : null)
     }
-    sync()
+    void sync()
     addEventListener('popstate', sync)
     return () => removeEventListener('popstate', sync)
-  }, [photos])
+    // Только на вход и на «Назад»: дальнейшие порции просмотр не трогают.
+  }, [])
 
-  const putInUrl = (index: number, mode: 'push' | 'replace') => {
+  const putInUrl = (index: number, items: PhotoPublic[], mode: 'push' | 'replace') => {
     const params = new URLSearchParams(location.search)
-    params.set('p', photos[index].id)
+    params.set('p', items[index].id)
     const url = `${location.pathname}?${params.toString()}`
     if (mode === 'push') history.pushState(null, '', url)
     else history.replaceState(null, '', url)
@@ -47,11 +109,17 @@ export function PhotoGrid({ photos, shop, albumTitles }: Props) {
 
   const open = (index: number) => {
     pushed.current = true
-    putInUrl(index, 'push')
+    putInUrl(index, photos, 'push')
+  }
+
+  const navigate = async (index: number) => {
+    let items = photos
+    if (index >= items.length && hasMore) items = await loadMore()
+    putInUrl(((index % items.length) + items.length) % items.length, items, 'replace')
   }
 
   const close = () => {
-    // Лайтбокс открыт по прямой ссылке — уходить назад некуда: чистим адрес.
+    // Просмотр открыт по прямой ссылке — уходить назад некуда: чистим адрес.
     if (!pushed.current) {
       const params = new URLSearchParams(location.search)
       params.delete('p')
@@ -75,29 +143,27 @@ export function PhotoGrid({ photos, shop, albumTitles }: Props) {
               <img
                 src={p.urls.small}
                 srcSet={`${p.urls.small} 500w, ${p.urls.medium} 800w`}
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                sizes="(max-width: 640px) 33vw, (max-width: 1199px) 20vw, 186px"
                 width={p.width || undefined}
                 height={p.height || undefined}
-                loading={i < 4 ? 'eager' : 'lazy'}
+                loading={i < 12 ? 'eager' : 'lazy'}
                 decoding="async"
                 alt={p.caption || 'Фото товара'}
               />
             </button>
             {p.caption && <p className="caption">{p.caption}</p>}
-            {albumTitles?.[p.album_id] && (
-              <a className="photo-album" href={`/${encodeURIComponent(shop.slug)}/a/${p.album_id}`}>
-                {albumTitles[p.album_id]}
-              </a>
-            )}
           </li>
         ))}
       </ul>
-      {openIndex !== null && (
+      {hasMore && <div ref={sentinel} className="photo-more" aria-hidden="true" />}
+      {openIndex !== null && photos[openIndex] && (
         <Lightbox
           photos={photos}
           index={openIndex}
+          total={total}
           shop={shop}
-          onNavigate={(i) => putInUrl(i, 'replace')}
+          albumTitle={albumTitle}
+          onNavigate={(i) => void navigate(i)}
           onClose={close}
         />
       )}
@@ -108,132 +174,171 @@ export function PhotoGrid({ photos, shop, albumTitles }: Props) {
 function Lightbox({
   photos,
   index,
+  total,
   shop,
+  albumTitle,
   onNavigate,
   onClose,
 }: {
   photos: PhotoPublic[]
   index: number
+  total: number
   shop: ShopPublic
+  albumTitle: string
   onNavigate: (i: number) => void
   onClose: () => void
 }) {
   const photo = photos[index]
   const body = useRef<HTMLDivElement>(null)
-  const prev = useCallback(
-    () => onNavigate((index - 1 + photos.length) % photos.length),
-    [index, photos.length, onNavigate],
-  )
-  const next = useCallback(
-    () => onNavigate((index + 1) % photos.length),
-    [index, photos.length, onNavigate],
-  )
+  const thumbs = useRef<HTMLDivElement>(null)
+  const touch = useRef<{ x: number; y: number } | null>(null)
+  // Увеличение по клику (на телефоне — щипком, его даёт браузер).
+  const [zoom, setZoom] = useState<string | null>(null)
+  const [toast, show] = useToast()
+  const prev = useCallback(() => onNavigate(index - 1), [index, onNavigate])
+  const next = useCallback(() => onNavigate(index + 1), [index, onNavigate])
 
-  // Возврат фокуса на плитку и блокировка прокрутки — ровно на монтирование.
-  // В одном эффекте с клавиатурой это ломалось: стрелки меняют prev/next,
-  // эффект переподписывался, и «плиткой, откуда пришли» становилась кнопка
-  // закрытия — на выходе фокус улетал в никуда.
+  useEffect(() => setZoom(null), [index])
+
+  // Возврат фокуса и блокировка прокрутки — ровно на монтирование.
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null
     document.body.style.overflow = 'hidden'
-    body.current?.querySelector<HTMLElement>('button')?.focus()
+    body.current?.querySelector<HTMLElement>('.lb-close')?.focus()
     return () => {
       document.body.style.overflow = ''
       returnTo?.focus()
     }
   }, [])
 
-  // Клавиатура: Esc, стрелки и запирание таба внутри окна — без этого
-  // табом уходишь за оверлей, в невидимую страницу под ним.
+  // Текущее превью — в видимой части ленты.
+  useEffect(() => {
+    thumbs.current?.querySelector('[aria-current]')?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [index])
+
+  // Клавиатура: Esc, стрелки и запирание таба внутри окна.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Esc в открытом списке каналов закрывает только список.
+      if (e.key === 'Escape' && !body.current?.querySelector('.sfpop')) onClose()
       if (e.key === 'ArrowLeft') prev()
       if (e.key === 'ArrowRight') next()
       if (e.key !== 'Tab' || !body.current) return
       const items = body.current.querySelectorAll<HTMLElement>('a[href], button')
       if (items.length === 0) return
-      const first = items[0]
+      const firstEl = items[0]
       const last = items[items.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
+      if (e.shiftKey && document.activeElement === firstEl) {
         e.preventDefault()
         last.focus()
       } else if (!e.shiftKey && document.activeElement === last) {
         e.preventDefault()
-        first.focus()
+        firstEl.focus()
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, prev, next])
 
-  // Фото без подписи давало «Интересует: » — пустое сообщение, по которому
-  // продавец не понимал, о каком товаре речь. Тогда подставляем ссылку на
-  // само фото: она открывает его в лайтбоксе (с нужной страницей альбома).
-  const text = messageText(shop.msg_template, photo.caption.trim() || photoLink(photo.id))
-  const channels = shopChannels(shop.contacts)
+  const link = photoLink(photo.id)
+  // В сообщение — ссылка на это фото (макет 15), подпись — если есть.
+  const caption = photo.caption.trim()
+  const text = messageText(shop.msg_template, caption ? `${caption}\n${link}` : link)
+  const contact = (cls: string) => (
+    <ContactMenu shop={shop} text={text} photoId={photo.id} about="фото" className={cls} />
+  )
 
   return (
-    <div
-      className="lightbox"
-      role="dialog"
-      aria-modal="true"
-      aria-label={photo.caption || 'Фото товара'}
-      onClick={onClose}
-    >
-      <div className="lightbox-body" ref={body} onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="lb-close" onClick={onClose} aria-label="Закрыть">
-          <X size={22} strokeWidth={1.6} aria-hidden="true" />
-        </button>
-        {photos.length > 1 && (
-          <>
-            <button type="button" className="lb-nav lb-prev" onClick={prev} aria-label="Назад">
-              <ChevronLeft size={26} strokeWidth={1.6} aria-hidden="true" />
-            </button>
-            <button type="button" className="lb-nav lb-next" onClick={next} aria-label="Вперёд">
-              <ChevronRight size={26} strokeWidth={1.6} aria-hidden="true" />
-            </button>
-          </>
-        )}
-        <img
-          src={photo.urls.large}
-          srcSet={`${photo.urls.medium} 800w, ${photo.urls.large} 1600w`}
-          sizes="100vw"
-          alt={photo.caption || 'Фото товара'}
-        />
-        <div className="lb-info">
-          {photo.caption && <p className="caption">{photo.caption}</p>}
-          {channels.length > 0 && (
-            <div className="lead-buttons">
-              {channels.map(({ channel, value }) => (
-                <LeadLink
-                  key={channel}
-                  shopId={shop.id}
-                  photoId={photo.id}
-                  channel={channel}
-                  href={contactHref(channel, value, text)}
-                  className={`btn btn-${channel}`}
-                  copyText={channel === 'vk' || channel === 'max' || channel === 'avito' ? text : undefined}
-                >
-                  Написать в {CHANNEL_LABELS[channel]}
-                </LeadLink>
-              ))}
-            </div>
-          )}
-          {channels.some((c) => c.channel === 'vk' || c.channel === 'max' || c.channel === 'avito') && (
-            <p className="lead-hint">
-              В VK, MAX и Авито текст о товаре не подставится сам — мы скопируем его, вставьте в чат.
-            </p>
-          )}
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={photo.caption || 'Фото товара'} ref={body}>
+      <div className="lb-top">
+        <div className="lb-title">
+          <b>{albumTitle}</b>
+          <span>
+            {index + 1} из {total}
+          </span>
+        </div>
+        <div className="lb-actions">
+          {contact('lb-write')}
+          <button
+            type="button"
+            className="lb-icon"
+            aria-label="Скопировать ссылку на фото"
+            onClick={() => void copyText(link).then((ok) => show(ok ? 'Ссылка на фото скопирована' : 'Не удалось скопировать ссылку'))}
+          >
+            <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <button type="button" className="lb-icon lb-close" onClick={onClose} aria-label="Закрыть">
+            <X size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
         </div>
       </div>
+      {toast && <div className="lb-toast">{toast}</div>}
+      <div
+        className="lb-stage"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+        onTouchStart={(e) => {
+          touch.current = e.touches.length === 1 && !zoom ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null
+        }}
+        onTouchEnd={(e) => {
+          const t = touch.current
+          touch.current = null
+          // Щипок или увеличенное фото — не листаем.
+          if (!t || zoom || (window.visualViewport && window.visualViewport.scale > 1.01)) return
+          const dx = e.changedTouches[0].clientX - t.x
+          const dy = e.changedTouches[0].clientY - t.y
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+            if (dx < 0) next()
+            else prev()
+          } else if (dy > 90 && dy > Math.abs(dx)) onClose()
+        }}
+      >
+        {total > 1 && (
+          <button type="button" className="lb-nav lb-prev" onClick={prev} aria-label="Назад">
+            <ChevronLeft size={22} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        )}
+        <img
+          key={photo.id}
+          src={photo.urls.large}
+          srcSet={`${photo.urls.medium} 800w, ${photo.urls.large} 1600w`}
+          sizes="(max-width: 640px) 100vw, 70vw"
+          alt={photo.caption || 'Фото товара'}
+          className={zoom ? 'is-zoomed' : undefined}
+          style={zoom ? { transformOrigin: zoom } : undefined}
+          onClick={(e) => {
+            if (zoom) return setZoom(null)
+            const r = e.currentTarget.getBoundingClientRect()
+            setZoom(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`)
+          }}
+        />
+        {total > 1 && (
+          <button type="button" className="lb-nav lb-next" onClick={next} aria-label="Вперёд">
+            <ChevronRight size={22} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {photo.caption && <p className="lb-caption">{photo.caption}</p>}
+      {photos.length > 1 && (
+        <div className="lb-thumbs" ref={thumbs}>
+          {photos.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-current={i === index ? 'true' : undefined}
+              aria-label={`Фото ${i + 1}`}
+              onClick={() => onNavigate(i)}
+            >
+              <img src={p.urls.small} alt="" loading="lazy" decoding="async" />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="lb-bottom">{contact('lb-write lb-write--block')}</div>
     </div>
   )
 }
 
 function photoLink(id: string): string {
   if (typeof window === 'undefined') return ''
-  const params = new URLSearchParams(location.search)
-  params.set('p', id)
-  return `${location.origin}${location.pathname}?${params.toString()}`
+  return `${location.origin}${location.pathname}?p=${encodeURIComponent(id)}`
 }

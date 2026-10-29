@@ -51,7 +51,7 @@ export function Pager({
 export function PoweredBy() {
   return (
     <p className="powered">
-      Витрина работает на <a href="/">Katalog</a>
+      Витрина работает на <a href="/">вуад</a>
     </p>
   )
 }

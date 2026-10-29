@@ -9,11 +9,15 @@ export function ShopTabs({
   tabs,
   categories,
   activeSlug,
+  empty = false,
 }: {
   shopSlug: string
   tabs: TabPublic[]
   categories: CategoryPublic[]
   activeSlug: string
+  // В витрине нет альбомов (макет 15 · «Пустая витрина»): пункт
+  // «Категории» остаётся, но без выпадающего списка.
+  empty?: boolean
 }) {
   const base = `/${encodeURIComponent(shopSlug)}`
   const href = (slug: string) => (slug === 'home' ? base : `${base}/t/${slug}`)
@@ -21,7 +25,11 @@ export function ShopTabs({
   // вкладки «Альбомы» у магазина нет).
   const anchor = tabs.some((t) => t.slug === 'albums') ? 'albums' : 'home'
   const dropdown =
-    categories.length > 0 ? (
+    categories.length > 0 && empty ? (
+      <span key="categories" className="shop-tab">
+        Категории
+      </span>
+    ) : categories.length > 0 ? (
       <CategoryDropdown
         key="categories"
         shopSlug={shopSlug}
