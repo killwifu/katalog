@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronDown, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronUp, Ellipsis, Eye, EyeOff as EyeOffIcon, FolderPlus, FolderTree, GripVertical, Inbox, Pen, Plus, Search, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronUp, Ellipsis, Eye, EyeOff as EyeOffIcon, FolderPlus, FolderTree, GripVertical, Inbox, Info, Pen, Plus, Search, Trash2, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
@@ -78,7 +78,7 @@ export function CategoriesPage() {
   const [placing, setPlacing] = useState<Album[] | null>(null)
   // Уведомление с «Отменить»: убрать альбом из категории — одно нажатие,
   // и вернуть его должно быть не сложнее.
-  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
+  const [toast, setToast] = useState<{ text: string; undo?: () => void; undoLabel?: string } | null>(null)
   useEffect(() => {
     if (!toast) return
     const timer = setTimeout(() => setToast(null), toast.undo ? 10000 : 5000)
@@ -112,17 +112,65 @@ export function CategoriesPage() {
     onError: (e: Error) => setError(errorText(e)),
   })
 
-  const remove = useMutation({
-    mutationFn: ({ id, moveTo }: { id: string; moveTo?: string }) =>
-      api.deleteCategory(shop.id, id, moveTo),
-    onSuccess: (_, v) => {
-      const title = categories.data?.find((c) => c.id === v.id)?.title
-      setSelected(null)
-      refresh()
-      if (title) setToast({ text: `Категория «${title}» удалена` })
-    },
-    onError: (e: Error) => setError(errorText(e)),
-  })
+  // Удаление (макет 14 · «Категория удалена»): открывается следующая
+  // категория, в тосте — «Отменить». Сервер удаляет насовсем, поэтому
+  // «Отменить» собирает категорию заново по снимку: тот же адрес, место,
+  // видимость, подкатегории и альбомы в прежнем порядке.
+  const removeCategory = async (c: Category) => {
+    const list = categories.data ?? []
+    const siblings = list.filter((x) => x.parent_id === c.parent_id)
+    const i = siblings.findIndex((x) => x.id === c.id)
+    const next = siblings[i + 1] ?? siblings[i - 1] ?? list.find((x) => x.id === c.parent_id)
+    const snap = [c, ...list.filter((x) => x.parent_id === c.id)].map((cat) => ({
+      cat,
+      albums: albumsOrdered(cat.id),
+    }))
+    try {
+      await api.deleteCategory(shop.id, c.id)
+    } catch (e) {
+      setError(errorText(e as Error))
+      return
+    }
+    setError('')
+    setSelected(next?.id)
+    setChip('')
+    setPicked(new Set())
+    refresh()
+    setToast({
+      text: `Категория «${c.title}» удалена`,
+      undo: () => void restoreCategory(snap, siblings.map((x) => x.id)),
+    })
+  }
+  const restoreCategory = async (snap: { cat: Category; albums: string[] }[], siblingIds: string[]) => {
+    const [root, ...subs] = snap
+    try {
+      const made = await api.createCategory(shop.id, root.cat.title, root.cat.slug, root.cat.parent_id ?? undefined)
+      const ids = new Map([[root.cat.id, made.id]])
+      for (const s of subs) ids.set(s.cat.id, (await api.createCategory(shop.id, s.cat.title, s.cat.slug, made.id)).id)
+      const now = await api.listCategories(shop.id)
+      await saveOrder(
+        now.filter((x) => x.parent_id === root.cat.parent_id),
+        siblingIds.map((id) => ids.get(id) ?? id),
+      )
+      await Promise.allSettled(
+        snap.flatMap((s) => {
+          const id = ids.get(s.cat.id) as string
+          const vis =
+            s.cat.is_hidden || !s.cat.on_home
+              ? [api.setCategoryVisibility(shop.id, id, { is_hidden: s.cat.is_hidden, on_home: s.cat.on_home })]
+              : []
+          const put = Promise.allSettled(s.albums.map((a) => api.addAlbumToCategory(shop.id, id, a))).then(() =>
+            s.albums.length > 1 ? api.setCategoryAlbumOrder(shop.id, id, s.albums) : undefined,
+          )
+          return [...vis, put]
+        }),
+      )
+      setSelected(made.id)
+    } catch {
+      setToast({ text: 'Не удалось вернуть категорию. Проверьте интернет' })
+    }
+    refresh()
+  }
 
   // Убрать альбомы из категории и предложить вернуть. Альбом может лежать
   // в нескольких категориях: убираем только из тех, что входят в открытую
@@ -134,15 +182,7 @@ export function CategoriesPage() {
     // Порядок альбомов в затронутых категориях до удаления: «Отменить»
     // возвращает альбомы на их места, а не в конец категории.
     const orderBefore = new Map<string, string[]>()
-    for (const categoryId of new Set(pairs.map((p) => p.categoryId))) {
-      orderBefore.set(
-        categoryId,
-        albumList
-          .filter((a) => catsOf(a).includes(categoryId))
-          .sort((x, y) => (x.category_pos?.[categoryId] ?? 0) - (y.category_pos?.[categoryId] ?? 0))
-          .map((a) => a.id),
-      )
-    }
+    for (const categoryId of new Set(pairs.map((p) => p.categoryId))) orderBefore.set(categoryId, albumsOrdered(categoryId))
     const results = await Promise.allSettled(
       pairs.map((p) => api.removeAlbumFromCategory(shop.id, p.categoryId, p.albumId)),
     )
@@ -198,7 +238,7 @@ export function CategoriesPage() {
           patch: { is_hidden: v.category.is_hidden, on_home: v.category.on_home },
         })
       if (v.patch.on_home === false) {
-        setToast({ text: `«${v.category.title}» больше не показывается на главной`, undo: back })
+        setToast({ text: `«${v.category.title}» больше не показывается на главной`, undo: back, undoLabel: 'Вернуть' })
       } else if (v.patch.is_hidden === true) {
         setToast({ text: `«${v.category.title}» скрыта с витрины`, undo: back })
       }
@@ -214,33 +254,36 @@ export function CategoriesPage() {
     onError: (e: Error) => setError(errorText(e)),
   })
 
-  // Порядок категорий верхнего уровня: перетащенная встаёт перед той, на
-  // которую её бросили. Номера переписываем всем подряд — так порядок не
-  // зависит от того, какие sort_order стояли раньше.
-  const reorderCategories = async (movingId: string, beforeId: string) => {
-    const list = (categories.data ?? []).filter((c) => !c.parent_id)
-    const moving = list.find((c) => c.id === movingId)
-    if (!moving || movingId === beforeId) return
-    const rest = list.filter((c) => c.id !== movingId)
-    rest.splice(rest.findIndex((c) => c.id === beforeId), 0, moving)
-    const results = await Promise.allSettled(
-      rest.map((c, i) => (c.sort_order === i ? null : api.updateCategory(shop.id, c.id, c.title, c.slug, null, i))),
+  // Альбомы категории в её порядке (он же порядок на витрине).
+  const albumsOrdered = (categoryId: string) =>
+    (albums.data ?? [])
+      .filter((a) => (a.category_ids ?? []).includes(categoryId))
+      .sort((x, y) => (x.category_pos?.[categoryId] ?? 0) - (y.category_pos?.[categoryId] ?? 0))
+      .map((a) => a.id)
+  // Номера переписываем всем на уровне подряд — так порядок не зависит от
+  // того, какие sort_order стояли раньше. Кого нет в ids — в конец.
+  const saveOrder = (level: Category[], ids: string[]) => {
+    const rank = (c: Category) => (ids.includes(c.id) ? ids.indexOf(c.id) : ids.length)
+    const sorted = [...level].sort((x, y) => rank(x) - rank(y))
+    return Promise.allSettled(
+      sorted.map((c, i) => (c.sort_order === i ? null : api.updateCategory(shop.id, c.id, c.title, c.slug, c.parent_id, i))),
     )
+  }
+  // Порядок внутри уровня (категории или подкатегории одной категории):
+  // перетащенная встаёт на место той, на которую её бросили, — ниже неё,
+  // если тянули вниз, и выше, если вверх (так её можно поставить и последней).
+  const reorderCategories = async (movingId: string, targetId: string) => {
+    const list = categories.data ?? []
+    const moving = list.find((c) => c.id === movingId)
+    if (!moving || movingId === targetId) return
+    const level = list.filter((c) => c.parent_id === moving.parent_id)
+    const ids = level.map((c) => c.id)
+    const down = ids.indexOf(movingId) < ids.indexOf(targetId)
+    const rest = ids.filter((id) => id !== movingId)
+    rest.splice(rest.indexOf(targetId) + (down ? 1 : 0), 0, movingId)
+    const results = await saveOrder(level, rest)
     refresh()
     if (results.some((r) => r.status === 'rejected')) setToast({ text: 'Не удалось сохранить порядок категорий' })
-  }
-  // Перестановка без перетаскивания (WCAG 2.5.7): «Переместить выше / ниже»
-  // в меню «⋯» — для клавиатуры и тех, кому трудно тянуть пальцем.
-  const moveCategory = (id: string, dir: -1 | 1) => {
-    const list = (categories.data ?? []).filter((c) => !c.parent_id)
-    const i = list.findIndex((c) => c.id === id)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= list.length) return
-    // «Выше» — встать перед соседом сверху; «ниже» — перед тем, кто через одного
-    // (или в конец, если сосед снизу последний).
-    if (dir === -1) void reorderCategories(id, list[j].id)
-    else if (j + 1 < list.length) void reorderCategories(id, list[j + 1].id)
-    else void reorderCategories(list[j].id, id)
   }
   const dropOnCategory = (target: Category, what = drag) => {
     setDrag(null)
@@ -254,26 +297,41 @@ export function CategoriesPage() {
           { onSuccess: () => setToast({ text: `Альбом «${album.title}» добавлен в «${target.title}»` }) },
         )
       }
-    } else if (!target.parent_id) {
+    } else {
       const moving = (categories.data ?? []).find((c) => c.id === what.id)
-      // Подкатегорию бросили на другую категорию — она переезжает туда
-      // (макет 14). Категорию на категорию — меняется порядок.
-      if (moving?.parent_id) {
-        if (moving.parent_id !== target.id) {
+      if (!moving) return
+      // Соседи по уровню — меняется порядок. Подкатегорию бросили на другую
+      // категорию (или её подкатегорию) — она переезжает туда (макет 14).
+      if (moving.parent_id === target.parent_id) {
+        void reorderCategories(moving.id, target.id)
+      } else if (moving.parent_id) {
+        const parent = target.parent_id ?? target.id
+        if (moving.parent_id !== parent) {
+          const title = (categories.data ?? []).find((c) => c.id === parent)?.title
           rename.mutate(
-            { id: moving.id, title: moving.title, slug: moving.slug, parentId: target.id },
-            { onSuccess: () => setToast({ text: `«${moving.title}» перенесена в «${target.title}»` }) },
+            { id: moving.id, title: moving.title, slug: moving.slug, parentId: parent },
+            { onSuccess: () => setToast({ text: `«${moving.title}» перенесена в «${title}»` }) },
           )
         }
-      } else {
-        void reorderCategories(what.id, target.id)
       }
     }
   }
+  // Куда встанет строка — синей линией (сосед по уровню) или подсветкой
+  // (подкатегория переезжает в эту категорию, альбом ложится в неё).
+  const dropMark = (c: Category): 'above' | 'below' | 'into' | undefined => {
+    const over = dropOn === c.id || treeReorder.over === c.id
+    const from = drag?.kind === 'category' ? drag.id : treeReorder.dragging
+    if (!over) return undefined
+    if (drag?.kind === 'album') return 'into'
+    const moving = all.find((x) => x.id === from)
+    if (!moving || moving.parent_id !== c.parent_id) return 'into'
+    const level = all.filter((x) => x.parent_id === c.parent_id)
+    return level.indexOf(moving) < level.indexOf(c) ? 'below' : 'above'
+  }
   const dropProps = (c: Category) => ({
     onDragOver: (e: React.DragEvent) => {
-      // Категорию можно бросить только на категорию верхнего уровня.
-      if (!drag || (drag.kind === 'category' && (c.parent_id || drag.id === c.id))) return
+      // Категорию верхнего уровня — только к соседям (третьего уровня нет).
+      if (!drag || (drag.kind === 'category' && (drag.id === c.id || (c.parent_id && !all.find((x) => x.id === drag.id)?.parent_id)))) return
       e.preventDefault()
       setDropOn(c.id)
     },
@@ -300,6 +358,7 @@ export function CategoriesPage() {
   const [treeOrdering, setTreeOrdering] = useState(false)
   const [paneOpen, setPaneOpen] = useState(false)
   const [albumOrdering, setAlbumOrdering] = useState(false)
+  const [narrow] = useState(() => window.matchMedia('(max-width: 1199px)').matches)
   const treeReorder = usePointerReorder('cat-id')
   const albumReorder = usePointerReorder('album-id')
   // Перестановка категорий и альбомов — плавным переездом строк и карточек.
@@ -374,11 +433,19 @@ export function CategoriesPage() {
     reorderAlbums.mutate({ categoryId: orderIn, ids })
   }
   const catTitle = (id: string | null) => (id ? all.find((c) => c.id === id)?.title : undefined)
-  const catTitles = (a: Album) =>
-    catsOf(a)
-      .map((id) => catTitle(id))
-      .filter(Boolean)
+  // Подпись карточки — подкатегории открытой категории, где лежит альбом
+  // (макет 14: «Пуховики, Куртки и парки»); у подкатегории и «Без категории» — нет.
+  const subTitles = (a: Album) =>
+    currentSubs
+      .filter((s) => catsOf(a).includes(s.id))
+      .map((s) => s.title)
       .join(', ')
+  // Карандаш и «+ Подкатегория» на странице категории (телефон) — поле в
+  // списке: закрываем страницу, иначе поле появится в скрытом дереве.
+  const editInTree = (start: () => void) => {
+    setPaneOpen(false)
+    start()
+  }
 
   return (
     <div>
@@ -407,6 +474,17 @@ export function CategoriesPage() {
             if (row && !(e.target as HTMLElement).closest('.cattree__handle')) setPaneOpen(true)
           }}
         >
+          {treeOrdering ? (
+            // Режим «Изменить порядок» (макет 14 · Tablet/Mobile): подсказка и
+            // «Готово» вместо сводки, «⋯» и «Добавить категорию» скрыты.
+            <div className="cattree__sum cattree__sum--order">
+              Перетащите за ручку
+              <button className="cats__done" onClick={() => setTreeOrdering(false)}>
+                <Icon as={Check} size={14} />
+                Готово
+              </button>
+            </div>
+          ) : (
           <div className="cattree__sum">
             {roots.length === 0 ? (
               'Категорий пока нет'
@@ -418,6 +496,7 @@ export function CategoriesPage() {
               </>
             )}
           </div>
+          )}
           {roots.map((c) => {
             const subs = children(c.id)
             const open = subs.length > 0 && isOpen(c.id)
@@ -436,7 +515,9 @@ export function CategoriesPage() {
               <div className={`cattree__item ${selected === c.id ? 'cattree__item--on' : ''}`}>
               <button
                 data-cat-id={c.id}
-                className={`cattree__row ${dropOn === c.id || treeReorder.over === c.id ? 'cattree__row--drop' : ''}`}
+                className="cattree__row"
+                data-drop={dropMark(c)}
+                data-dragging={(drag?.kind === 'category' && drag.id === c.id) || undefined}
                 aria-current={selected === c.id}
                 draggable
                 onDragStart={(e) => {
@@ -483,20 +564,21 @@ export function CategoriesPage() {
                 ) : (
                   <span className="cattree__chev" aria-hidden="true" />
                 )}
-                <b className={c.is_hidden ? 'cattree__title text-ink-3' : 'cattree__title'}>{c.title}</b>
-                {c.is_hidden ? (
+                {/* «не на главной» — у счётчика, на планшете — под названием (макет 14). */}
+                <span className="cattree__name">
+                  <b className={c.is_hidden ? 'cattree__title text-ink-3' : 'cattree__title'}>{c.title}</b>
+                  {!c.is_hidden && !c.on_home && (
+                    <span className="cattree__badge">
+                      <HomeIcon size={13} />
+                      не на главной
+                    </span>
+                  )}
+                </span>
+                {c.is_hidden && (
                   <span className="cattree__eye" role="img" aria-label="Скрыта с витрины">
                     <Icon as={EyeOffIcon} size={15} />
                   </span>
-                ) : (
-                  !c.on_home && (
-                    <span className="cattree__badge">
-                      <HomeIcon size={11} />
-                      не на главной
-                    </span>
-                  )
                 )}
-                <span className="spacer" />
                 <span className="cnt">{countIn(c)}</span>
               </button>
               {/* На телефоне «⋯» у каждой строки (макет 14 · Mobile), на
@@ -504,13 +586,10 @@ export function CategoriesPage() {
               {!treeOrdering && (
                 <CategoryActions
                   category={c}
-                  all={all}
                   subCount={subs.length}
                   onStartRename={() => setRenaming(c.id)}
                   onAddSub={() => setAdding({ parentId: c.id })}
-                  onMove={(dir) => moveCategory(c.id, dir)}
-                  canMove={[roots.indexOf(c) > 0, roots.indexOf(c) < roots.length - 1]}
-                  onDelete={remove.mutate}
+                  onDelete={() => void removeCategory(c)}
                   onVisibility={(patch) => visibility.mutate({ category: c, patch })}
                 />
               )}
@@ -532,7 +611,9 @@ export function CategoriesPage() {
                 <div key={sub.id} className={`cattree__item ${selected === sub.id ? 'cattree__item--on' : ''}`}>
                 <button
                   data-cat-id={sub.id}
-                  className={`cattree__row cattree__row--sub ${dropOn === sub.id ? 'cattree__row--drop' : ''}`}
+                  className="cattree__row cattree__row--sub"
+                  data-drop={dropMark(sub)}
+                  data-dragging={(drag?.kind === 'category' && drag.id === sub.id) || undefined}
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move'
@@ -567,10 +648,9 @@ export function CategoriesPage() {
                 {!treeOrdering && (
                   <CategoryActions
                     category={sub}
-                    all={all}
                     subCount={0}
                     onStartRename={() => setRenaming(sub.id)}
-                    onDelete={remove.mutate}
+                    onDelete={() => void removeCategory(sub)}
                     onVisibility={(patch) => visibility.mutate({ category: sub, patch })}
                   />
                 )}
@@ -628,10 +708,10 @@ export function CategoriesPage() {
               Добавить категорию
             </button>
           )}
-          {roots.length > 1 && (
-            <button className="cattree__add touch-only" onClick={() => setTreeOrdering((v) => !v)}>
-              <Icon as={treeOrdering ? Check : GripVertical} />
-              {treeOrdering ? 'Готово' : 'Изменить порядок'}
+          {roots.length > 1 && !treeOrdering && (
+            <button className="cattree__add touch-only" onClick={() => setTreeOrdering(true)}>
+              <Icon as={GripVertical} />
+              Изменить порядок
             </button>
           )}
         </div>
@@ -661,31 +741,45 @@ export function CategoriesPage() {
             <h2>
               {current ? current.title : 'Без категории'}
               {current && (
-                <button className="catpane__rename" onClick={() => setRenaming(current.id)} aria-label="Переименовать" title="Переименовать">
+                // На телефоне дерево скрыто страницей категории — поле
+                // переименования открывается в списке (макет 14 · Mobile).
+                <button className="catpane__rename" onClick={() => editInTree(() => setRenaming(current.id))} aria-label="Переименовать" title="Переименовать">
                   <Icon as={Pen} size={18} />
                 </button>
               )}
+              {(!current || current.is_hidden) && (
+                <span className="catpane__badge">
+                  <Icon as={EyeOffIcon} size={14} />
+                  {current ? 'Скрыта с витрины' : 'Видно только вам'}
+                </span>
+              )}
             </h2>
             <p className="catpane__meta">
-              {current ? (
-                <>
-                  {currentSubs.length}{' '}
-                  {plural(currentSubs.length, 'подкатегория', 'подкатегории', 'подкатегорий')} · {inCurrent.length}{' '}
-                  {plural(inCurrent.length, 'альбом', 'альбома', 'альбомов')}
-                </>
-              ) : (
-                <>Эти альбомы не попадут в меню витрины, пока вы не положите их в категорию</>
-              )}
+              {currentSubs.length > 0 &&
+                `${currentSubs.length} ${plural(currentSubs.length, 'подкатегория', 'подкатегории', 'подкатегорий')} · `}
+              {inCurrent.length > 0
+                ? `${inCurrent.length} ${plural(inCurrent.length, 'альбом', 'альбома', 'альбомов')}`
+                : 'Нет альбомов'}
             </p>
             </div>
             <span className="spacer" />
             {current && (
               <div className="catpane__acts">
-                {!current.parent_id && (
-                  <button className="btn btn--ghost btn--pill" onClick={() => setAdding({ parentId: current.id })}>
-                    <Icon as={Plus} size={18} />
-                    Подкатегория
+                {current.is_hidden ? (
+                  <button
+                    className="btn btn--ghost btn--pill"
+                    onClick={() => visibility.mutate({ category: current, patch: { is_hidden: false } })}
+                  >
+                    <Icon as={Eye} size={18} />
+                    Показать на витрине
                   </button>
+                ) : (
+                  !current.parent_id && (
+                    <button className="btn btn--ghost btn--pill" onClick={() => editInTree(() => setAdding({ parentId: current.id }))}>
+                      <Icon as={Plus} size={18} />
+                      Подкатегория
+                    </button>
+                  )
                 )}
                 <button className="btn btn--primary btn--pill" onClick={() => setPicking(true)}>
                   <Icon as={FolderPlus} size={18} />
@@ -696,19 +790,13 @@ export function CategoriesPage() {
           </div>
 
 
-          {current?.is_hidden && (
-            <div className="alert alert--warn">
-              <span className="flex-1">
-                <b>Скрыта с витрины.</b> Покупатели не видят эту категорию на витрине. Сами альбомы остаются
-                доступны — по ссылке и на вкладке «Альбомы».
-              </span>
-              <button
-                className="shrink-0 font-medium underline"
-                onClick={() => visibility.mutate({ category: current, patch: { is_hidden: false } })}
-              >
-                Показать на витрине
-              </button>
-            </div>
+          {(!current || current.is_hidden) && (
+            <p className="catpane__note">
+              <Icon as={Info} size={16} />
+              {current
+                ? 'Покупатели не видят эту категорию на витрине. Сами альбомы остаются доступны — по ссылке и в других категориях.'
+                : 'Здесь альбомы, которые не лежат ни в одной категории. Покупатели этот раздел не видят. Чтобы альбом попал на витрину в категорию — добавьте его туда.'}
+            </p>
           )}
 
           {currentSubs.length > 0 && (
@@ -724,12 +812,15 @@ export function CategoriesPage() {
             </div>
           )}
 
+          {inCurrent.length > 0 && (
           <div className="alhead">
-            {/* Макет 14: «Выбрать все» слева, поиск справа. */}
-            {visible.length > 0 && (current || all.length > 0) && !albumOrdering && (
+            {/* Макет 14: «Выбрать все» слева, поиск справа. В режиме порядка
+                «Выбрать все» приглушено, поиск скрыт, «Готово» — справа. */}
+            {visible.length > 0 && (current || all.length > 0) && (
               <SelectAll
                 picked={picked.size}
                 all={visible.every((a) => picked.has(a.id))}
+                disabled={albumOrdering}
                 onToggle={() =>
                   setPicked(visible.every((a) => picked.has(a.id)) ? new Set() : new Set(visible.map((a) => a.id)))
                 }
@@ -743,6 +834,7 @@ export function CategoriesPage() {
                     setRemoving({ list: inCurrent.filter((a) => picked.has(a.id)), from: current.title, ids: idsOf(current) })
                   }
                 >
+                  <Icon as={Trash2} size={16} />
                   Убрать из категории
                 </button>
               </>
@@ -754,23 +846,31 @@ export function CategoriesPage() {
                   onClick={() => setPlacing(uncategorized.filter((a) => picked.has(a.id)))}
                   disabled={all.length === 0}
                 >
+                  <Icon as={Plus} size={16} />
                   Добавить в категории
                 </button>
               </>
             )}
-            {current && visible.length > 1 && picked.size === 0 && (
-              <button className="alhead__order" onClick={() => setAlbumOrdering((v) => !v)}>
-                <Icon as={albumOrdering ? Check : GripVertical} size={14} />
-                {albumOrdering ? 'Готово' : 'Изменить порядок'}
+            {current && visible.length > 1 && picked.size === 0 && !albumOrdering && (
+              <button className="alhead__order" onClick={() => setAlbumOrdering(true)}>
+                <Icon as={GripVertical} size={14} />
+                Изменить порядок
               </button>
             )}
             <span className="spacer" />
+            {albumOrdering && (
+              <button className="cats__done" onClick={() => setAlbumOrdering(false)}>
+                <Icon as={Check} size={14} />
+                Готово
+              </button>
+            )}
             <span className="catpane__search" hidden={albumOrdering}>
               <Icon as={Search} />
+              {/* «Найти альбом» на планшете и телефоне — подпись короче (макет 14). */}
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск в категории"
+                placeholder={narrow ? 'Найти альбом' : 'Поиск в категории'}
                 aria-label="Поиск в категории"
               />
               {query && (
@@ -779,7 +879,14 @@ export function CategoriesPage() {
                 </button>
               )}
             </span>
+            {albumOrdering && (
+              <p className="cats__hint">
+                <Icon as={Info} size={14} />
+                Перетащите альбом за ручку, чтобы поменять порядок
+              </p>
+            )}
           </div>
+          )}
 
           {visible.length === 0 ? (
             norm ? (
@@ -794,12 +901,15 @@ export function CategoriesPage() {
               </div>
             ) : current ? (
               <div className="emptybox">
+                <div className="emptybox__ico emptybox__ico--brand" aria-hidden="true">
+                  <Icon as={ImageIcon} size={24} />
+                </div>
                 <h3>В категории пока нет альбомов</h3>
                 <p>
-                  Категория уже видна покупателям в меню витрины. Добавьте в неё альбомы или создайте
-                  подкатегории.
+                  Категория уже видна покупателям на витрине. Добавьте в неё альбомы или создайте подкатегории
                 </p>
-                <button className="btn btn--primary" onClick={() => setPicking(true)}>
+                <button className="btn btn--primary btn--pill" onClick={() => setPicking(true)}>
+                  <Icon as={FolderPlus} size={18} />
                   Добавить альбомы
                 </button>
               </div>
@@ -886,9 +996,11 @@ export function CategoriesPage() {
                   )}
                   <div className="alcard__body">
                     <b title={a.title}>{a.title}</b>
-                    <span className="alcard__cat" title={catTitles(a)}>
-                      {catTitles(a) || 'Без категории'}
-                    </span>
+                    {subTitles(a) && (
+                      <span className="alcard__cat" title={subTitles(a)}>
+                        {subTitles(a)}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -939,14 +1051,15 @@ export function CategoriesPage() {
         </div></Portal>
       )}
 
+      {/* На телефоне тост снизу (макет 14 · Mobile) — как в «Альбомах». */}
       {toast && (
-        <Toast
+        <div className="al__toast"><Toast
           text={toast.text}
           actions={
             toast.undo
               ? [
                   {
-                    label: 'Отменить',
+                    label: toast.undoLabel ?? 'Отменить',
                     run: () => {
                       toast.undo?.()
                       setToast(null)
@@ -956,7 +1069,7 @@ export function CategoriesPage() {
               : []
           }
           onClose={() => setToast(null)}
-        />
+        /></div>
       )}
 
       {picking && current && (
@@ -1012,34 +1125,26 @@ function plural(n: number, one: string, few: string, many: string): string {
   return many
 }
 
-// Переименование и удаление живут в правой панели: в макете это карандаш
-// у заголовка и пункт меню «⋯». Удаление спрашивает, куда девать альбомы —
-// молча отвязывать нельзя, продавец потеряет раскладку витрины.
+// Меню «⋯» строки дерева (макет 14): переименовать, подкатегория, «На
+// главной», скрыть, удалить. Удаление — после подтверждения; альбомы
+// остаются, а вернуть категорию можно из тоста.
 function CategoryActions({
   category,
-  all,
   subCount,
   onStartRename,
   onAddSub,
-  onMove,
-  canMove,
   onDelete,
   onVisibility,
 }: {
   category: Category
-  all: Category[]
   subCount: number
   onStartRename: () => void
   onAddSub?: () => void
-  onMove?: (dir: -1 | 1) => void
-  canMove?: [boolean, boolean]
-  onDelete: (v: { id: string; moveTo?: string }) => void
+  onDelete: () => void
   onVisibility: (patch: { is_hidden?: boolean; on_home?: boolean }) => void
 }) {
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [moveTo, setMoveTo] = useState('')
-  const targets = all.filter((c) => c.id !== category.id && !c.parent_id)
 
   return (
     // Меню «⋯» у выбранной строки дерева (макет 14 · Меню «⋯»).
@@ -1064,18 +1169,6 @@ function CategoryActions({
               <Icon as={Plus} />
               Добавить подкатегорию
             </button>
-          )}
-          {onMove && canMove && (
-            <>
-              <button role="menuitem" disabled={!canMove[0]} onClick={() => onMove(-1)}>
-                <Icon as={ArrowUp} />
-                Переместить выше
-              </button>
-              <button role="menuitem" disabled={!canMove[1]} onClick={() => onMove(1)}>
-                <Icon as={ArrowDown} />
-                Переместить ниже
-              </button>
-            </>
           )}
           {/* «На главной» — только у категорий верхнего уровня: блоками на
               главной витрины стоят они, подкатегории живут внутри. */}
@@ -1113,24 +1206,11 @@ function CategoryActions({
             <div className="modal__head">
               <h2>Удалить категорию «{category.title}»?</h2>
             </div>
-            <div className="modal__text">
-              <p>
-                {subCount > 0 &&
-                  `Вместе с ней ${plural(subCount, 'удалится', 'удалятся', 'удалятся')} ${subCount} ${plural(subCount, 'подкатегория', 'подкатегории', 'подкатегорий')}. `}
-                Альбомы останутся — их можно оставить без категории или перенести в другую.
-              </p>
-              <label className="field mt-3">
-                <span>Куда деть альбомы</span>
-                <select className="inp" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-                  <option value="">Оставить «Без категории»</option>
-                  {targets.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      Перенести в «{c.title}»
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            <p className="modal__text">
+              {subCount > 0 &&
+                `Вместе с ней ${plural(subCount, 'удалится', 'удалятся', 'удалятся')} ${subCount} ${plural(subCount, 'подкатегория', 'подкатегории', 'подкатегорий')}. `}
+              Альбомы останутся — те, что больше ни в одной категории, попадут в «Без категории».
+            </p>
             <div className="modal__foot">
               <span className="spacer" />
               <button className="btn btn--ghost" onClick={() => setConfirming(false)} autoFocus>
@@ -1140,7 +1220,7 @@ function CategoryActions({
                 className="btn btn--primary"
                 onClick={() => {
                   setConfirming(false)
-                  onDelete({ id: category.id, moveTo: moveTo || undefined })
+                  onDelete()
                 }}
               >
                 Удалить

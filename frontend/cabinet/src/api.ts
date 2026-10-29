@@ -552,12 +552,11 @@ export const api = {
     request<void>('DELETE', `/shops/${shopId}/categories/${categoryId}/albums/${albumId}`),
   setCategoryVisibility: (shopId: string, id: string, patch: { is_hidden?: boolean; on_home?: boolean }) =>
     request<Category>('PATCH', `/shops/${shopId}/categories/${id}/visibility`, patch),
-  // moveTo пустой — альбомы останутся без категории, но не удалятся.
   deleteAlbum: (shopId: string, id: string) =>
     request<void>('DELETE', `/shops/${shopId}/albums/${id}`),
 
-  deleteCategory: (shopId: string, id: string, moveTo?: string) =>
-    request<void>('DELETE', `/shops/${shopId}/categories/${id}${moveTo ? `?move_to=${moveTo}` : ''}`),
+  deleteCategory: (shopId: string, id: string) =>
+    request<void>('DELETE', `/shops/${shopId}/categories/${id}`),
 
   presign: (shopId: string, albumId: string, size: number) =>
     request<{ photo_id: string; url: string }>('POST', '/uploads/presign', {
