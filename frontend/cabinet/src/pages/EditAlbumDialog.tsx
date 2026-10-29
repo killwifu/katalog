@@ -1,9 +1,9 @@
-import { X, Check, Plus, Trash2, Undo2, CircleAlert, GripVertical, WifiOff } from 'lucide-react'
+import { X, Check, Plus, Trash2, CircleAlert, GripVertical, WifiOff } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import { api, ApiError, errorText, type Album, type AlbumStatus, type Category } from '../api'
 import { ACCEPT_ATTR, FORMATS_HINT, plural, rejectReason, uploadToAlbum } from '../lib/uploadRun'
-import { LimitLink, useLimitExcess } from '../lib/limits'
+import { LimitError, LimitLink, useLimitExcess } from '../lib/limits'
 import { Icon } from '../lib/icons'
 import { useShop } from './AppLayout'
 import { shopWatermark, WatermarkControl } from './WatermarkControl'
@@ -17,6 +17,16 @@ import { useSingleFlight } from '../lib/singleFlight'
 import { Portal } from '../lib/Portal'
 import { useFlip } from '../lib/flip'
 import { setLiftedDragImage } from '../lib/dragGhost'
+import {
+  DropRelease,
+  fileCount,
+  MAX_DESCRIPTION,
+  PhotoDrop,
+  TileMenu,
+  tileOnRight,
+  TouchHint,
+  useTileMenuDismiss,
+} from './NewAlbumDialog'
 
 // Редактирование альбома по макету 12 · Desktop · v2 — тем же окном, что и
 // создание: слева фотографии, справа данные. Всё, что продавец меняет в
@@ -24,7 +34,6 @@ import { setLiftedDragImage } from '../lib/dragGhost'
 // «Удаленное», новые загружаются, обложка меняется. До сохранения альбом
 // на витрине остаётся прежним.
 const MAX_TITLE = 30
-const MAX_DESCRIPTION = 2000
 
 const ACCESS: { id: AlbumStatus; label: string; hint: string }[] = [
   { id: 'published', label: 'Опубликован', hint: 'Альбом увидят все посетители витрины' },
@@ -54,7 +63,11 @@ export function EditAlbumDialog({
   const fileInput = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState(album.title)
   const [description, setDescription] = useState(album.description)
-  const [categoryId, setCategoryId] = useState(album.category_id ?? '')
+  // Альбом может лежать в нескольких категориях (макет 11–12 · «Выбор категорий»).
+  const initialCats = album.category_ids ?? (album.category_id ? [album.category_id] : [])
+  const [categoryIds, setCategoryIds] = useState<string[]>(initialCats)
+  const catsChanged =
+    categoryIds.length !== initialCats.length || categoryIds.some((id) => !initialCats.includes(id))
   const [status, setStatus] = useState<AlbumStatus>(album.status)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -62,6 +75,8 @@ export function EditAlbumDialog({
   // только после «Сохранить».
   const [clearing, setClearing] = useState(false)
   const [menuKey, setMenuKey] = useState<string | null>(null)
+  const [menuRight, setMenuRight] = useState(false)
+  useTileMenuDismiss(menuKey, setMenuKey)
   // Телефон (макет 12 · Mobile): в форме первые 8 фото, «Показать все N
   // фото» раскрывает сетку на месте, «Свернуть» — обратно.
   const [phone] = useState(() => window.matchMedia('(max-width: 640px)').matches)
@@ -75,6 +90,11 @@ export function EditAlbumDialog({
   useFlip(tilesRef, 'tile-key')
   const [confirmClose, setConfirmClose] = useState(false)
   const [over, setOver] = useState(false)
+  const [dragCount, setDragCount] = useState(0)
+  const dragOver = (on: boolean, e?: DragEvent) => {
+    setOver(on)
+    if (e) setDragCount(fileCount(e))
+  }
   const shop = useShop()
   const limitExcess = useLimitExcess(shop)
   const [password, setPassword] = useState<PasswordChoice>({ mode: album.has_password ? 'keep' : 'none', value: '' })
@@ -111,12 +131,28 @@ export function EditAlbumDialog({
   const [added, setAdded] = useState<NewItem[]>([])
   const [percent, setPercent] = useState<Record<string, number>>({})
   const validAdded = added.filter((i) => !i.reject)
+  // Убранные фото из сетки исчезают (макет 12 · «Есть изменения»); вернуть
+  // их — «Отмена» в окне.
+  const visible = existing.filter((p) => !removed.has(p.id))
+  // Превышение лимита — своей строкой в футере, пока не поменяли добавленные фото.
+  const [limitHit, setLimitHit] = useState<{ excess: string; added: NewItem[] } | null>(null)
+  const limit = limitHit?.added === added ? limitHit.excess : ''
+  // Срок хранения «Удаленного» задаёт сервер (TRASH_KEEP_DAYS).
+  const trash = useQuery({
+    queryKey: ['trash', shopId, 1],
+    queryFn: () => api.listTrash(shopId, 1),
+    enabled: removed.size > 0 || clearing,
+  })
+  const keepDays = trash.data?.keep_days
+  const restoreText = keepDays
+    ? `их можно восстановить ${keepDays} ${plural(keepDays, 'день', 'дня', 'дней')}`
+    : 'оттуда их можно восстановить'
 
   const currentCover = cover ?? album.cover_photo_id ?? existing[0]?.id ?? null
   const dirty =
     title !== album.title ||
     description !== album.description ||
-    categoryId !== (album.category_id ?? '') ||
+    catsChanged ||
     status !== album.status ||
     removed.size > 0 ||
     cover !== null ||
@@ -128,7 +164,7 @@ export function EditAlbumDialog({
     (status !== album.status || passwordChanged) &&
     title === album.title &&
     description === album.description &&
-    categoryId === (album.category_id ?? '') &&
+    !catsChanged &&
     removed.size === 0 &&
     cover === null &&
     order === null &&
@@ -171,13 +207,7 @@ export function EditAlbumDialog({
     }
     if (!busy) addFiles(e.dataTransfer.files)
   }
-  const toggleRemoved = (id: string) =>
-    setRemoved((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const remove = (id: string) => setRemoved((prev) => new Set(prev).add(id))
 
   // Двойной клик не запускает действие дважды.
   const flight = useSingleFlight()
@@ -192,10 +222,8 @@ export function EditAlbumDialog({
       // не сохраняется ничего. Убранные фото места не освобождают: они уходят
       // в «Удаленное» и продолжают считаться в тарифе.
       const excess = limitExcess(validAdded.length, validAdded.reduce((sum, i) => sum + i.file.size, 0))
-      if (excess) {
-        setError(`Изменения не сохранены: ${excess}. Удалите лишние фото или смените тариф.`)
-        return
-      }
+      setLimitHit(excess ? { excess, added } : null)
+      if (excess) return
       setBusy(true)
       setError('')
       try {
@@ -224,9 +252,8 @@ export function EditAlbumDialog({
             ...(coverChanged && album.cover_photo_id ? { cover_photo_id: '' } : {}),
           })
         }
-        if (categoryId !== (album.category_id ?? '')) {
-          await api.setAlbumCategory(shopId, album.id, categoryId || null)
-        }
+        for (const id of categoryIds.filter((c) => !initialCats.includes(c))) await api.addAlbumToCategory(shopId, id, album.id)
+        for (const id of initialCats.filter((c) => !categoryIds.includes(c))) await api.removeAlbumFromCategory(shopId, id, album.id)
         if (order) {
           await api.setPhotoOrder(shopId, album.id, order.filter((id) => !removed.has(id)))
           setOrder(null)
@@ -279,7 +306,7 @@ export function EditAlbumDialog({
 
   return (
     <Portal><div className="modal__back" role="dialog" aria-modal="true" aria-label="Редактировать альбом" {...backdrop}>
-      <div className={withPhotos ? 'modal modal--sheet' : 'modal modal--form modal--sheet'}>
+      <div className={withPhotos ? 'modal modal--sheet modal--album' : 'modal modal--form modal--sheet modal--album'}>
         <div className="modal__head">
           <div>
             <h2>Редактировать альбом</h2>
@@ -305,17 +332,12 @@ export function EditAlbumDialog({
               </span>
               <span className="spacer" />
               {photosAfter > 0 && <span className="field__cnt field__cnt--tip">Первое фото — обложка</span>}
-              {/* Макет 12 · «Удалить все фото»: помечает всё показанное, а
-                  не удаляет — до «Сохранить» это можно отменить. */}
-              {existing.length + added.length > 0 &&
-                !busy &&
-                (existing.every((p) => removed.has(p.id)) && added.length === 0 ? (
-                  <button className="btn btn--quiet btn--sm whitespace-nowrap" onClick={() => setRemoved(new Set())}>
-                    Вернуть все
-                  </button>
-                ) : (
+              {/* Макет 12 · «Удалить все фото»: сетка очищается, а в
+                  «Удаленное» фото уходят только по «Сохранить». */}
+              {visible.length + added.length > 0 &&
+                !busy && (
                   <>
-                    {existing.length > 1 && (
+                    {visible.length > 1 && (
                       <button className="btn btn--quiet btn--sm touch-only phbar__btn" aria-pressed={ordering} onClick={() => setOrdering((v) => !v)}>
                         <Icon as={ordering ? Check : GripVertical} />
                         {ordering ? 'Готово' : 'Изменить порядок'}
@@ -328,7 +350,7 @@ export function EditAlbumDialog({
                       </button>
                     )}
                   </>
-                ))}
+                )}
             </div>
             <input
               ref={fileInput}
@@ -341,30 +363,49 @@ export function EditAlbumDialog({
                 e.target.value = ''
               }}
             />
+            {/* Макет 12 · «Пустой альбом»: вместо сетки — зона загрузки. */}
+            {photosAfter === 0 && added.length === 0 && !photos.isPending ? (
+              <PhotoDrop
+                over={over}
+                onOver={dragOver}
+                onDrop={drop}
+                onPick={() => fileInput.current?.click()}
+                release={
+                  <>
+                    <p>Отпустите, чтобы добавить {dragCount > 0 ? `${dragCount} ` : ''}фото</p>
+                    <small>{FORMATS_HINT}</small>
+                  </>
+                }
+              />
+            ) : (
             <div className="upbox">
             <div
               ref={tilesRef}
                 className={`upgrid upgrid--side ${over ? 'upgrid--over' : ''}`}
               onDragOver={(e) => {
                 e.preventDefault()
-                if (!dragId) setOver(true)
+                if (!dragId && !busy) dragOver(true, e)
               }}
               onDragLeave={() => setOver(false)}
               onDrop={drop}
             >
+              {!ordering && (
               <button className="uptile" onClick={() => fileInput.current?.click()} disabled={busy}>
                 <i>
                     <Icon as={Plus} size={20} />
                   </i>
                 <span>Добавить</span>
               </button>
+              )}
               {added.map((item) => (
                 <div
                   key={item.key}
-                  className={`uptile2 ${item.reject ? 'uptile2--bad' : ''} ${menuKey === item.key ? 'is-menu' : ''}`}
+                  className={`uptile2 ${item.reject ? 'uptile2--bad' : ''} ${menuKey === item.key && !busy ? 'is-menu' : ''}`}
                   onClick={(e) => {
                         // Тач-экран: нажатие на фото открывает меню вместо крестиков (макеты 10–12).
-                        if (!(e.target as HTMLElement).closest('button')) setMenuKey((k) => (k === item.key ? null : item.key))
+                        if ((e.target as HTMLElement).closest('button, [role="menu"]')) return
+                        setMenuRight(tileOnRight(e.currentTarget))
+                        setMenuKey((k) => (k === item.key ? null : item.key))
                       }}
                 >
                   <Thumb file={item.file} />
@@ -394,18 +435,34 @@ export function EditAlbumDialog({
                         <Icon as={X} size={20} />
                       </button>
                   )}
+                  {menuKey === item.key && !busy && (
+                    <TileMenu
+                      right={menuRight}
+                      onRemove={() => setAdded((prev) => prev.filter((i) => i.key !== item.key))}
+                      onDone={() => setMenuKey(null)}
+                    />
+                  )}
                 </div>
               ))}
-              {existing.slice(0, Math.max(0, shownLimit - added.length)).map((p) => {
-                const gone = removed.has(p.id)
+              {visible.slice(0, Math.max(0, shownLimit - added.length)).map((p) => {
+                const menu = menuKey === p.id && !ordering && !busy
+                const makeCover = () => {
+                  // Обложка — первое фото альбома (макет 13): фото
+                  // переезжает в начало, как на странице альбома.
+                  setCover(p.id)
+                  setOrder([p.id, ...existing.map((x) => x.id).filter((id) => id !== p.id)])
+                  setMenuKey(null)
+                }
                 return (
                   <div
                     key={p.id}
-                    className={`uptile2 ${gone ? 'uptile2--gone' : ''} ${dragId === p.id ? 'uptile2--drag is-dragging' : ''} ${menuKey === p.id && !ordering ? 'is-menu' : ''} ${tileReorder.over === p.id ? 'uptile2--over' : ''}`}
+                    className={`uptile2 ${dragId === p.id ? 'uptile2--drag is-dragging' : ''} ${menu ? 'is-menu' : ''} ${tileReorder.over === p.id ? 'uptile2--over' : ''}`}
                     data-tile-key={p.id}
                     onClick={(e) => {
                         // Тач-экран: нажатие на фото открывает меню вместо крестиков (макеты 10–12).
-                        if (!(e.target as HTMLElement).closest('button')) setMenuKey((k) => (k === p.id ? null : p.id))
+                        if ((e.target as HTMLElement).closest('button, [role="menu"]')) return
+                        setMenuRight(tileOnRight(e.currentTarget))
+                        setMenuKey((k) => (k === p.id ? null : p.id))
                       }}
                     draggable={!busy}
                     onDragStart={(e) => {
@@ -427,29 +484,16 @@ export function EditAlbumDialog({
                     }}
                   >
                     <img src={p.urls!.small} alt={p.caption || ''} loading="lazy" />
-                    {ordering && !busy && !gone && (
+                    {ordering && !busy && (
                       <span className="photo__handle" aria-label="Перетащить фото" {...tileReorder.handle(p.id, (from, to) => moveBefore(to, from))}>
                         <Icon as={GripVertical} size={14} />
                       </span>
                     )}
-                    {gone ? (
-                      <span className="uptile2__msg">
-                        <b>Будет удалено</b>
-                      </span>
-                    ) : p.id === currentCover ? (
+                    {p.id === currentCover ? (
                       <span className="uptile2__pct">Обложка</span>
                     ) : (
                       !busy && (
-                        <button
-                          className="uptile2__cover"
-                          onClick={() => {
-                            // Обложка — первое фото альбома (макет 13): фото
-                            // переезжает в начало, как на странице альбома.
-                            setCover(p.id)
-                            setOrder([p.id, ...existing.map((x) => x.id).filter((id) => id !== p.id)])
-                            setMenuKey(null)
-                          }}
-                        >
+                        <button className="uptile2__cover" onClick={makeCover}>
                           Сделать обложкой
                         </button>
                       )
@@ -458,15 +502,23 @@ export function EditAlbumDialog({
                       <button
                         className="uptile2__x"
                         onClick={() => {
-                          toggleRemoved(p.id)
+                          remove(p.id)
                           setMenuKey(null)
                         }}
-                        aria-label={gone ? 'Вернуть фото' : 'Убрать фото из альбома'}
-                        data-menu={gone ? 'Вернуть' : 'Удалить'}
-                        title={gone ? 'Вернуть' : 'Убрать из альбома'}
+                        aria-label="Убрать фото из альбома"
+                        data-menu="Удалить"
+                        title="Убрать из альбома"
                       >
-                        <Icon as={gone ? Undo2 : X} size={20} />
+                        <Icon as={X} size={20} />
                       </button>
+                    )}
+                    {menu && (
+                      <TileMenu
+                        right={menuRight}
+                        onCover={p.id === currentCover ? undefined : makeCover}
+                        onRemove={() => remove(p.id)}
+                        onDone={() => setMenuKey(null)}
+                      />
                     )}
                   </div>
                 )
@@ -476,27 +528,20 @@ export function EditAlbumDialog({
                 <div className="uptile2 uptile2--more">ещё {total - existing.length} — на странице альбома</div>
               )}
             </div>
+            {over && <DropRelease count={dragCount} />}
             {/* Телефон (12 · Mobile): «Показать все» и подсказка — внутри рамки фото. */}
-            {phone && added.length + existing.length > 8 && (
+            {phone && added.length + visible.length > 8 && (
               <button className="btn btn--ghost btn--sm w-full upbox__more" onClick={() => setExpanded((v) => !v)}>
-                {expanded ? 'Свернуть' : `Показать все ${added.length + existing.length} фото`}
+                {expanded ? 'Свернуть' : `Показать все ${added.length + visible.length} фото`}
               </button>
             )}
             {photosAfter > 1 && !busy && (
               <p className="hint hint--i upbox__hint">Перетащите фото, чтобы поменять порядок</p>
             )}
-            {removed.size === 0 && (
-              <p className="hint hint--i touch-hint">Чтобы удалить фото или сделать его обложкой, нажмите на него</p>
-            )}
+            {!busy && <TouchHint ordering={ordering} />}
             </div>
-            {removed.size > 0 ? (
-              <p className="hint hint--i">
-                {removed.size} фото {plural(removed.size, 'переместится', 'переместятся', 'переместятся')} в
-                «Удаленное» — оттуда их можно восстановить
-              </p>
-            ) : (
-              <p className="hint hint--i">Форматы {FORMATS_HINT}</p>
             )}
+            <p className="hint hint--i">Форматы {FORMATS_HINT}</p>
           </div>
 
           <div>
@@ -526,10 +571,10 @@ export function EditAlbumDialog({
             <label className="field">
               <span className="field__row">
                 <span>Описание</span>
-                <span className="field__cnt">необязательно</span>
+                <span className="field__cnt">· необязательно</span>
                 <span className="spacer" />
                 <span className="field__cnt">
-                  {description.length} / {MAX_DESCRIPTION}
+                  {description.length.toLocaleString('ru-RU')} / {MAX_DESCRIPTION.toLocaleString('ru-RU')}
                 </span>
               </span>
               <textarea
@@ -544,14 +589,8 @@ export function EditAlbumDialog({
             </label>
 
             <div className="field field--cat">
-              <span>Категория</span>
-              <CategoryPicker
-                single
-                categories={categories}
-                value={categoryId ? [categoryId] : []}
-                disabled={busy}
-                onChange={(ids) => setCategoryId(ids[0] ?? '')}
-              />
+              <span>Категории</span>
+              <CategoryPicker sheet categories={categories} value={categoryIds} disabled={busy} onChange={setCategoryIds} />
             </div>
 
             <div className="field">
@@ -578,6 +617,8 @@ export function EditAlbumDialog({
               )}
             </div>
 
+            {/* Планшет (макет 12 · Tablet): водяной знак — справа от пароля. */}
+            <div className="albform__access">
             <PasswordControl
               plan={shop.plan}
               hasPassword={album.has_password}
@@ -592,14 +633,23 @@ export function EditAlbumDialog({
 
             {/* Знак альбома (макет 11–12 · «Водяной знак · Положение»). */}
             <WatermarkControl shop={shop} disabled={busy} value={wm} onChange={setWm} />
+            </div>
           </div>
         </div>
 
         <div className="modal__foot">
-          {error ? (
+          {limit ? (
+            <LimitError head="Изменения не сохранены" excess={limit} hint="Удалите лишние фото или" />
+          ) : error ? (
             <p className="hint hint--err" role="alert">
               {error}
               <LimitLink text={error} />
+            </p>
+          ) : removed.size > 0 && !busy ? (
+            // Макет 12 · «Есть изменения»: куда денутся убранные фото — в футере.
+            <p className="hint hint--i">
+              {removed.size} фото {plural(removed.size, 'переместится', 'переместятся', 'переместятся')} в «Удаленное» —{' '}
+              {restoreText}
             </p>
           ) : (
             // Макет 12: «Изменений нет», пока ничего не тронуто; поменяли
@@ -629,13 +679,14 @@ export function EditAlbumDialog({
         <ConfirmDialog
           title="Удалить все фото?"
           icon="trash"
-          text={`Вы действительно хотите удалить все ${existing.length + added.length} фото альбома? После «Сохранить» они переместятся в «Удаленное» — оттуда их можно восстановить.`}
+          text={`Вы действительно хотите удалить все ${visible.length + added.length} фото альбома? После «Сохранить» они переместятся в «Удаленное» — ${restoreText}.`}
           confirmLabel="Удалить все"
           onCancel={() => setClearing(false)}
           onConfirm={() => {
             setRemoved(new Set(existing.map((p) => p.id)))
             setAdded([])
             setClearing(false)
+            setOrdering(false)
           }}
         />
       )}

@@ -852,8 +852,6 @@ button.uptile2--more:hover { border-color: #2547CE; }
 /* С уточнением: .field > span красит любой span в поле серым. */
 .field > span.field__err { display: block; margin: 6px 0 0; font-size: var(--text-xs); color: var(--color-danger); }
 .inp[aria-invalid="true"] { border-color: var(--color-danger); }
-.uptile2--gone img { opacity: .2; }
-.uptile2--gone { outline: 1px dashed var(--color-danger); outline-offset: -1px; }
 .uptile:disabled { opacity: .5; cursor: default; }
 
 /* --- Телефон: поправки к новым окнам ---------------------------------------
@@ -1023,7 +1021,6 @@ button.alcard__edit { cursor: pointer; padding: 0; min-height: 0; }
 .field--cat .pop__panel { left: 0; right: 0; }
 .field--cat .catpick { width: auto; }
 .catpick__empty { padding: 8px 4px; font-size: var(--text-sm); color: var(--color-ink-3); }
-.catpick__clear { width: 100%; margin-top: 6px; padding: 8px; border: 0; border-top: 1px solid var(--color-line); background: none; font: inherit; font-size: var(--text-xs); color: var(--color-ink-2); cursor: pointer; }
 .catpick__static { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); color: var(--color-ink-2); }
 .frow__cat .pop__btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .segbar button:has(.segbar__note) { flex-direction: column; gap: 0; }
@@ -2857,3 +2854,66 @@ textarea.ocs__inp { height: auto; min-height: 92px; padding: 11px 14px; resize: 
 .frow__x { display: grid; flex: none; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: none; color: #62615C; cursor: pointer; }
 .frow__x:hover { background: #E4E2DC; color: #1A1A18; }
 .modal--upload .frow__cat .pop__btn { justify-content: space-between; width: 100%; height: 36px; min-height: 36px; padding: 0 10px 0 12px; border-radius: 8px; font-size: 13.5px; }
+
+/* --- Окна «Новый альбом» / «Редактировать альбом» (макеты 11–12) ---------- */
+/* Компьютер: крестик — только на плитке под курсором; у плиток с ошибкой — всегда. */
+@media (hover: hover) {
+  .modal--album .uptile2:not(.uptile2--bad):not(.uptile2--net) .uptile2__x { opacity: 0; transition: opacity .12s ease; }
+  .modal--album .uptile2:hover .uptile2__x, .modal--album .uptile2__x:focus-visible { opacity: 1; }
+}
+/* Тач-экран: меню фото рядом с плиткой, у выбранной — синяя рамка. */
+.modal--album .uptile2.is-menu { overflow: visible; z-index: 3; outline: 2px solid #2547CE; outline-offset: -2px; }
+.modal--album .uptile2.is-menu::after { content: none; }
+.app .modal--album .uptile2.is-menu .uptile2__x, .app .modal--album .uptile2.is-menu .uptile2__cover { display: none !important; }
+/* «Изменить порядок» включён — «Готово» залитая синяя. */
+@media (hover: none) {
+  .app .modal--album button.phbar__btn[aria-pressed="true"]:not([class*="uppy"]):not(.hidden) { border-color: #2547CE; background: #2547CE; color: #fff; }
+}
+/* Пустая зона, над ней тащат файлы: иконка в белом круге и синий текст. */
+.drop--over .drop__ico { background: #fff; box-shadow: 0 2px 8px rgb(37 71 206 / 14%); animation: dropbounce .6s ease-in-out infinite; }
+.drop div.drop__release { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; line-height: 22px; text-align: center; }
+.drop div.drop__release p { margin: 0; font-weight: 600; color: #1E3AA8; animation: none; }
+.drop div.drop__release small { font-size: 13px; line-height: 18px; font-weight: 400; color: #2547CE; }
+/* Над сеткой с фото тащат файлы: подсветка поверх сетки (макет 11 · «пачка»). */
+.upbox__release { display: none; }
+@media (min-width: 860px), (max-width: 640px) {
+  .modal--sheet .upbox { position: relative; }
+  .upbox__release { position: absolute; inset: -1px; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; border: 2px dashed #2547CE; border-radius: 16px; background: #E9ECFB; text-align: center; pointer-events: none; animation: dropfade .15s ease-out; }
+  .upbox__release span { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 50%; background: #fff; color: #2547CE; box-shadow: 0 2px 8px rgb(37 71 206 / 14%); animation: dropbounce .6s ease-in-out infinite; }
+  .upbox__release b { font-size: 15px; line-height: 22px; font-weight: 600; color: #1E3AA8; }
+  .upbox__release small { font-size: 12.5px; line-height: 18px; color: #2547CE; }
+}
+@media (prefers-reduced-motion: reduce) { .upbox__release, .upbox__release span, .drop--over .drop__ico { animation: none; } }
+/* Поле «Категории»: путь слева с многоточием, «+N» и шеврон справа. */
+.field--cat .pop__btn > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.pop__badge { flex: none; margin-left: 8px; color: #90908A; }
+.field--cat .pop__chev { flex: none; margin-left: 8px; }
+/* Шторка категорий на телефоне: «Можно выбрать несколько» и «Готово». */
+.catpick__note, .catpick__done { display: none !important; }
+@media (max-width: 640px) {
+  .pop__panel--sheet .catpick { width: auto; padding: 0 10px; }
+  .pop__panel--sheet .catpick__note { display: block !important; margin: -6px 2px 8px; font-size: 13.5px; line-height: 20px; color: #62615C; }
+  .pop__panel--sheet .catpick__list { max-height: 52vh; }
+  .app .pop__panel--sheet button.catpick__done:not([class*="uppy"]):not(.hidden) { display: flex !important; justify-content: center; width: 100%; height: 48px; min-height: 48px; margin-top: 10px; font-size: 15px; }
+}
+/* Пароль и водяной знак: на планшете — рядом (макет 11–12 · Tablet). */
+.modal .field + .albform__access { margin-top: 18px; }
+@media (min-width: 860px) and (max-width: 1199px) {
+  .albform__access { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 24px; align-items: start; }
+  .albform__access > .field { grid-row: 1 / span 2; }
+  .modal .albform__access > .wm { margin-top: 0; }
+  .albform__access > .hint { grid-column: 2; contain: inline-size; }
+  /* Много фото — сетка ~2,5 ряда и прокручивается (макет 12 · Tablet). */
+  .modal--album .upbox > .upgrid { max-height: 296px; overflow: auto; }
+}
+/* Ошибка в футере переносится сама, кнопки остаются справа. */
+.modal--album .modal__foot > .hint, .modal--album .modal__foot > .limerr { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 640px) { .modal--album .modal__foot > .hint, .modal--album .modal__foot > .limerr { flex-basis: 100%; } }
+/* Тач-экран: подсказка про перетаскивание мышью не нужна, «Изменить порядок»
+   — после «Удалить все», без «Первое фото — обложка» (макет 11–12 · Tablet). */
+@media (hover: none) {
+  .modal--album .upbox__hint, .modal--album .field__cnt--tip { display: none !important; }
+  .modal--album .field__row .phbar__btn.touch-only { order: 2; }
+}
+/* Шапка и низ окна — поверх ручек и меню фото при прокрутке. */
+.modal--album > .modal__head, .modal--album > .modal__foot { z-index: 6; }

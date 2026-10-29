@@ -181,8 +181,9 @@ export function MassUpload({
         if (!folder.albumId) {
           try {
             const title = folder.title.trim()
-            const album = await api.createAlbum(shop.id, title)
-            if (album.status !== 'draft') await api.setAlbumStatus(shop.id, album.id, 'draft')
+            // Черновик — сразу при создании: вторым запросом альбом успевал
+            // побыть опубликованным пустым.
+            const album = await api.createAlbum(shop.id, title, undefined, undefined, 'draft')
             patch(folder.id, { albumId: album.id, savedTitle: title })
             folder = { ...folder, albumId: album.id }
           } catch (e) {

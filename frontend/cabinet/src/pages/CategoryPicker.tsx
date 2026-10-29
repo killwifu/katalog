@@ -5,56 +5,63 @@ import { Popover } from './Popover'
 import { fold } from '../lib/fold'
 import { Icon } from '../lib/icons'
 
-// Выбор категорий у папки в массовой загрузке (макет 10): список с поиском
-// и деревом, можно отметить несколько. В поле — первая и «+N»; ничего не
-// отмечено — «Без категории». single — одна категория (окна альбома):
-// вместо плоского <select>, где подкатегории сливались с категориями.
+// Выбор категорий у папки в массовой загрузке (макет 10) и у альбома
+// (макет 11–12 · «Выбор категорий»): список с поиском и деревом, можно
+// отметить несколько. В поле — первая (подкатегория — с путём «Категория:
+// Подкатегория») и «+N»; ничего не отмечено — «Без категории».
+// sheet — на телефоне шторкой снизу с «Готово» (окна альбома).
 export function CategoryPicker({
   categories,
   value,
   onChange,
   disabled,
-  single,
+  sheet,
 }: {
   categories: Category[]
   value: string[]
   onChange: (ids: string[]) => void
   disabled?: boolean
-  single?: boolean
+  sheet?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   // Свёрнутые категории — по стрелке слева (макет 10).
   const [folded, setFolded] = useState<Set<string>>(new Set())
-  const title = (id: string) => categories.find((c) => c.id === id)?.title ?? ''
-  const label =
-    value.length === 0 ? 'Без категории' : value.length === 1 ? title(value[0]) : `${title(value[0])} +${value.length - 1}`
+  const path = (id: string) => {
+    const c = categories.find((x) => x.id === id)
+    const parent = c?.parent_id ? categories.find((x) => x.id === c.parent_id) : undefined
+    return parent ? `${parent.title}: ${c?.title}` : (c?.title ?? '')
+  }
+  const label = value.length === 0 ? 'Без категории' : path(value[0])
+  const more = value.length > 1 ? `+${value.length - 1}` : undefined
   const norm = fold(query.trim())
   const match = (c: Category) => !norm || fold(c.title).includes(norm)
   const roots = categories.filter((c) => !c.parent_id)
   const subs = (id: string) => categories.filter((c) => c.parent_id === id)
-  const toggle = (id: string) => {
-    if (single) {
-      onChange([id])
-      setOpen(false)
-      return
-    }
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id])
-  }
-  const kind = single ? 'radio' : 'checkbox'
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id])
 
   if (disabled) {
     return (
       <span className="catpick__static" title={label}>
         {label}
+        {more && ` ${more}`}
       </span>
     )
   }
   return (
-    <Popover open={open} onToggle={setOpen} label={label} title="Категория" active={value.length > 0}>
+    <Popover
+      open={open}
+      onToggle={setOpen}
+      label={label}
+      badge={more}
+      title="Категории"
+      active={value.length > 0}
+      sheet={sheet}
+    >
       {/* Макет 10 · «Массовая · Выбор категории у папки»: поиск с лупой,
           категории сворачиваются стрелкой, выбранная строка подсвечена. */}
       <div className="catpick">
+        {sheet && <p className="catpick__note">Можно выбрать несколько</p>}
         <label className="catpick__search">
           <Icon as={Search} size={16} />
           <input
@@ -94,13 +101,7 @@ export function CategoryPicker({
                     <span className="catpick__fold" aria-hidden="true" />
                   )}
                   <label>
-                    <input
-                      type={kind}
-                      checked={value.includes(root.id)}
-                      onChange={() => toggle(root.id)}
-                      // Повторный выбор той же категории onChange не вызывает — просто закрываем.
-                      onClick={() => single && value.includes(root.id) && setOpen(false)}
-                    />
+                    <input type="checkbox" checked={value.includes(root.id)} onChange={() => toggle(root.id)} />
                     {root.title}
                   </label>
                 </div>
@@ -108,13 +109,7 @@ export function CategoryPicker({
                   children.map((sub) => (
                     <div key={sub.id} className={`catpick__row catpick__sub ${value.includes(sub.id) ? 'is-on' : ''}`}>
                       <label>
-                        <input
-                      type={kind}
-                      checked={value.includes(sub.id)}
-                      onChange={() => toggle(sub.id)}
-                      // Повторный выбор той же категории onChange не вызывает — просто закрываем.
-                      onClick={() => single && value.includes(sub.id) && setOpen(false)}
-                    />
+                        <input type="checkbox" checked={value.includes(sub.id)} onChange={() => toggle(sub.id)} />
                         {sub.title}
                       </label>
                     </div>
@@ -123,15 +118,10 @@ export function CategoryPicker({
             )
           })}
         </div>
-        {value.length > 0 && (
-          <button
-            className="catpick__clear"
-            onClick={() => {
-              onChange([])
-              if (single) setOpen(false)
-            }}
-          >
-            Сбросить — без категории
+        {/* «Без категории» — не пункт списка (макет 11): снять все галочки. */}
+        {sheet && (
+          <button type="button" className="btn btn--primary catpick__done" onClick={() => setOpen(false)}>
+            Готово
           </button>
         )}
       </div>

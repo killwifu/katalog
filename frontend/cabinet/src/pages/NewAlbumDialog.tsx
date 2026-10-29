@@ -1,15 +1,15 @@
-import { X, Check, Plus, Trash2, ImagePlus, Upload, CircleAlert, GripVertical, WifiOff, Folders, LoaderCircle } from 'lucide-react'
+import { X, Check, Plus, Trash2, ImagePlus, Upload, CircleAlert, GripVertical, WifiOff, Folders, LoaderCircle, RefreshCw, Image as ImageIcon } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useRef, useState, type CSSProperties, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import { api, ApiError, errorText, type Album, type AlbumStatus, type Category } from '../api'
-import { ACCEPT_ATTR, FORMATS_HINT, plural, rejectReason, uploadToAlbum } from '../lib/uploadRun'
+import { ACCEPT_ATTR, FORMATS_HINT, MAX_FILE_MB, plural, rejectReason, uploadToAlbum } from '../lib/uploadRun'
 import { Icon } from '../lib/icons'
 import { PLAN_NAMES } from '../lib/plans'
 import { useShop } from './AppLayout'
 import { shopWatermark, WatermarkControl } from './WatermarkControl'
 import { PasswordControl, passwordError, type PasswordChoice } from './PasswordControl'
-import { LimitLink, useLimitExcess } from '../lib/limits'
+import { LimitError, LimitLink, useLimitExcess } from '../lib/limits'
 import { useDialogClose } from '../lib/useDialogClose'
 import { usePointerReorder } from '../lib/pointerReorder'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -27,9 +27,8 @@ import { setLiftedDragImage } from '../lib/dragGhost'
 // альбом, потом догружаем в него выбранные файлы, и только после этого
 // закрываем окно — иначе продавец решит, что фото пропали.
 const MAX_TITLE = 30
-// Предел описания задаёт сервер (albums_handlers.go): показывать 3 500,
-// как в макете, значит обещать то, что бэкенд отклонит.
-const MAX_DESCRIPTION = 2000
+// Тот же предел у сервера (albums_handlers.go · maxAlbumDescription).
+export const MAX_DESCRIPTION = 3500
 
 const ACCESS: { id: AlbumStatus; label: string; hint: string }[] = [
   { id: 'published', label: 'Опубликован', hint: 'Альбом увидят все посетители витрины' },
@@ -62,7 +61,7 @@ export function NewAlbumDialog({
   const fileInput = useRef<HTMLInputElement>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState('')
+  const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [status, setStatus] = useState<AlbumStatus>('published')
   const [items, setItems] = useState<Item[]>(() =>
     initialFiles.map((file) => ({ key: crypto.randomUUID(), file, reject: rejectReason(file) })),
@@ -70,6 +69,8 @@ export function NewAlbumDialog({
   // «и ещё N» раскрывает следующую порцию миниатюр.
   const [previewLimit, setPreviewLimit] = useState(PREVIEW_LIMIT)
   const [menuKey, setMenuKey] = useState<string | null>(null)
+  const [menuRight, setMenuRight] = useState(false)
+  useTileMenuDismiss(menuKey, setMenuKey)
   // «Изменить порядок» на тач-экране (макет 11 · Tablet/Mobile): ручки на
   // фото, меню по нажатию отключено, «Удалить все» скрыта.
   const [ordering, setOrdering] = useState(false)
@@ -78,10 +79,14 @@ export function NewAlbumDialog({
   const tilesRef = useRef<HTMLDivElement>(null)
   useFlip(tilesRef, 'tile-key')
   const [over, setOver] = useState(false)
+  const [dragCount, setDragCount] = useState(0)
   // album — альбом уже создан: дальше только догрузка фото в него.
   const [album, setAlbum] = useState<Album | null>(null)
   const [busy, setBusy] = useState<'no' | 'album' | 'photos'>('no')
   const [error, setError] = useState('')
+  // Превышение лимита тарифа («на 3 фото и 24 МБ») — своей строкой в футере,
+  // пока продавец не поменял набор фото.
+  const [limitHit, setLimitHit] = useState<{ excess: string; items: Item[] } | null>(null)
   const [titleError, setTitleError] = useState(false)
   const [password, setPassword] = useState<PasswordChoice>({ mode: 'none', value: '' })
   const shopWm = shopWatermark(shop)
@@ -96,6 +101,7 @@ export function NewAlbumDialog({
   const [dragKey, setDragKey] = useState<string | null>(null)
 
   const valid = items.filter((i) => !i.reject)
+  const rejected = items.length - valid.length
   const left = valid.filter((i) => !done.has(i.key))
   const failedCount = Object.keys(failed).length
 
@@ -230,21 +236,22 @@ export function NewAlbumDialog({
       // Лимит проверяем по нажатию «Создать альбом» и всей пачкой (макет 11):
       // не помещается — альбом не создаётся вовсе.
       const excess = limitExcess(valid.length, valid.reduce((sum, i) => sum + i.file.size, 0))
-      if (excess) {
-        setError(`Альбом не создан: ${excess}. Удалите лишние фото или смените тариф.`)
-        return
-      }
+      setLimitHit(excess ? { excess, items } : null)
+      if (excess) return
       setError('')
       setBusy('album')
       let created: Album
       try {
         const own = wm.enabled !== shopWm.enabled || wm.position !== shopWm.position
-        created = await api.createAlbum(shopId, name, undefined, own ? wm : undefined)
+        // Черновиком: публикуем, только когда пароль и описание записаны.
+        created = await api.createAlbum(shopId, name, undefined, own ? wm : undefined, 'draft')
       } catch (e) {
         setError(
           e instanceof ApiError && e.code === 'album_limit'
             ? 'Достигнут предел числа альбомов — удалите ненужные, чтобы создать новый.'
-            : `Не удалось создать альбом: ${errorText(e)}`,
+            : e instanceof ApiError
+              ? `Не удалось создать альбом: ${errorText(e)}`
+              : 'Не удалось создать альбом. Проверьте интернет и попробуйте ещё раз',
         )
         setBusy('no')
         return
@@ -267,7 +274,7 @@ export function NewAlbumDialog({
         if (effectiveStatus !== created.status) {
           await api.setAlbumStatus(shopId, created.id, effectiveStatus)
         }
-        if (categoryId) await api.setAlbumCategory(shopId, created.id, categoryId)
+        for (const id of categoryIds) await api.addAlbumToCategory(shopId, id, created.id)
       } catch {
         settingsFailed = true
         setError('Альбом создан, но часть настроек не сохранилась — поправьте их в альбоме.')
@@ -284,9 +291,12 @@ export function NewAlbumDialog({
     }
   }
 
+  const limit = limitHit?.items === items ? limitHit.excess : ''
   const shown = items.slice(0, previewLimit)
   const coverKey = valid[0]?.key
-  const locked = busy !== 'no' || album !== null
+  // Пока создаётся альбом, форма выглядит как была (макет 11 · «Создание»),
+  // но не принимает ввод — см. inert ниже.
+  const locked = busy === 'photos' || album !== null
 
   let primary: string
   if (busy === 'photos') primary = 'Загружаем фото…'
@@ -298,6 +308,8 @@ export function NewAlbumDialog({
   if (busy === 'photos') footText = `Дождитесь загрузки фото: осталось ${Math.max(0, valid.length - done.size)}`
   else if (album && left.length > 0)
     footText = `Альбом создан · загружено ${done.size} из ${valid.length}${failedCount > 0 ? ` · ${failedCount} не ${plural(failedCount, 'загрузилось', 'загрузились', 'загрузились')}` : ''}`
+  else if (items.length > 0)
+    footText = `${valid.length} фото${rejected > 0 ? ` · ${rejected} не ${plural(rejected, 'загрузилось', 'загрузились', 'загрузились')}` : ''}`
   else footText = 'Обязательно только название'
 
   // Лимит фото исчерпан — вместо формы диалог лимита (макет 11): создавать
@@ -359,7 +371,7 @@ export function NewAlbumDialog({
 
   return (
     <Portal><div className="modal__back" role="dialog" aria-modal="true" aria-label="Новый альбом" {...backdrop}>
-      <div className="modal modal--sheet">
+      <div className="modal modal--sheet modal--album">
         <div className="modal__head">
           <div>
             <h2>Новый альбом</h2>
@@ -371,7 +383,7 @@ export function NewAlbumDialog({
           </button>
         </div>
 
-        <div className="modal__body">
+        <div className="modal__body" inert={busy === 'album'}>
           {/* Телефон (11 · Mobile): подзаголовок — первой строкой содержимого,
               а не в закреплённой шапке. */}
           <p className="modal__sub">Добавьте фото и заполните данные — всё можно изменить позже в самом альбоме</p>
@@ -416,37 +428,18 @@ export function NewAlbumDialog({
               }}
             />
             {items.length === 0 ? (
-              <div
-                className={`drop ${over ? 'drop--over' : ''}`}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setOver(true)
-                }}
-                onDragLeave={() => setOver(false)}
+              <PhotoDrop
+                over={over}
+                onOver={setOver}
                 onDrop={drop}
-              >
-                <span className="drop__ico" aria-hidden="true">
-                  <Icon as={ImagePlus} size={26} />
-                </span>
-                {/* Телефон (макет 11 · Mobile): перетаскивать нечем — «Нажмите,
-                    чтобы выбрать фото», синяя кнопка «Выбрать фото». */}
-                <p>
-                  <span className="hover-only">{over ? 'Отпустите, чтобы загрузить' : 'Перетащите фото сюда'}</span>
-                  <span className="touch-only-inline">Нажмите, чтобы выбрать фото</span>
-                </p>
-                <small>
-                  <span className="hover-only">
-                    {over ? 'Фото появятся здесь, можно сразу несколько' : 'или выберите файлы на компьютере'}
-                  </span>
-                  <span className="touch-only-inline">Из галереи, файлов или камеры</span>
-                </small>
-                <button className="btn btn--ghost btn--sm drop__pick" onClick={() => fileInput.current?.click()}>
-                  <Icon as={Upload} strokeWidth={2} />
-                  <span className="hover-only">Выбрать файлы</span>
-                  <span className="touch-only-inline">Выбрать фото</span>
-                </button>
-                <small>Можно загрузить сразу несколько фото</small>
-              </div>
+                onPick={() => fileInput.current?.click()}
+                release={
+                  <>
+                    <p>Отпустите, чтобы загрузить</p>
+                    <small>Фото появятся здесь, можно сразу несколько</small>
+                  </>
+                }
+              />
             ) : (
               <div className="upbox">
               <div
@@ -456,12 +449,14 @@ export function NewAlbumDialog({
                   e.preventDefault()
                   // Подсветка «бросьте файлы» — только для файлов, не для
                   // плиток, которые переставляют внутри сетки.
-                  if (!dragKey) setOver(true)
+                  if (dragKey || album) return
+                  setOver(true)
+                  setDragCount(fileCount(e))
                 }}
                 onDragLeave={() => setOver(false)}
                 onDrop={drop}
               >
-                {!locked && (
+                {!locked && !ordering && (
                   <button className="uptile" onClick={() => fileInput.current?.click()}>
                     <i>
                     <Icon as={Plus} size={20} />
@@ -471,15 +466,19 @@ export function NewAlbumDialog({
                 )}
                 {shown.map((item) => {
                   const problem = item.reject || failed[item.key]
+                  const net = problem === 'Ошибка сети'
                   const isDone = done.has(item.key)
+                  const menu = menuKey === item.key && !ordering && !locked
                   return (
                     <div
                       key={item.key}
-                      className={`uptile2 ${problem ? 'uptile2--bad' : ''} ${dragKey === item.key ? 'uptile2--drag is-dragging' : ''} ${menuKey === item.key && !ordering ? 'is-menu' : ''} ${tileReorder.over === item.key ? 'uptile2--over' : ''}`}
+                      className={`uptile2 ${net ? 'uptile2--net' : problem ? 'uptile2--bad' : ''} ${dragKey === item.key ? 'uptile2--drag is-dragging' : ''} ${menu ? 'is-menu' : ''} ${tileReorder.over === item.key ? 'uptile2--over' : ''}`}
                       data-tile-key={item.key}
                       onClick={(e) => {
                         // Тач-экран: нажатие на фото открывает меню вместо крестиков (макеты 10–12).
-                        if (!(e.target as HTMLElement).closest('button')) setMenuKey((k) => (k === item.key ? null : item.key))
+                        if ((e.target as HTMLElement).closest('button, [role="menu"]')) return
+                        setMenuRight(tileOnRight(e.currentTarget))
+                        setMenuKey((k) => (k === item.key ? null : item.key))
                       }}
                       draggable={!locked}
                       onDragStart={(e) => {
@@ -508,9 +507,18 @@ export function NewAlbumDialog({
                       )}
                       {problem ? (
                         <span className="uptile2__msg">
-                          <Icon as={problem === 'Ошибка сети' ? WifiOff : CircleAlert} size={20} />
-                        <b>{problem}</b>
-                          <small title={item.file.name}>{item.file.name}</small>
+                          <Icon as={net ? WifiOff : CircleAlert} size={20} />
+                          <b>{problem}</b>
+                          {net ? (
+                            busy === 'no' && (
+                              <button className="uptile2__retry" onClick={() => void submit()}>
+                                <Icon as={RefreshCw} size={13} />
+                                Повторить
+                              </button>
+                            )
+                          ) : (
+                            <small title={item.file.name}>{item.file.name}</small>
+                          )}
                         </span>
                       ) : busy === 'photos' && !isDone ? (
                         <span className="uptile2__up">
@@ -544,6 +552,14 @@ export function NewAlbumDialog({
                         <Icon as={X} size={20} />
                       </button>
                       )}
+                      {menu && (
+                        <TileMenu
+                          right={menuRight}
+                          onCover={item.key === coverKey || problem ? undefined : () => makeCover(item.key)}
+                          onRemove={() => setItems((prev) => prev.filter((i) => i.key !== item.key))}
+                          onDone={() => setMenuKey(null)}
+                        />
+                      )}
                     </div>
                   )
                 })}
@@ -554,13 +570,18 @@ export function NewAlbumDialog({
                 </button>
                 )}
               </div>
+              {over && <DropRelease count={dragCount} />}
               {items.length > 1 && !locked && (
                 <p className="hint hint--i upbox__hint">Перетащите фото, чтобы поменять порядок</p>
               )}
-              <p className="hint hint--i touch-hint">Чтобы удалить фото или сделать его обложкой, нажмите на него</p>
+              {!locked && <TouchHint ordering={ordering} />}
               </div>
             )}
-            <p className="hint hint--i">Форматы {FORMATS_HINT}</p>
+            {rejected > 0 && !album ? (
+              <p className="hint hint--err">Загрузите JPEG, PNG, WebP или HEIC до {MAX_FILE_MB} МБ</p>
+            ) : (
+              <p className="hint hint--i">Форматы {FORMATS_HINT}</p>
+            )}
           </div>
 
           <div>
@@ -594,10 +615,10 @@ export function NewAlbumDialog({
             <label className="field">
               <span className="field__row">
                 <span>Описание</span>
-                <span className="field__cnt">необязательно</span>
+                <span className="field__cnt">· необязательно</span>
                 <span className="spacer" />
                 <span className="field__cnt">
-                  {description.length} / {MAX_DESCRIPTION}
+                  {description.length.toLocaleString('ru-RU')} / {MAX_DESCRIPTION.toLocaleString('ru-RU')}
                 </span>
               </span>
               <textarea
@@ -612,14 +633,8 @@ export function NewAlbumDialog({
             </label>
 
             <div className="field field--cat">
-              <span>Категория</span>
-              <CategoryPicker
-                single
-                categories={categories}
-                value={categoryId ? [categoryId] : []}
-                disabled={locked}
-                onChange={(ids) => setCategoryId(ids[0] ?? '')}
-              />
+              <span>Категории</span>
+              <CategoryPicker sheet categories={categories} value={categoryIds} disabled={locked} onChange={setCategoryIds} />
             </div>
 
             <div className="field">
@@ -643,6 +658,8 @@ export function NewAlbumDialog({
               </p>
             </div>
 
+            {/* Планшет (макет 11 · Tablet): водяной знак — справа от пароля. */}
+            <div className="albform__access">
             <PasswordControl
               plan={shop.plan}
               hasPassword={false}
@@ -657,16 +674,21 @@ export function NewAlbumDialog({
 
             {/* Знак альбома (макет 11–12 · «Водяной знак · Положение»). */}
             <WatermarkControl shop={shop} disabled={locked} value={wm} onChange={setWm} />
+            </div>
           </div>
         </div>
 
         <div className="modal__foot">
           {/* Постоянная подсказка «Обязательно только название» на телефоне
               не показывается (11 · Mobile) — только состояние загрузки и ошибки. */}
-          <p aria-live="polite" className={`hint ${error ? 'hint--err' : ''} ${!error && busy === 'no' && !album ? 'hint--idle' : ''}`}>
-            {error && confirm !== 'close' ? error : footText}
-            {error && confirm !== 'close' && <LimitLink text={error} />}
-          </p>
+          {limit ? (
+            <LimitError head="Альбом не создан" excess={limit} hint="Удалите лишние фото или" />
+          ) : (
+            <p aria-live="polite" className={`hint ${error ? 'hint--err' : ''} ${!error && busy === 'no' && !album ? 'hint--idle' : ''}`}>
+              {error && confirm !== 'close' ? error : footText}
+              {error && confirm !== 'close' && <LimitLink text={error} />}
+            </p>
+          )}
           <span className="spacer" />
           {busy === 'photos' ? (
             <>
@@ -709,4 +731,148 @@ export function NewAlbumDialog({
       )}
     </div></Portal>
   )
+}
+
+// --- Общее для окон «Новый альбом» и «Редактировать альбом» (макеты 11–12) ---
+
+// Число перетаскиваемых файлов — для «Отпустите, чтобы добавить N фото».
+export function fileCount(e: DragEvent): number {
+  return [...e.dataTransfer.items].filter((i) => i.kind === 'file').length
+}
+
+// Пустая зона фото: «Перетащите фото сюда / Выбрать файлы»; над ней тащат
+// файлы — остаётся только иконка и release (макет 11 · «Перетаскивание фото»).
+export function PhotoDrop({
+  over,
+  onOver,
+  onDrop,
+  onPick,
+  release,
+}: {
+  over: boolean
+  onOver: (on: boolean, e?: DragEvent) => void
+  onDrop: (e: DragEvent) => void
+  onPick: () => void
+  release: ReactNode
+}) {
+  return (
+    <div
+      className={`drop ${over ? 'drop--over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        onOver(true, e)
+      }}
+      onDragLeave={() => onOver(false)}
+      onDrop={onDrop}
+    >
+      <span className="drop__ico" aria-hidden="true">
+        <Icon as={ImagePlus} size={26} />
+      </span>
+      {over ? (
+        <div className="drop__release">{release}</div>
+      ) : (
+        <>
+          {/* Телефон (макет 11 · Mobile): перетаскивать нечем — «Нажмите,
+              чтобы выбрать фото», синяя кнопка «Выбрать фото». */}
+          <p>
+            <span className="hover-only">Перетащите фото сюда</span>
+            <span className="touch-only-inline">Нажмите, чтобы выбрать фото</span>
+          </p>
+          <small>
+            <span className="hover-only">или выберите файлы на компьютере</span>
+            <span className="touch-only-inline">Из галереи, файлов или камеры</span>
+          </small>
+          <button className="btn btn--ghost btn--sm drop__pick" onClick={onPick}>
+            <Icon as={Upload} strokeWidth={2} />
+            <span className="hover-only">Выбрать файлы</span>
+            <span className="touch-only-inline">Выбрать фото</span>
+          </button>
+          <small>Можно загрузить сразу несколько фото</small>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Подсветка поверх сетки с фото, когда над ней тащат файлы (макет 11 ·
+// «Перетаскивание пачки фото»): иконка, «Отпустите, чтобы добавить N фото».
+export function DropRelease({ count }: { count: number }) {
+  return (
+    <div className="upbox__release" aria-hidden="true">
+      <span>
+        <Icon as={Upload} size={22} />
+      </span>
+      <b>Отпустите, чтобы добавить {count > 0 ? `${count} ` : ''}фото</b>
+      <small>{FORMATS_HINT}</small>
+    </div>
+  )
+}
+
+// Подсказка под фото на тач-экране: в режиме порядка — про ручку.
+export function TouchHint({ ordering }: { ordering: boolean }) {
+  return (
+    <p className="hint hint--i touch-hint">
+      {ordering ? 'Перетащите фото за ручку, чтобы поменять порядок' : 'Чтобы удалить или изменить обложку, нажмите на фото'}
+    </p>
+  )
+}
+
+// Меню фото по нажатию на тач-экране (макет 11–12 · «Меню фото»): рядом с
+// плиткой, у выбранной — синяя рамка; крестиков на плитках нет.
+export function TileMenu({
+  right,
+  onCover,
+  onRemove,
+  onDone,
+}: {
+  right: boolean
+  onCover?: () => void
+  onRemove: () => void
+  onDone: () => void
+}) {
+  return (
+    <div className={`uptile2__menu ${right ? 'uptile2__menu--r' : ''}`} role="menu">
+      {onCover && (
+        <button
+          role="menuitem"
+          onClick={() => {
+            onCover()
+            onDone()
+          }}
+        >
+          <Icon as={ImageIcon} size={16} />
+          Сделать обложкой
+        </button>
+      )}
+      <button
+        role="menuitem"
+        onClick={() => {
+          onRemove()
+          onDone()
+        }}
+      >
+        <Icon as={Trash2} size={16} />
+        Удалить
+      </button>
+    </div>
+  )
+}
+
+// Меню раскрывается в сторону середины сетки, чтобы не уйти за край.
+export function tileOnRight(tile: HTMLElement): boolean {
+  const t = tile.getBoundingClientRect()
+  const g = tile.parentElement?.getBoundingClientRect()
+  return Boolean(g) && t.left + t.width / 2 > (g?.left ?? 0) + (g?.width ?? 0) / 2
+}
+
+// Меню фото закрывается нажатием мимо.
+export function useTileMenuDismiss(menuKey: string | null, setMenuKey: (k: null) => void) {
+  useEffect(() => {
+    if (!menuKey) return
+    const hide = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest('.uptile2.is-menu')) setMenuKey(null)
+    }
+    document.addEventListener('pointerdown', hide)
+    return () => document.removeEventListener('pointerdown', hide)
+  }, [menuKey, setMenuKey])
 }
