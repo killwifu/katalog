@@ -2663,7 +2663,7 @@ textarea.ocs__inp { height: auto; min-height: 92px; padding: 11px 14px; resize: 
 .ocs__link:disabled { color: var(--ocs-muted); cursor: default; }
 .ocs__logo { display: flex; align-items: center; gap: 16px; }
 .ocs__logo > i { flex: none; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; background: #E9ECFB; font-size: 22px; font-style: normal; font-weight: 600; color: #2547CE; }
-.ocs__logo > i img { width: 100%; height: 100%; object-fit: cover; }
+.ocs__logo > i img { width: inherit; height: inherit; object-fit: cover; }
 .ocs__logo > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .ocs__wm { display: flex; flex-direction: column; gap: 18px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .ocs__wm:disabled { opacity: .5; }
