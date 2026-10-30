@@ -810,7 +810,10 @@ body:has(.shopbar) {
   font-weight: 600;
 }
 
-.shophead__ava img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+/* Размер — от родителя явно: в grid-ячейке height: 100% у высокой картинки
+   растягивал её на всю высоту файла, логотип вылезал за круг. */
+.shophead__ava { overflow: hidden; }
+.shophead__ava img { width: inherit; height: inherit; border-radius: 50%; object-fit: cover; }
 
 .shophead__info { flex: 1; min-width: 0; }
 .shophead h1 { font-size: 24px; font-weight: 600; line-height: 1.25; }
