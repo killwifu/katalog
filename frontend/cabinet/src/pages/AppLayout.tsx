@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, CreditCard, Folder, LayoutDashboard, LayoutList, LogOut, MessageCircle, ShieldCheck, SlidersHorizontal, RefreshCw, Tag, Trash2, WifiOff, Menu as MenuIcon } from 'lucide-react'
+import { ChevronDown, ChevronUp, CreditCard, Folder, LayoutDashboard, LogOut, MessageCircle, ShieldCheck, SlidersHorizontal, RefreshCw, Tag, Trash2, WifiOff, Menu as MenuIcon } from 'lucide-react'
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api, type Shop } from '../api'
@@ -28,7 +28,6 @@ const NAV = [
   { to: '/', label: 'Обзор', icon: <Icon as={LayoutDashboard} className="nav__ico" /> },
   { to: '/albums', label: 'Альбомы', icon: <Icon as={Folder} className="nav__ico" /> },
   { to: '/categories', label: 'Категории', icon: <Icon as={Tag} className="nav__ico" /> },
-  { to: '/tabs', label: 'Вкладки', icon: <Icon as={LayoutList} className="nav__ico" /> },
   { to: '/contacts', label: 'Контакты', icon: <Icon as={MessageCircle} className="nav__ico" /> },
   { to: '/settings', label: 'Настройки', icon: <Icon as={SlidersHorizontal} className="nav__ico" /> },
   { to: '/billing', label: 'Подписка', icon: <Icon as={CreditCard} className="nav__ico" /> },

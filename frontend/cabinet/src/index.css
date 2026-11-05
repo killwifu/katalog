@@ -1639,15 +1639,6 @@ p[role='status'].hint { display: flex; align-items: center; gap: 6px; }
 .ov__head { min-height: 36px; }
 .ov__row > section > p:first-of-type { line-height: 1.1; }
 
-/* «Вкладки»: карточки вкладок и разделов, стрелки порядка — иконками по
-   центру круглых кнопок. */
-.tabblock { border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-surface); }
-.tabblock__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--color-line); }
-.secblock { padding: 12px; border-radius: 12px; background: var(--color-page); }
-.movebtns { display: inline-flex; gap: 2px; }
-.app .movebtns button { display: grid; place-items: center; width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--color-ink-2); cursor: pointer; }
-.app .movebtns button:hover:not(:disabled) { background: var(--color-surface-alt); color: var(--color-ink); }
-.app .movebtns button:disabled { opacity: .35; cursor: default; }
 
 /* Место перетаскиваемого фото (макет 11/13 · «Изменить порядок»):
    пунктир 1.5px, светло-синяя заливка, само фото — в «поднятой» копии. */
