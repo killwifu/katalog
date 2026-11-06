@@ -14,7 +14,6 @@ import { installModalFocusTrap } from './lib/focusTrap'
 import { installErrorReporting } from './lib/errorReport'
 import { AlbumPage } from './pages/AlbumPage'
 import { CategoriesPage } from './pages/CategoriesPage'
-import { TabsPage } from './pages/TabsPage'
 import { TrashPage } from './pages/TrashPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -193,12 +192,6 @@ const categoriesRoute = createRoute({
   component: CategoriesPage,
 })
 
-const tabsRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/tabs',
-  component: TabsPage,
-})
-
 const contactsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/contacts',
@@ -248,7 +241,7 @@ const router = createRouter({
     verifyEmailRoute,
     confirmEmailRoute,
     checkEmailRoute,
-    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, tabsRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
+    appRoute.addChildren([overviewRoute, albumsRoute, categoriesRoute, contactsRoute, settingsRoute, albumRoute, captionsRoute, billingRoute, adminRoute, statsRoute, trashRoute]),
   ]),
   basepath: '/app',
   defaultErrorComponent: ({ error }) => <ErrorPage error={error} />,

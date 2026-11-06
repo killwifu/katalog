@@ -36,7 +36,6 @@ export const API_ERRORS: Record<string, string> = {
   invalid_caption: 'Подпись слишком длинная — не больше 2000 символов',
   invalid_settings: 'Проверьте настройки: какое-то значение вне допустимого',
   invalid_cover: 'Обложкой можно сделать только фото из этого альбома',
-  too_many_tabs: 'Слишком много вкладок для сортировки',
   too_many_albums: 'В разделе не больше 500 альбомов',
   shop_suspended: 'Магазин заблокирован модератором — загрузка недоступна',
   shop_limit: 'На один аккаунт — не больше 5 магазинов',
@@ -318,22 +317,6 @@ export type Category = {
 
 export type AlbumStatus = 'published' | 'unlisted' | 'draft'
 
-export type Tab = {
-  id: string
-  title: string
-  slug: string
-  is_system: boolean
-  sort_order: number
-}
-
-export type Section = {
-  id: string
-  tab_id: string
-  title: string
-  sort_order: number
-  album_ids: string[]
-}
-
 export type PhotoStatus = 'uploading' | 'processing' | 'ready' | 'failed' | 'blocked'
 
 export type Photo = {
@@ -501,30 +484,9 @@ export const api = {
   albumDownloadUrl: (shopId: string, albumId: string, ids?: string[]) =>
     `${API}/shops/${shopId}/albums/${albumId}/download${ids?.length ? `?ids=${ids.join(',')}` : ''}`,
 
-  // Порядок фото на странице альбома задаётся целиком, как у вкладок.
+  // Порядок фото на странице альбома задаётся целиком.
   setPhotoOrder: (shopId: string, albumId: string, photoIds: string[]) =>
     request<void>('PUT', `/shops/${shopId}/albums/${albumId}/photos/order`, { photo_ids: photoIds }),
-
-  listTabs: (shopId: string) => request<Tab[]>('GET', `/shops/${shopId}/tabs`),
-  createTab: (shopId: string, title: string, slug: string) =>
-    request<Tab>('POST', `/shops/${shopId}/tabs`, { title, slug }),
-  // Порядок задаётся целиком: обмен двумя PATCH рвался посередине и
-  // оставлял у соседних вкладок одинаковый sort_order.
-  setTabOrder: (shopId: string, tabIds: string[]) =>
-    request<void>('PUT', `/shops/${shopId}/tabs/order`, { tab_ids: tabIds }),
-  deleteTab: (shopId: string, tabId: string) =>
-    request<void>('DELETE', `/shops/${shopId}/tabs/${tabId}`),
-
-  listSections: (shopId: string) => request<Section[]>('GET', `/shops/${shopId}/sections`),
-  createSection: (shopId: string, tabId: string, title: string) =>
-    request<Section>('POST', `/shops/${shopId}/tabs/${tabId}/sections`, { title }),
-  updateSection: (shopId: string, sectionId: string, title: string, sortOrder: number) =>
-    request<Section>('PATCH', `/shops/${shopId}/sections/${sectionId}`, { title, sort_order: sortOrder }),
-  deleteSection: (shopId: string, sectionId: string) =>
-    request<void>('DELETE', `/shops/${shopId}/sections/${sectionId}`),
-  // Состав секции задаётся целиком: порядок в массиве — порядок на витрине.
-  setSectionAlbums: (shopId: string, sectionId: string, albumIds: string[]) =>
-    request<void>('PUT', `/shops/${shopId}/sections/${sectionId}/albums`, { album_ids: albumIds }),
 
   listCategories: (shopId: string) =>
     request<Category[]>('GET', `/shops/${shopId}/categories`),
