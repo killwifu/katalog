@@ -186,7 +186,9 @@ export function NewAlbumDialog({
     void queryClient.invalidateQueries({ queryKey: ['shops'] })
   }
 
-  const upload = async (target: Album) => {
+  // keepOpen — часть настроек не сохранилась: фото догружаем, но окно
+  // не закрываем, чтобы продавец увидел ошибку (закроет «Готово»).
+  const upload = async (target: Album, keepOpen = false) => {
     if (left.length === 0) {
       onClose(target)
       return
@@ -213,7 +215,7 @@ export function NewAlbumDialog({
       setError(`Альбом создан, но часть фото не поместилась: ${result.quota}.`)
       return
     }
-    if (result.stopped || result.failed.length > 0) return
+    if (result.stopped || result.failed.length > 0 || keepOpen) return
     onClose(target)
   }
 
@@ -285,7 +287,7 @@ export function NewAlbumDialog({
         setBusy('no')
         return
       }
-      await upload(created)
+      await upload(created, settingsFailed)
     } finally {
       flight.leave()
     }
