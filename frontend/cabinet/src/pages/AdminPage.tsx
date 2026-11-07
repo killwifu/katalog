@@ -80,9 +80,10 @@ function ActionError({ of }: { of: { isError: boolean; error: Error | null }[] }
 function ComplaintsTab() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState('open')
+  const [page, setPage] = useState(1)
   const complaints = useQuery({
-    queryKey: ['admin', 'complaints', status],
-    queryFn: () => api.adminListComplaints(status || undefined),
+    queryKey: ['admin', 'complaints', status, page],
+    queryFn: () => api.adminListComplaints(status || undefined, page),
   })
   // Любое действие модератора меняет и сводку, и список продавцов
   // (блокировка), поэтому сбрасываем всю админ-зону, а не одну вкладку.
@@ -134,7 +135,7 @@ function ComplaintsTab() {
       )}
       <select
         value={status}
-        onChange={(e) => setStatus(e.target.value)}
+        onChange={(e) => { setStatus(e.target.value); setPage(1) }}
         className="mb-4 rounded border border-line-strong px-2 py-1.5 text-sm"
       >
         <option value="open">Новые</option>
@@ -143,6 +144,12 @@ function ComplaintsTab() {
         <option value="rejected">Отклонённые</option>
         <option value="">Все</option>
       </select>
+
+      <nav aria-label="Страницы жалоб" className="mb-4 flex items-center gap-3">
+        <button className="btn btn--ghost btn--sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Назад</button>
+        <span className="text-sm text-ink-2">Страница {page}</span>
+        <button className="btn btn--ghost btn--sm" disabled={complaints.data.length < 200} onClick={() => setPage(page + 1)}>Далее</button>
+      </nav>
 
       {complaints.data.length === 0 && <p className="text-ink-2">Жалоб нет.</p>}
 
@@ -165,10 +172,33 @@ function ComplaintsTab() {
                 </a>
               )}
             </div>
-            <p className="mb-1 text-sm break-all text-ink-2">{c.content_url}</p>
-            <p className="mb-2 text-sm whitespace-pre-wrap text-ink">{c.reason}</p>
+            {c.target_type ? (
+              <>
+                <p className="mb-1 text-sm font-medium text-ink">
+                  Жалоба покупателя на {TARGET_LABELS[c.target_type]}
+                  {c.reason_code && ` · ${REASON_LABELS[c.reason_code]}`}
+                </p>
+                {/* Ссылку собрал сервер — по ней модератор открывает объект. */}
+                <a
+                  href={c.content_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mb-1 block text-sm break-all text-brand hover:underline"
+                >
+                  {c.content_url}
+                </a>
+              </>
+            ) : (
+              <p className="mb-1 text-sm break-all text-ink-2">{c.content_url}</p>
+            )}
+            {c.reason && <p className="mb-2 text-sm whitespace-pre-wrap text-ink">{c.reason}</p>}
             <p className="mb-3 text-sm text-ink-2">
-              Заявитель: {c.reporter_name ? `${c.reporter_name} <${c.reporter_email}>` : c.reporter_email}
+              Заявитель:{' '}
+              {c.target_type
+                ? 'аноним'
+                : c.reporter_name
+                  ? `${c.reporter_name} <${c.reporter_email}>`
+                  : c.reporter_email}
             </p>
             <div className="flex flex-wrap gap-2 text-sm">
               {c.status === 'open' && (
@@ -228,6 +258,24 @@ function ComplaintsTab() {
       </ul>
     </div>
   )
+}
+
+// Жалобы покупателей с витрины (макет 15 · «Жалоба»).
+const TARGET_LABELS: Record<NonNullable<AdminComplaint['target_type']>, string> = {
+  shop: 'витрину',
+  album: 'альбом',
+  photo: 'фото',
+}
+
+const REASON_LABELS: Record<NonNullable<AdminComplaint['reason_code']>, string> = {
+  prohibited: 'Запрещённые товары',
+  violence: 'Насилие или жестокость',
+  adult: 'Контент 18+',
+  fraud: 'Мошенничество',
+  counterfeit: 'Подделка или нарушение прав',
+  hate: 'Оскорбления или ненависть',
+  spam: 'Спам',
+  other: 'Другое',
 }
 
 const PHOTO_STATUS_LABELS: Record<string, string> = {

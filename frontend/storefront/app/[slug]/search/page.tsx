@@ -18,22 +18,24 @@ import { TrackView } from '@/components/TrackView'
 
 type Props = {
   params: { slug: string }
-  searchParams: { q?: string; from?: string }
+  searchParams: { q?: string | string[]; from?: string | string[] }
 }
 
 export function generateMetadata({ searchParams }: Props): Metadata {
-  const { q } = searchParams
+  const q = Array.isArray(searchParams.q) ? searchParams.q[0] : searchParams.q
   return { title: q ? `Поиск «${q}»` : 'Поиск', robots: { index: false } }
 }
 
 export default async function SearchPage({ params, searchParams }: Props) {
   const { slug } = params
-  const q = (searchParams.q ?? '').trim().slice(0, 100)
+  const query = Array.isArray(searchParams.q) ? searchParams.q[0] : searchParams.q
+  const q = (query ?? '').trim().slice(0, 100)
+  const returnTo = Array.isArray(searchParams.from) ? searchParams.from[0] : searchParams.from
   const base = `/${encodeURIComponent(slug)}`
   // «Сбросить поиск» возвращает на прежнюю вкладку — только внутри витрины.
   const from =
-    searchParams.from && searchParams.from.startsWith(`${base}`) && !searchParams.from.startsWith('//')
-      ? searchParams.from
+    returnTo && (returnTo === base || returnTo.startsWith(`${base}/`) || returnTo.startsWith(`${base}?`))
+      ? returnTo
       : base
   if (!q) redirect(from)
 

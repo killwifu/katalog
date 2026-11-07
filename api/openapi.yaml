@@ -623,7 +623,19 @@ paths:
     post:
       operationId: presignShopLogo
       summary: URL для прямой загрузки логотипа витрины в хранилище
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [size]
+              properties:
+                size: { type: integer, format: int64, minimum: 1, maximum: 10485760, description: "Точный размер файла; Content-Length подписан в PUT URL" }
       responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "200":
           description: OK
           content:
@@ -2175,6 +2187,40 @@ paths:
         "410": { $ref: "#/components/responses/ShopUnavailable" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/v1/public/shops/{slug}/albums/{albumID}/photos/{photoID}:
+    get:
+      operationId: getPublicPhoto
+      summary: Публичное фото по id независимо от страницы альбома
+      description: >
+        Только ready, неудалённое фото указанного магазина и альбома.
+        Действуют ограничения видимости альбома и родителя, включая пароль.
+        Альбом по ссылке доступен. Закрытое фото без действующего пропуска — 404.
+        Приватные поля и оригиналы не отдаются.
+      parameters:
+        - $ref: "#/components/parameters/ShopSlug"
+        - name: albumID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: photoID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Album-Token
+          in: header
+          required: false
+          description: Пропуск альбома или родителя (см. unlockPublicAlbum).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Только публичные поля фото и URL деривативов WebP.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicPhoto" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/public/shops/{slug}/search:
     get:
       operationId: searchPublicPhotos
@@ -2304,6 +2350,53 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
 
+  /api/v1/public/shops/{slug}/complaints:
+    post:
+      operationId: createBuyerComplaint
+      summary: Анонимная жалоба покупателя на витрину, альбом или фото (макет 15 · «Жалоба»)
+      description: >
+        Объект определяется на сервере по target_id и должен быть сейчас виден
+        на этой витрине; чужой, скрытый, удалённый или несуществующий — 404.
+        Ссылку на объект (content_url в админке) собирает сервер. Rate-limit
+        по IP — как у входа (AUTH_RATE_LIMIT в минуту).
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [target, reason]
+              properties:
+                target: { type: string, enum: [shop, album, photo], description: "иначе 400 invalid_target" }
+                target_id: { type: string, format: uuid, description: "id альбома или фото; для shop не нужен" }
+                reason:
+                  type: string
+                  enum: [prohibited, violence, adult, fraud, counterfeit, hate, spam, other]
+                  description: "иначе 400 invalid_reason"
+                comment:
+                  type: string
+                  maxLength: 500
+                  description: "Необязателен; для reason=other обязателен (иначе 400 comment_required). Длиннее 500 — 400 invalid_comment"
+      responses:
+        "201":
+          description: Жалоба зарегистрирована
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, const: open }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/ShopUnavailable" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
   /api/v1/admin/overview:
     get:
       operationId: adminOverview
@@ -2351,12 +2444,20 @@ paths:
     get:
       operationId: adminListComplaints
       summary: "[admin] Список жалоб (фильтр по статусу)"
-      description: Все /api/v1/admin/* доступны только role=admin; остальным — 404.
+      description: >
+        Все /api/v1/admin/* доступны только role=admin; остальным — 404.
+        Массив до 200 жалоб, от новых к старым (created_at DESC, id DESC).
+        Пустой массив означает конец списка.
       parameters:
         - name: status
           in: query
           required: false
           schema: { type: string, enum: [open, in_review, resolved, rejected] }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1 }
+          description: Номер страницы 1–1000000; больше — 1000000, некорректное — 1.
       responses:
         "200":
           description: OK
@@ -2806,17 +2907,20 @@ components:
     AdminComplaint:
       type: object
       required: [id, shop_id, shop_slug, photo_id, photo_album_id, reason,
-                 reporter_name, reporter_email, content_url, status, created_at, resolved_at]
+                 reporter_name, reporter_email, content_url, target_type, reason_code,
+                 status, created_at, resolved_at]
       properties:
         id: { type: string, format: uuid }
         shop_id: { type: [string, "null"], format: uuid }
         shop_slug: { type: [string, "null"] }
         photo_id: { type: [string, "null"], format: uuid }
-        photo_album_id: { type: [string, "null"], format: uuid }
-        reason: { type: string }
-        reporter_name: { type: string }
+        photo_album_id: { type: [string, "null"], format: uuid, description: "Альбом фото, а у жалобы на альбом — сам альбом" }
+        reason: { type: string, description: "Текст претензии правообладателя или комментарий покупателя (может быть пустым)" }
+        reporter_name: { type: string, description: "Пусто у анонимной жалобы покупателя" }
         reporter_email: { type: string }
         content_url: { type: string }
+        target_type: { type: [string, "null"], enum: [shop, album, photo, null], description: "Жалоба покупателя с витрины; null — жалоба правообладателя" }
+        reason_code: { type: [string, "null"], enum: [prohibited, violence, adult, fraud, counterfeit, hate, spam, other, null] }
         status: { type: string, enum: [open, in_review, resolved, rejected] }
         created_at: { type: string, format: date-time }
         resolved_at: { type: [string, "null"], format: date-time }

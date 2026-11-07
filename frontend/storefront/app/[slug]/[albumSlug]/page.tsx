@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { albumHref, getAlbumPage, getCategories, getShopPage, loadOrUnavailable } from '@/lib/api'
+import { albumHref, getAlbumPage, getCategories, getPublicPhoto, getShopPage, loadOrUnavailable } from '@/lib/api'
 import { AlbumView } from '@/components/AlbumView'
 import { ShopUnavailable } from '@/components/ShopUnavailable'
 
@@ -11,7 +11,7 @@ import { ShopUnavailable } from '@/components/ShopUnavailable'
 
 type Props = {
   params: { slug: string; albumSlug: string }
-  searchParams: { p?: string }
+  searchParams: { p?: string | string[] }
 }
 
 async function load(slug: string, albumSlug: string) {
@@ -29,7 +29,10 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!data) return { title: `Альбом недоступен — ${shopData.shop.name}`, robots: { index: false } }
   // Покупатель пересылает ссылку на конкретный товар (?p=) — в превью
   // мессенджера должен быть он, а не обложка альбома.
-  const shared = searchParams.p ? data.photos.find((ph) => ph.id === searchParams.p) : undefined
+  const photoID = Array.isArray(searchParams.p) ? searchParams.p[0] : searchParams.p
+  const shared = photoID && !data.album.locked
+    ? data.photos.find((photo) => photo.id === photoID) ?? await getPublicPhoto(params.slug, data.album.id, photoID)
+    : null
   const cover = (shared ?? data.photos[0])?.urls
   const ogTitle = shared?.caption
     ? `${shared.caption.slice(0, 100)} — ${data.shop.name}`

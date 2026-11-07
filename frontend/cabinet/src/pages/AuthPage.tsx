@@ -1,7 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, Gift, Info } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api, ApiError, errorText, type SignupIntent } from '../api'
 import { takeFlash } from '../lib/flash'
 import { PLAN_NAMES } from '../lib/plans'
@@ -180,6 +180,12 @@ function LoginPage() {
   const [busy, setBusy] = useState(false)
   const [notice] = useState(() => takeFlash()?.text ?? '')
 
+  useEffect(() => {
+    if (!locked) return
+    const timer = setTimeout(() => setLocked(false), 15 * 60_000)
+    return () => clearTimeout(timer)
+  }, [locked])
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
@@ -228,11 +234,11 @@ function LoginPage() {
             placeholder="name@mail.ru"
             value={email}
             invalid={wrong}
-            disabled={locked}
             required
             onChange={(e) => {
               setEmail(e.target.value)
               setWrong(false)
+              setLocked(false)
             }}
           />
           {/* Одна ошибка на оба поля — чтобы не подсказывать, есть ли такая почта. */}

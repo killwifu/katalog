@@ -82,6 +82,7 @@ export function AlbumView({
   const slugs = shopData.albums.find((a) => a.id === album.id)?.category_slugs ?? []
   const head: AlbumHeadProps = {
     shop,
+    albumId: album.id,
     title: album.title,
     photoCount: album.photo_count,
     url,

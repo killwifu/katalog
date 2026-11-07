@@ -49,6 +49,7 @@ func (a *API) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update password", err)
 		return
 	}
+	a.clearPendingEmailChange(r.Context(), user.ID)
 	// Остальные сессии закрываем, как при сбросе: пароль меняют и тогда,
 	// когда подозревают чужой доступ. Текущую выдаём заново — продавец
 	// остаётся в кабинете.

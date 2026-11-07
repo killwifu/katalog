@@ -50,6 +50,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Regression tests
+        run: npm run test --if-present
       - name: Build
         run: npm run build
       # Бюджет производительности: JS витрины ≤ 100 КБ gzip на страницу.

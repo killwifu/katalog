@@ -144,6 +144,13 @@ export function getAlbumPage(slug: string, albumKey: string, page: number): Prom
   )
 }
 
+export function getPublicPhoto(slug: string, albumID: string, photoID: string): Promise<PhotoPublic | null> {
+  return getJSON<PhotoPublic>(
+    `/api/v1/public/shops/${encodeURIComponent(slug)}/albums/${encodeURIComponent(albumID)}/photos/${encodeURIComponent(photoID)}`,
+    slug,
+  )
+}
+
 // Адрес альбома на витрине.
 export function albumHref(shopSlug: string, album: { slug: string }): string {
   return `/${encodeURIComponent(shopSlug)}/${encodeURIComponent(album.slug)}`

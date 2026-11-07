@@ -65,6 +65,7 @@ func (a *API) Router() http.Handler {
 			r.Use(a.rateLimit("public", a.Cfg.PublicRateLimit))
 			r.Get("/shops/{slug}", a.handlePublicShop)
 			r.Get("/shops/{slug}/albums/{albumID}", a.handlePublicAlbum)
+			r.Get("/shops/{slug}/albums/{albumID}/photos/{photoID}", a.handlePublicPhoto)
 			// Подбор пароля альбома ограничен так же жёстко, как вход:
 			// общий лимит публичных страниц для этого слишком щедрый.
 			r.With(a.rateLimit("unlock", a.Cfg.AuthRateLimit)).
@@ -78,6 +79,10 @@ func (a *API) Router() http.Handler {
 			r.Get("/config", a.handlePublicConfig)
 			// Notice-and-takedown: жалоба правообладателя, без auth.
 			r.Post("/complaints", a.handleCreateComplaint)
+			// Жалоба покупателя с витрины: анонимная, поэтому лимит жёсткий,
+			// как у входа, — общий лимит публичных страниц очередь не защитит.
+			r.With(a.rateLimit("complaint", a.Cfg.AuthRateLimit)).
+				Post("/shops/{slug}/complaints", a.handleCreateBuyerComplaint)
 		})
 
 		// Вебхук ЮKassa: без сессии; подлинность проверяется запросом

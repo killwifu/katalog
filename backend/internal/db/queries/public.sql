@@ -143,3 +143,8 @@ WHERE a.parent_id = $1 AND a.status = 'published' AND a.deleted_at IS NULL
   AND a.photo_count > 0
 ORDER BY a.sort_order, a.created_at, a.id
 LIMIT 200;
+
+-- name: GetPublicPhoto :one
+SELECT * FROM photos
+WHERE id = @id AND album_id = @album_id AND shop_id = @shop_id
+  AND status = 'ready' AND deleted_at IS NULL;

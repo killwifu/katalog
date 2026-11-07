@@ -305,11 +305,57 @@ func (q *Queries) AdminUnsuspendShop(ctx context.Context, id uuid.UUID) (Shop, e
 	return i, err
 }
 
+const createBuyerComplaint = `-- name: CreateBuyerComplaint :one
+INSERT INTO complaints (shop_id, album_id, photo_id, target_type, reason_code, reason, content_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url, target_type, reason_code, album_id
+`
+
+type CreateBuyerComplaintParams struct {
+	ShopID     uuid.NullUUID `json:"shop_id"`
+	AlbumID    uuid.NullUUID `json:"album_id"`
+	PhotoID    uuid.NullUUID `json:"photo_id"`
+	TargetType *string       `json:"target_type"`
+	ReasonCode *string       `json:"reason_code"`
+	Reason     string        `json:"reason"`
+	ContentUrl string        `json:"content_url"`
+}
+
+// Жалоба покупателя с витрины: анонимная, объект проверен handler'ом.
+func (q *Queries) CreateBuyerComplaint(ctx context.Context, arg CreateBuyerComplaintParams) (Complaint, error) {
+	row := q.db.QueryRow(ctx, createBuyerComplaint,
+		arg.ShopID,
+		arg.AlbumID,
+		arg.PhotoID,
+		arg.TargetType,
+		arg.ReasonCode,
+		arg.Reason,
+		arg.ContentUrl,
+	)
+	var i Complaint
+	err := row.Scan(
+		&i.ID,
+		&i.ShopID,
+		&i.PhotoID,
+		&i.Reason,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+		&i.ReporterName,
+		&i.ReporterEmail,
+		&i.ContentUrl,
+		&i.TargetType,
+		&i.ReasonCode,
+		&i.AlbumID,
+	)
+	return i, err
+}
+
 const createComplaint = `-- name: CreateComplaint :one
 
 INSERT INTO complaints (shop_id, photo_id, reason, reporter_name, reporter_email, content_url)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url
+RETURNING id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url, target_type, reason_code, album_id
 `
 
 type CreateComplaintParams struct {
@@ -343,6 +389,9 @@ func (q *Queries) CreateComplaint(ctx context.Context, arg CreateComplaintParams
 		&i.ReporterName,
 		&i.ReporterEmail,
 		&i.ContentUrl,
+		&i.TargetType,
+		&i.ReasonCode,
+		&i.AlbumID,
 	)
 	return i, err
 }
@@ -389,7 +438,7 @@ func (q *Queries) CreateModerationLog(ctx context.Context, arg CreateModerationL
 }
 
 const getComplaint = `-- name: GetComplaint :one
-SELECT id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url FROM complaints
+SELECT id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url, target_type, reason_code, album_id FROM complaints
 WHERE id = $1
 `
 
@@ -407,6 +456,9 @@ func (q *Queries) GetComplaint(ctx context.Context, id uuid.UUID) (Complaint, er
 		&i.ReporterName,
 		&i.ReporterEmail,
 		&i.ContentUrl,
+		&i.TargetType,
+		&i.ReasonCode,
+		&i.AlbumID,
 	)
 	return i, err
 }
@@ -444,14 +496,19 @@ func (q *Queries) GetShopBySlugAny(ctx context.Context, slug string) (Shop, erro
 }
 
 const listComplaints = `-- name: ListComplaints :many
-SELECT c.id, c.shop_id, c.photo_id, c.reason, c.status, c.created_at, c.resolved_at, c.reporter_name, c.reporter_email, c.content_url, s.slug AS shop_slug, p.album_id AS photo_album_id
+SELECT c.id, c.shop_id, c.photo_id, c.reason, c.status, c.created_at, c.resolved_at, c.reporter_name, c.reporter_email, c.content_url, c.target_type, c.reason_code, c.album_id, s.slug AS shop_slug, p.album_id AS photo_album_id
 FROM complaints c
 LEFT JOIN shops s ON s.id = c.shop_id
 LEFT JOIN photos p ON p.id = c.photo_id
 WHERE $1::complaint_status IS NULL OR c.status = $1
-ORDER BY c.created_at DESC
-LIMIT 200
+ORDER BY c.created_at DESC, c.id DESC
+LIMIT 200 OFFSET $2
 `
+
+type ListComplaintsParams struct {
+	Status     NullComplaintStatus `json:"status"`
+	OffsetRows int32               `json:"offset_rows"`
+}
 
 type ListComplaintsRow struct {
 	ID            uuid.UUID          `json:"id"`
@@ -464,13 +521,16 @@ type ListComplaintsRow struct {
 	ReporterName  string             `json:"reporter_name"`
 	ReporterEmail string             `json:"reporter_email"`
 	ContentUrl    string             `json:"content_url"`
+	TargetType    *string            `json:"target_type"`
+	ReasonCode    *string            `json:"reason_code"`
+	AlbumID       uuid.NullUUID      `json:"album_id"`
 	ShopSlug      *string            `json:"shop_slug"`
 	PhotoAlbumID  uuid.NullUUID      `json:"photo_album_id"`
 }
 
 // Список для админ-зоны: с slug магазина и альбомом фото (для действий).
-func (q *Queries) ListComplaints(ctx context.Context, status NullComplaintStatus) ([]ListComplaintsRow, error) {
-	rows, err := q.db.Query(ctx, listComplaints, status)
+func (q *Queries) ListComplaints(ctx context.Context, arg ListComplaintsParams) ([]ListComplaintsRow, error) {
+	rows, err := q.db.Query(ctx, listComplaints, arg.Status, arg.OffsetRows)
 	if err != nil {
 		return nil, err
 	}
@@ -489,6 +549,9 @@ func (q *Queries) ListComplaints(ctx context.Context, status NullComplaintStatus
 			&i.ReporterName,
 			&i.ReporterEmail,
 			&i.ContentUrl,
+			&i.TargetType,
+			&i.ReasonCode,
+			&i.AlbumID,
 			&i.ShopSlug,
 			&i.PhotoAlbumID,
 		); err != nil {
@@ -579,7 +642,7 @@ SET status      = $2,
     resolved_at = CASE WHEN $2::complaint_status IN ('resolved', 'rejected')
                        THEN now() ELSE resolved_at END
 WHERE id = $1
-RETURNING id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url
+RETURNING id, shop_id, photo_id, reason, status, created_at, resolved_at, reporter_name, reporter_email, content_url, target_type, reason_code, album_id
 `
 
 type SetComplaintStatusParams struct {
@@ -601,6 +664,9 @@ func (q *Queries) SetComplaintStatus(ctx context.Context, arg SetComplaintStatus
 		&i.ReporterName,
 		&i.ReporterEmail,
 		&i.ContentUrl,
+		&i.TargetType,
+		&i.ReasonCode,
+		&i.AlbumID,
 	)
 	return i, err
 }

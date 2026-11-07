@@ -195,7 +195,7 @@ export function TrashPage() {
                     ['photos', 'Фото', data.total],
                   ] as const
                 ).map(([k, label, n]) => (
-                  <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>
+                  <button key={k} aria-pressed={tab === k} onClick={() => { setTab(k); setPage(1); setPicked(new Set()) }}>
                     {label} <em>{n}</em>
                   </button>
                 ))}

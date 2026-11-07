@@ -15,20 +15,9 @@ export const QUOTA_REASONS: Record<string, string> = {
   subscription_inactive: 'подписка неактивна, загрузка приостановлена',
 }
 
-export type UploadOutcome = {
-  uploaded: number
-  total: number
-  reason?: string
-  // confirmFailed — файлы доехали в S3, но подтвердить их не удалось.
-  // Молчать здесь нельзя: место уже занято, а обработка не начата.
-  confirmFailed?: number
-}
-
 type Options = {
   shopId: string
   albumId: string
-  onBatchConfirmed: () => void
-  onOutcome?: (outcome: UploadOutcome) => void
 }
 
 // Один конструктор на загрузку в альбом и на онбординг: настройки ограничений,
@@ -44,13 +33,22 @@ async function confirmInChunks(shopId: string, ids: string[]): Promise<ConfirmRe
   for (let i = 0; i < ids.length; i += CONFIRM_CHUNK) chunks.push(ids.slice(i, i + CONFIRM_CHUNK))
   const results: ConfirmResult[] = []
   for (const chunk of chunks.reverse()) {
-    const res = await api.confirm(shopId, chunk)
-    results.unshift(...(res.results ?? []))
+    try {
+      const res = await api.confirm(shopId, chunk)
+      results.unshift(...chunk.map((photo_id) =>
+        res.results?.find((r) => r.photo_id === photo_id) ?? { photo_id, status: 'error' },
+      ))
+    } catch (e) {
+      // Успех предыдущих частей сохраняется даже при отказе следующей.
+      results.unshift(...chunk.map((photo_id) => ({
+        photo_id, status: 'error', code: e instanceof ApiError ? e.code : undefined,
+      })))
+    }
   }
   return results
 }
 
-export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }: Options): Uppy {
+export function createPhotoUppy({ shopId, albumId }: Options) {
   // Файлы, под которые сервер уже выдал ссылку (и завёл фото).
   const presigned = new Map<string, string>()
   const uppy = new Uppy({
@@ -117,87 +115,28 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
     })
   })
 
-  // Порядок выбора запоминаем сами: после отмены Uppy выбрасывает файлы
-  // из состояния, и восстановить его по getFiles() уже нельзя.
-  const picked = new Map<string, number>()
-  uppy.on('file-added', (file) => picked.set(file.id, picked.size))
-
   // Что уже лежит в S3 и что из этого подтверждено. Подтверждать нужно
   // и при отмене: «Остановить» посреди пачки иначе оставляло доехавшие
   // файлы в статусе uploading — место занято, обработка не начата.
   const uploaded = new Map<string, string>()
-  const confirmed = new Set<string>()
   uppy.on('upload-success', (file) => {
     if (!file) return
     const photoId = (uppy.getFile(file.id)?.meta as { photoId?: string } | undefined)?.photoId
     if (photoId) uploaded.set(file.id, photoId)
   })
 
-  const confirmUploaded = () => {
-    // Подтверждаем в том порядке, в каком продавец выбрал файлы, а не в
-    // том, в каком они докачались: место фотографии в альбоме сервер
-    // назначает по порядку в этом списке. Крупный файл, доехавший
-    // последним, иначе оказывался в конце ряда своих же ракурсов.
-    const ids = [...uploaded.entries()]
-      .filter(([, photoId]) => !confirmed.has(photoId))
-      .sort((a, b) => (picked.get(a[0]) ?? 0) - (picked.get(b[0]) ?? 0))
-      .map(([, photoId]) => photoId)
-    if (ids.length === 0) return
-    for (const id of ids) confirmed.add(id)
-
-    // Подтверждение — тоже «в пути»: закрой вкладку до него, и доехавшие
-    // в хранилище фото так и не появятся в альбоме.
+  const confirmUploaded = async (ids: string[]) => {
+    if (ids.length === 0) return []
     bump(1)
-    void confirmInChunks(shopId, ids)
-      .finally(() => bump(-1))
-      .then((results) => {
-        onBatchConfirmed()
-        // Подтверждение частичное: у каждого фото свой статус. Молча
-        // потерять несколько из пачки — худший исход: продавец считает,
-        // что загрузил всё.
-        const failed = results.filter((r) => r.status !== 'processing')
-        if (failed.length > 0) {
-          // Отказ по квоте — не сбой: советовать «загрузите заново» здесь
-          // значит гонять продавца по кругу, файл не поместится и во второй
-          // раз. Ему нужен тариф, а не повторная загрузка с телефона.
-          const quota = failed.find((r) => r.code && QUOTA_REASONS[r.code])
-          onOutcome?.(
-            quota
-              ? {
-                  uploaded: ids.length - failed.length,
-                  total: ids.length,
-                  reason: QUOTA_REASONS[quota.code as string],
-                }
-              : {
-                  uploaded: ids.length - failed.length,
-                  total: ids.length,
-                  confirmFailed: failed.length,
-                },
-          )
-        }
-      })
-      .catch(() => {
-        // Файлы уже в S3 и занимают место, но обработка не запущена.
-        // Без этой ветки они навсегда оставались в статусе uploading —
-        // на боевом стенде таких накопилось шесть штук за неделю.
-        onOutcome?.({ uploaded: 0, total: ids.length, confirmFailed: ids.length })
-      })
+    try {
+      return await confirmInChunks(shopId, ids)
+    } finally {
+      bump(-1)
+    }
   }
 
-  uppy.on('complete', (result) => {
-    const ok = result.successful ?? []
-    const failed = result.failed ?? []
-    if (failed.length > 0 && onOutcome) {
-      const reason = Object.values(QUOTA_REASONS).find((r) => failed.some((f) => f.error?.includes(r)))
-      onOutcome({ uploaded: ok.length, total: ok.length + failed.length, reason })
-    }
-    confirmUploaded()
-  })
-  // cancel-all приходит до того, как Uppy выбросит файлы, — и при
-  // «Остановить», и при destroy() после обычного завершения (там
-  // подтверждать уже нечего, confirmed это отсекает).
+  // Отмена убирает только недоехавшие файлы; доехавшие подтверждает uploadRun.
   uppy.on('cancel-all', () => {
-    confirmUploaded()
     // Ссылка выдана, а файл не доехал: остановили или сорвалась сеть.
     // Сервер уже завёл под него фото в статусе uploading — без отмены оно
     // сутки висело бы в альбоме плиткой «Обработка…» и занимало лимит.
@@ -207,5 +146,5 @@ export function createPhotoUppy({ shopId, albumId, onBatchConfirmed, onOutcome }
     presigned.clear()
   })
 
-  return uppy
+  return { uppy, confirmUploaded }
 }

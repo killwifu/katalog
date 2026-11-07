@@ -1,4 +1,5 @@
 import { bump } from './inflight'
+import { reportError } from './errorReport'
 import { ALBUM_GONE, createPhotoUppy, QUOTA_REASONS } from './uppy'
 
 // Ровно то, что принимает сервер (см. ограничения в uppy.ts и maxFileSize
@@ -51,16 +52,20 @@ type RunOptions = {
   onConfirmed: () => void
 }
 
+// Повтор после потерянного ответа confirm не создаёт дубликат и не расходует квоту снова.
+const pendingConfirm = new WeakMap<Blob, Map<string, string>>()
+
 // uploadToAlbum грузит пачку в один альбом тем же конструктором, что и
 // страница альбома: presign, ограничения и подтверждение обязаны совпадать.
-// Остановка через signal не теряет доехавшие файлы — их подтверждает
-// обработчик cancel-all в uppy.ts.
+// Остановка через signal отменяет передачу, но ждёт подтверждения доехавших файлов.
 export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onConfirmed }: RunOptions): Promise<RunResult> {
   return new Promise((resolve) => {
     const ok: string[] = []
+    const uploaded = new Map<string, string>()
     const failed: { key: string; message: string }[] = []
     let quota: string | undefined
     const keyOf = new Map<string, string>()
+    const destination = `${shopId}/${albumId}`
     let left = files.length
     bump(left)
     const settle = () => {
@@ -70,29 +75,50 @@ export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onCo
       }
     }
 
-    const uppy = createPhotoUppy({
-      shopId,
-      albumId,
-      onBatchConfirmed: onConfirmed,
-      onOutcome: (outcome) => {
-        if (outcome.reason) quota = outcome.reason
-      },
-    })
+    const { uppy, confirmUploaded } = createPhotoUppy({ shopId, albumId })
 
     let settled = false
-    const finish = (stopped: boolean) => {
+    const finish = async (stopped: boolean) => {
       if (settled) return
       settled = true
       signal.removeEventListener('abort', onAbort)
-      bump(-left)
-      left = 0
-      uppy.destroy()
-      resolve({ ok, failed, quota, stopped })
+      uppy.cancelAll()
+      const results = await confirmUploaded(files.flatMap(({ key }) => uploaded.get(key) ?? []))
+      for (const { key, file } of files) {
+        const photoId = uploaded.get(key)
+        if (!photoId) continue
+        const result = results.find((r) => r.photo_id === photoId)
+        if (result?.status === 'processing' || result?.status === 'ready') {
+          ok.push(key)
+          pendingConfirm.get(file)?.delete(destination)
+        } else {
+          const reason = result?.code && QUOTA_REASONS[result.code]
+          if (reason) quota = reason
+          failed.push({ key, message: reason || 'Не удалось подтвердить загрузку. Попробуйте ещё раз' })
+        }
+      }
+      try {
+        if (uploaded.size > 0) await onConfirmed()
+      } catch (e) {
+        reportError(e)
+      } finally {
+        bump(-left)
+        left = 0
+        uppy.destroy()
+        resolve({ ok, failed, quota, stopped: stopped || signal.aborted })
+      }
     }
-    const onAbort = () => finish(true)
+    const onAbort = () => { void finish(true) }
 
     for (const { key, file } of files) {
       try {
+        const photoId = pendingConfirm.get(file)?.get(destination)
+        if (photoId) {
+          uploaded.set(key, photoId)
+          settle()
+          onProgress(key, 100)
+          continue
+        }
         const id = uppy.addFile({ name: file.name, type: file.type, data: file })
         keyOf.set(id, key)
       } catch (e) {
@@ -107,9 +133,16 @@ export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onCo
       onProgress(key, Math.round((progress.bytesUploaded / progress.bytesTotal) * 100))
     })
     uppy.on('upload-success', (file) => {
-      const key = file && keyOf.get(file.id)
+      if (!file) return
+      const key = keyOf.get(file.id)
       if (!key) return
-      ok.push(key)
+      const photoId = file.meta.photoId
+      if (typeof photoId === 'string') {
+        uploaded.set(key, photoId)
+        const targets = pendingConfirm.get(file.data) ?? new Map<string, string>()
+        targets.set(destination, photoId)
+        pendingConfirm.set(file.data, targets)
+      }
       settle()
       onProgress(key, 100)
     })
@@ -123,7 +156,7 @@ export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onCo
     })
 
     if (signal.aborted || keyOf.size === 0) {
-      finish(signal.aborted)
+      void finish(signal.aborted)
       return
     }
     signal.addEventListener('abort', onAbort)
@@ -137,6 +170,7 @@ export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onCo
 }
 
 export function formatMB(bytes: number): string {
+  if (bytes === 0) return '0 КБ'
   const mb = bytes / (1024 * 1024)
   // Мелкие файлы в мегабайтах давали «0,0 МБ» — выглядит как пустой файл.
   if (mb < 0.1) return `${Math.max(1, Math.round(bytes / 1024))} КБ`

@@ -5,6 +5,12 @@ INSERT INTO complaints (shop_id, photo_id, reason, reporter_name, reporter_email
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
+-- Жалоба покупателя с витрины: анонимная, объект проверен handler'ом.
+-- name: CreateBuyerComplaint :one
+INSERT INTO complaints (shop_id, album_id, photo_id, target_type, reason_code, reason, content_url)
+VALUES (@shop_id, sqlc.narg('album_id'), sqlc.narg('photo_id'), @target_type, @reason_code, @reason, @content_url)
+RETURNING *;
+
 -- name: GetComplaint :one
 SELECT * FROM complaints
 WHERE id = $1;
@@ -16,8 +22,8 @@ FROM complaints c
 LEFT JOIN shops s ON s.id = c.shop_id
 LEFT JOIN photos p ON p.id = c.photo_id
 WHERE sqlc.narg('status')::complaint_status IS NULL OR c.status = sqlc.narg('status')
-ORDER BY c.created_at DESC
-LIMIT 200;
+ORDER BY c.created_at DESC, c.id DESC
+LIMIT 200 OFFSET @offset_rows;
 
 -- name: SetComplaintStatus :one
 UPDATE complaints

@@ -198,6 +198,7 @@ export function SettingsPage() {
       </div>
 
       <form onSubmit={submit} className="ocs__stack" noValidate>
+        <fieldset disabled={save.isPending} className="contents">
         <section className="ocs__card">
           <div className="ocs__cardhead">
             <h2>Витрина</h2>
@@ -383,6 +384,7 @@ export function SettingsPage() {
             {save.isPending ? 'Сохраняю…' : 'Сохранить'}
           </button>
         </div>
+        </fieldset>
       </form>
 
       <section className="ocs__card ocs__stack-gap">
@@ -422,7 +424,7 @@ function LogoField({ shop, logoUrl }: { shop: Shop; logoUrl?: string }) {
     if (size && (size.w < 200 || size.h < 200)) return setErr('Картинка меньше 200×200 — в шапке витрины она будет размытой')
     setBusy(true)
     try {
-      const pre = await api.presignLogo(shop.id)
+      const pre = await api.presignLogo(shop.id, file.size)
       const put = await fetch(pre.url, { method: 'PUT', body: file })
       if (!put.ok) throw new Error('Не удалось загрузить файл — попробуйте ещё раз')
       await api.confirmLogo(shop.id, pre.logo_id)

@@ -193,21 +193,25 @@ func (q *Queries) ListUserIdentities(ctx context.Context, userID uuid.UUID) ([]L
 	return items, nil
 }
 
-const updateUserEmail = `-- name: UpdateUserEmail :exec
+const updateUserEmail = `-- name: UpdateUserEmail :execrows
 UPDATE users
 SET email = $2, email_verified_at = now(), updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND password_hash IS NOT DISTINCT FROM $3::text
 `
 
 type UpdateUserEmailParams struct {
-	ID    uuid.UUID `json:"id"`
-	Email *string   `json:"email"`
+	ID                   uuid.UUID `json:"id"`
+	Email                *string   `json:"email"`
+	ExpectedPasswordHash *string   `json:"expected_password_hash"`
 }
 
 // Смена почты по ссылке из письма: новая почта сразу подтверждена.
-func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) error {
-	_, err := q.db.Exec(ctx, updateUserEmail, arg.ID, arg.Email)
-	return err
+func (q *Queries) UpdateUserEmail(ctx context.Context, arg UpdateUserEmailParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserEmail, arg.ID, arg.Email, arg.ExpectedPasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :exec
