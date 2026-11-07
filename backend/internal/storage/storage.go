@@ -4,12 +4,14 @@
 package storage
 
 import (
-	"errors"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,8 +79,14 @@ func DerivativeKey(shopID, photoID uuid.UUID, size int) string {
 }
 
 // PresignPut возвращает URL для прямой загрузки оригинала из браузера.
-func (c *Client) PresignPut(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	u, err := c.presign.PresignedPutObject(ctx, c.bucket, key, expiry)
+func (c *Client) PresignPut(ctx context.Context, key string, size int64, expiry time.Duration) (string, error) {
+	if size <= 0 || size > imagingmeta.MaxOriginalBytes {
+		return "", fmt.Errorf("invalid original size: %d", size)
+	}
+	// Браузер сам выставляет Content-Length; подпись запрещает PUT другого размера.
+	headers := make(http.Header)
+	headers.Set("Content-Length", strconv.FormatInt(size, 10))
+	u, err := c.presign.PresignHeader(ctx, http.MethodPut, c.bucket, key, expiry, nil, headers)
 	if err != nil {
 		return "", fmt.Errorf("presign put %s: %w", key, err)
 	}
@@ -117,22 +125,31 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+var ErrOriginalTooLarge = errors.New("original exceeds file size limit")
+
 func (c *Client) Download(ctx context.Context, key string) ([]byte, error) {
 	obj, err := c.ops.GetObject(ctx, c.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", key, err)
 	}
 	defer func() { _ = obj.Close() }()
-	data, err := io.ReadAll(obj)
+	data, err := io.ReadAll(io.LimitReader(obj, imagingmeta.MaxOriginalBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", key, err)
+	}
+	if len(data) > imagingmeta.MaxOriginalBytes {
+		return nil, fmt.Errorf("read %s: %w", key, ErrOriginalTooLarge)
 	}
 	return data, nil
 }
 
 func (c *Client) Upload(ctx context.Context, key string, data []byte, contentType string) error {
+	opts := minio.PutObjectOptions{ContentType: contentType}
+	if strings.HasPrefix(key, "drv/") {
+		opts.CacheControl = "public, max-age=31536000, immutable"
+	}
 	_, err := c.ops.PutObject(ctx, c.bucket, key, bytes.NewReader(data), int64(len(data)),
-		minio.PutObjectOptions{ContentType: contentType})
+		opts)
 	if err != nil {
 		return fmt.Errorf("put %s: %w", key, err)
 	}

@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -224,6 +226,7 @@ func (a *API) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "update password", err)
 		return
 	}
+	a.clearPendingEmailChange(r.Context(), uid)
 	// Все прежние сессии закрываем: сброс пароля запрашивают в том числе
 	// когда подозревают чужой доступ, и чужая cookie должна перестать
 	// работать сразу, а не по истечении TTL.
@@ -326,6 +329,21 @@ func (a *API) handleCancelRegistration(w http.ResponseWriter, r *http.Request) {
 // новая почта сохраняется только после перехода по ссылке из письма,
 // пришедшего на неё. До этого она «ожидает» (pending_email в /auth/me).
 
+// Ссылка привязана к хешу пароля: смена, сброс и первая установка её отзывают.
+func emailChangeCredential(user db.User) string {
+	passwordHash := ""
+	if user.PasswordHash != nil {
+		passwordHash = *user.PasswordHash
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(passwordHash)))
+}
+
+func (a *API) clearPendingEmailChange(ctx context.Context, uid uuid.UUID) {
+	if err := a.RDB.Del(ctx, emailPendingKey(uid)).Err(); err != nil {
+		a.Log.Error("clear pending email change", "user_id", uid, "error", err)
+	}
+}
+
 func emailChangeKey(token string) string { return "emchg:" + token }
 func emailPendingKey(uid uuid.UUID) string {
 	return "empending:" + uid.String()
@@ -387,7 +405,7 @@ func (a *API) sendEmailChange(w http.ResponseWriter, r *http.Request, user db.Us
 		return
 	}
 	pipe := a.RDB.TxPipeline()
-	pipe.Set(r.Context(), emailChangeKey(token), user.ID.String()+" "+email, emailChangeTTL)
+	pipe.Set(r.Context(), emailChangeKey(token), user.ID.String()+" "+email+" "+emailChangeCredential(user), emailChangeTTL)
 	pipe.Set(r.Context(), emailPendingKey(user.ID), email, emailChangeTTL)
 	if _, err := pipe.Exec(r.Context()); err != nil {
 		a.internalError(w, "store email change", err)
@@ -434,19 +452,36 @@ func (a *API) handleConfirmEmailChange(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "consume email change", err)
 		return
 	}
-	idStr, email, _ := strings.Cut(val, " ")
+	idStr, rest, _ := strings.Cut(val, " ")
+	email, credential, _ := strings.Cut(rest, " ")
 	uid, err := uuid.Parse(idStr)
 	if err != nil {
 		a.internalError(w, "parse email change", err)
 		return
 	}
-	err = a.Q.UpdateUserEmail(r.Context(), db.UpdateUserEmailParams{ID: uid, Email: &email})
+	user, err := a.Q.GetUserByID(r.Context(), uid)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && credential != emailChangeCredential(user)) {
+		apiError(w, http.StatusBadRequest, "invalid_token", "token is invalid, expired or already used")
+		return
+	}
+	if err != nil {
+		a.internalError(w, "load email change user", err)
+		return
+	}
+	// Пароль мог смениться после SELECT: UPDATE проверяет его повторно.
+	rows, err := a.Q.UpdateUserEmail(r.Context(), db.UpdateUserEmailParams{
+		ID: uid, Email: &email, ExpectedPasswordHash: user.PasswordHash,
+	})
 	if isUniqueViolation(err) {
 		apiError(w, http.StatusConflict, "email_taken", "email is already registered")
 		return
 	}
 	if err != nil {
 		a.internalError(w, "update email", err)
+		return
+	}
+	if rows == 0 {
+		apiError(w, http.StatusBadRequest, "invalid_token", "token is invalid, expired or already used")
 		return
 	}
 	// Ожидающая почта снимается, только если это она (могли запросить другую позже).

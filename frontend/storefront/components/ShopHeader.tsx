@@ -1,4 +1,5 @@
 import type { CategoryPublic, ShopPublic, TabPublic } from '@/lib/api'
+import { MoreMenu } from './MoreMenu'
 import { SearchForm } from './SearchForm'
 import { ShopAbout } from './ShopAbout'
 import { ShopTabs } from './ShopTabs'
@@ -74,6 +75,7 @@ export function ShopHeader({
             {shop.description && <ShopAbout text={shop.description} contactsHref={`${base}/t/contacts`} />}
           </div>
           <SearchForm slug={shop.slug} initial={search} from={from} />
+          <MoreMenu target={{ slug: shop.slug, kind: 'shop', name: shop.name }} className="shophead__more" />
         </div>
         <ShopTabs
           shopSlug={shop.slug}

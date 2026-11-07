@@ -85,3 +85,6 @@ func ValidWatermarkPosition(pos string) bool {
 // фото. Ставит API при подтверждении, до воркера (см. confirmOne): здесь,
 // а не в imaging, потому что API собирается без cgo/libvips.
 const FailFileTooLarge = "file_too_large"
+
+// MaxOriginalBytes bounds original downloads even if a presigned PUT replaces the object.
+const MaxOriginalBytes = 10 << 20

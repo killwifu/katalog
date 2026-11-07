@@ -26,8 +26,18 @@ const maxLogoBytes = 10 << 20
 // если такие файлы начнут копиться.
 func (a *API) handleLogoPresign(w http.ResponseWriter, r *http.Request) {
 	shop := shopFromCtx(r)
+	var req struct {
+		Size int64 `json:"size"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Size <= 0 || req.Size > maxLogoBytes {
+		apiError(w, http.StatusBadRequest, "invalid_size", "size must be 1..10485760 bytes")
+		return
+	}
 	logoID := uuid.New()
-	url, err := a.Store.PresignPut(r.Context(), storage.OrigKey(shop.ID, logoID), presignTTL)
+	url, err := a.Store.PresignPut(r.Context(), storage.OrigKey(shop.ID, logoID), req.Size, presignTTL)
 	if err != nil {
 		a.internalError(w, "presign logo", err)
 		return

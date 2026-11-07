@@ -72,7 +72,8 @@ export function BillingPage() {
   const [returned] = useState(() => new URLSearchParams(location.search).get('payment'))
   // «Сейчас» фиксируется при открытии страницы: счёт идёт на дни.
   const [now] = useState(() => Date.now())
-  const waitUntil = now + 60_000
+  const [waitUntil, setWaitUntil] = useState(now + 60_000)
+  const [waitExpired, setWaitExpired] = useState(false)
   const payments = useQuery({
     queryKey: ['payments', shop.id],
     queryFn: () => api.listPayments(shop.id),
@@ -87,6 +88,11 @@ export function BillingPage() {
   }
 
   const settled = returned ? payments.data?.payments.find((x) => x.id === returned) : undefined
+  useEffect(() => {
+    if (!returned || settled) return
+    const timer = setTimeout(() => setWaitExpired(true), Math.max(0, waitUntil - Date.now()))
+    return () => clearTimeout(timer)
+  }, [returned, settled, waitUntil])
   const [seen, setSeen] = useState(false)
   useEffect(() => {
     if (!settled) return
@@ -168,6 +174,31 @@ export function BillingPage() {
         <h1>Подписка</h1>
       </div>
       <p className="bill__lead">Ваш тариф, сколько места уже занято и чем отличаются тарифы.</p>
+
+      {returned && !settled && (
+        <div className="alert alert--warn" role="status">
+          <p>
+            {payments.isError
+              ? 'Не удалось проверить оплату. Попробуйте ещё раз.'
+              : waitExpired
+                ? 'Подтверждение оплаты задерживается. Проверьте статус ещё раз — повторно платить не нужно.'
+                : 'Ждём подтверждения оплаты…'}
+          </p>
+          {(waitExpired || payments.isError) && (
+            <button
+              className="btn btn--ghost btn--pill"
+              disabled={payments.isFetching}
+              onClick={() => {
+                setWaitExpired(false)
+                setWaitUntil(Date.now() + 60_000)
+                void payments.refetch()
+              }}
+            >
+              Проверить оплату
+            </button>
+          )}
+        </div>
+      )}
 
       {b.failed_payment && (
         <div className="bill__fail" role="alert">

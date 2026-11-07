@@ -148,26 +148,30 @@ export function CategoriesPage() {
       const ids = new Map([[root.cat.id, made.id]])
       for (const s of subs) ids.set(s.cat.id, (await api.createCategory(shop.id, s.cat.title, s.cat.slug, made.id)).id)
       const now = await api.listCategories(shop.id)
-      await saveOrder(
+      const orderResults = await saveOrder(
         now.filter((x) => x.parent_id === root.cat.parent_id),
         siblingIds.map((id) => ids.get(id) ?? id),
       )
-      await Promise.allSettled(
+      const restored = await Promise.allSettled(
         snap.flatMap((s) => {
           const id = ids.get(s.cat.id) as string
           const vis =
             s.cat.is_hidden || !s.cat.on_home
               ? [api.setCategoryVisibility(shop.id, id, { is_hidden: s.cat.is_hidden, on_home: s.cat.on_home })]
               : []
-          const put = Promise.allSettled(s.albums.map((a) => api.addAlbumToCategory(shop.id, id, a))).then(() =>
-            s.albums.length > 1 ? api.setCategoryAlbumOrder(shop.id, id, s.albums) : undefined,
-          )
+          const put = Promise.allSettled(s.albums.map((a) => api.addAlbumToCategory(shop.id, id, a))).then(async (results) => {
+            if (results.some((r) => r.status === 'rejected')) throw new Error('album restore failed')
+            if (s.albums.length > 1) await api.setCategoryAlbumOrder(shop.id, id, s.albums)
+          })
           return [...vis, put]
         }),
       )
       setSelected(made.id)
+      if ([...orderResults, ...restored].some((r) => r.status === 'rejected')) {
+        setToast({ text: 'Категория восстановлена частично. Проверьте её видимость, альбомы и порядок' })
+      }
     } catch {
-      setToast({ text: 'Не удалось вернуть категорию. Проверьте интернет' })
+      setToast({ text: 'Не удалось полностью вернуть категорию. Проверьте её содержимое и интернет' })
     }
     refresh()
   }

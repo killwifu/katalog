@@ -1,10 +1,11 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Link2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImageOff, Link2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AlbumPage, PhotoPublic, ShopPublic } from '@/lib/api'
 import { messageText } from '@/lib/links'
 import { ContactMenu } from './ContactMenu'
+import { MoreMenu } from './MoreMenu'
 import { copyText, useToast } from './Toast'
 
 // Сетка фото альбома (макет 15): все фото одной сеткой, следующие порции
@@ -42,8 +43,14 @@ type Props = {
 export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, source }: Props) {
   const [photos, setPhotos] = useState(first)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
-  const loading = useRef(false)
+  const [loadError, setLoadError] = useState(false)
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set())
+  const wantedIndex = useRef<number | null>(null)
+  const navigation = useRef(0)
+  const syncPhoto = useRef<(() => Promise<void>) | null>(null)
+  const loading = useRef<Promise<PhotoPublic[]> | null>(null)
   const sentinel = useRef<HTMLDivElement>(null)
+  const grid = useRef<HTMLUListElement>(null)
   const hasMore = photos.length < total
   // Открытое фото живёт в адресе (?p=) и в истории: ссылку на товар можно
   // переслать, а «Назад» на Android закрывает просмотр, а не уводит из магазина.
@@ -53,18 +60,36 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
   const list = useRef(first)
   list.current = photos
   const loadMore = useCallback(async (): Promise<PhotoPublic[]> => {
-    const have = list.current
-    if (loading.current) return have
-    loading.current = true
-    const next = await fetchPhotos(source, Math.floor(have.length / perPage) + 1)
-    loading.current = false
-    if (!next || next.length === 0) return have
-    const seen = new Set(have.map((p) => p.id))
-    const merged = [...have, ...next.filter((p) => !seen.has(p.id))]
-    list.current = merged
-    setPhotos(merged)
-    return merged
+    if (loading.current) return loading.current
+    const pending = (async () => {
+      const have = list.current
+      const next = await fetchPhotos(source, Math.floor(have.length / perPage) + 1)
+      if (!next || next.length === 0) {
+        setLoadError(true)
+        return have
+      }
+      const seen = new Set(have.map((p) => p.id))
+      const merged = [...have, ...next.filter((p) => !seen.has(p.id))]
+      setLoadError(merged.length === have.length)
+      list.current = merged
+      setPhotos(merged)
+      return merged
+    })()
+    loading.current = pending
+    try {
+      return await pending
+    } finally {
+      loading.current = null
+    }
   }, [perPage, source])
+
+  // Ошибка могла случиться до гидратации, когда onError ещё не подписан.
+  useEffect(() => {
+    const failed = [...(grid.current?.querySelectorAll<HTMLImageElement>('img') ?? [])]
+      .filter((img) => img.complete && img.currentSrc && img.naturalWidth === 0)
+      .map((img) => img.dataset.photoId!)
+    if (failed.length) setFailedImages((ids) => new Set([...ids, ...failed]))
+  }, [photos])
 
   // Подгрузка при прокрутке: за экран до конца сетки.
   useEffect(() => {
@@ -79,7 +104,9 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
 
   // ?p= из адреса: фото может лежать дальше первой порции — догружаем.
   useEffect(() => {
+    let alive = true
     const sync = async () => {
+      const seq = ++navigation.current
       const id = new URLSearchParams(location.search).get('p')
       let have = list.current
       let i = id ? have.findIndex((p) => p.id === id) : -1
@@ -89,12 +116,18 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
         have = more
         i = have.findIndex((p) => p.id === id)
       }
+      if (!alive || seq !== navigation.current) return
       if (i < 0) pushed.current = false
       setOpenIndex(i >= 0 ? i : null)
     }
+    syncPhoto.current = sync
     void sync()
     addEventListener('popstate', sync)
-    return () => removeEventListener('popstate', sync)
+    return () => {
+      alive = false
+      syncPhoto.current = null
+      removeEventListener('popstate', sync)
+    }
     // Только на вход и на «Назад»: дальнейшие порции просмотр не трогают.
   }, [])
 
@@ -108,17 +141,34 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
   }
 
   const open = (index: number) => {
+    navigation.current++
+    wantedIndex.current = null
     pushed.current = true
     putInUrl(index, photos, 'push')
   }
 
   const navigate = async (index: number) => {
-    let items = photos
-    if (index >= items.length && hasMore) items = await loadMore()
-    putInUrl(((index % items.length) + items.length) % items.length, items, 'replace')
+    const seq = ++navigation.current
+    wantedIndex.current = index
+    const target = ((index % total) + total) % total
+    let items = list.current
+    while (target >= items.length) {
+      const more = await loadMore()
+      if (seq !== navigation.current || more.length === items.length) return
+      items = more
+    }
+    putInUrl(target, items, 'replace')
+  }
+
+  const retry = () => {
+    if (wantedIndex.current !== null) void navigate(wantedIndex.current)
+    else if (new URLSearchParams(location.search).has('p')) void syncPhoto.current?.()
+    else void loadMore()
   }
 
   const close = () => {
+    navigation.current++
+    wantedIndex.current = null
     // Просмотр открыт по прямой ссылке — уходить назад некуда: чистим адрес.
     if (!pushed.current) {
       const params = new URLSearchParams(location.search)
@@ -136,11 +186,15 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
   }
   return (
     <>
-      <ul className="photo-grid">
+      <ul className="photo-grid" ref={grid}>
         {photos.map((p, i) => (
           <li key={p.id} className="photo-card">
             <button type="button" className="photo-open" onClick={() => open(i)}>
-              <img
+              {failedImages.has(p.id) ? (
+                <span className="photo-unavailable"><ImageOff size={24} aria-hidden="true" /><span className="sr-only">Фото не загрузилось</span></span>
+              ) : <img
+                data-photo-id={p.id}
+                onError={() => setFailedImages((ids) => new Set(ids).add(p.id))}
                 src={p.urls.small}
                 srcSet={`${p.urls.small} 500w, ${p.urls.medium} 800w`}
                 sizes="(max-width: 640px) 33vw, (max-width: 1199px) 20vw, 186px"
@@ -149,12 +203,15 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
                 loading={i < 12 ? 'eager' : 'lazy'}
                 decoding="async"
                 alt={p.caption || 'Фото товара'}
-              />
+              />}
             </button>
             {p.caption && <p className="caption">{p.caption}</p>}
           </li>
         ))}
       </ul>
+      {loadError && openIndex === null && (
+        <p role="alert">Не удалось загрузить фото. <button type="button" className="btn btn--ghost" onClick={retry}>Повторить</button></p>
+      )}
       {hasMore && <div ref={sentinel} className="photo-more" aria-hidden="true" />}
       {openIndex !== null && photos[openIndex] && (
         <Lightbox
@@ -163,6 +220,10 @@ export function PhotoGrid({ photos: first, total, perPage, shop, albumTitle, sou
           total={total}
           shop={shop}
           albumTitle={albumTitle}
+          shopSlug={source.shopSlug}
+          albumToken={source.token}
+          loadError={loadError}
+          onRetry={retry}
           onNavigate={(i) => void navigate(i)}
           onClose={close}
         />
@@ -177,6 +238,10 @@ function Lightbox({
   total,
   shop,
   albumTitle,
+  shopSlug,
+  albumToken,
+  loadError,
+  onRetry,
   onNavigate,
   onClose,
 }: {
@@ -185,6 +250,10 @@ function Lightbox({
   total: number
   shop: ShopPublic
   albumTitle: string
+  shopSlug: string
+  albumToken?: string
+  loadError: boolean
+  onRetry: () => void
   onNavigate: (i: number) => void
   onClose: () => void
 }) {
@@ -194,6 +263,7 @@ function Lightbox({
   const touch = useRef<{ x: number; y: number } | null>(null)
   // Увеличение по клику (на телефоне — щипком, его даёт браузер).
   const [zoom, setZoom] = useState<string | null>(null)
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
   const [toast, show] = useToast()
   const prev = useCallback(() => onNavigate(index - 1), [index, onNavigate])
   const next = useCallback(() => onNavigate(index + 1), [index, onNavigate])
@@ -219,8 +289,11 @@ function Lightbox({
   // Клавиатура: Esc, стрелки и запирание таба внутри окна.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Esc в открытом списке каналов закрывает только список.
-      if (e.key === 'Escape' && !body.current?.querySelector('.sfpop')) onClose()
+      // Открыто окно жалобы: клавиши его (Esc, стрелки в поле, фокус держит
+      // сам <dialog>), просмотр их не трогает.
+      if (body.current?.querySelector('dialog[open]')) return
+      // Esc в открытом списке каналов или меню «⋯» закрывает только его.
+      if (e.key === 'Escape' && !body.current?.querySelector('.sfpop, .sfmore__menu')) onClose()
       if (e.key === 'ArrowLeft') prev()
       if (e.key === 'ArrowRight') next()
       if (e.key !== 'Tab' || !body.current) return
@@ -267,6 +340,11 @@ function Lightbox({
           >
             <Link2 size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
+          <MoreMenu
+            target={{ slug: shopSlug, kind: 'photo', id: photo.id, name: albumTitle, position: `${index + 1} из ${total}`, token: albumToken }}
+            className="lb-more"
+            onSent={show}
+          />
           <button type="button" className="lb-icon lb-close" onClick={onClose} aria-label="Закрыть">
             <X size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
@@ -297,7 +375,14 @@ function Lightbox({
             <ChevronLeft size={22} strokeWidth={1.8} aria-hidden="true" />
           </button>
         )}
-        <img
+        {failedPhoto === photo.id ? (
+          <div className="photo-unavailable photo-unavailable--viewer" role="alert">
+            <ImageOff size={40} aria-hidden="true" />
+            <p>Фото не загрузилось</p>
+            <button type="button" className="btn btn--ghost photo-retry" onClick={() => setFailedPhoto(null)}>Повторить</button>
+          </div>
+        ) : <img
+          onError={() => setFailedPhoto(photo.id)}
           key={photo.id}
           src={photo.urls.large}
           srcSet={`${photo.urls.medium} 800w, ${photo.urls.large} 1600w`}
@@ -310,13 +395,14 @@ function Lightbox({
             const r = e.currentTarget.getBoundingClientRect()
             setZoom(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`)
           }}
-        />
+        />}
         {total > 1 && (
           <button type="button" className="lb-nav lb-next" onClick={next} aria-label="Вперёд">
             <ChevronRight size={22} strokeWidth={1.8} aria-hidden="true" />
           </button>
         )}
       </div>
+      {loadError && <p className="lb-caption" role="alert">Не удалось загрузить фото. <button type="button" className="btn btn--ghost" onClick={onRetry}>Повторить</button></p>}
       {photo.caption && <p className="lb-caption">{photo.caption}</p>}
       {photos.length > 1 && (
         <div className="lb-thumbs" ref={thumbs}>

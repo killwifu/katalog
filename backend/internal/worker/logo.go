@@ -12,6 +12,7 @@ import (
 
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
+	"katalog/backend/internal/imagingmeta"
 	"katalog/backend/internal/storage"
 	"katalog/backend/internal/tasks"
 )
@@ -32,17 +33,20 @@ func (p *Processor) HandleShopLogo(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal payload: %v: %w", err, asynq.SkipRetry)
 	}
 	origKey := storage.OrigKey(payload.ShopID, payload.LogoID)
+	fail := func(reason string) error {
+		_ = p.RDB.Set(ctx, tasks.LogoFailKey(payload.LogoID), reason, 10*time.Minute).Err()
+		_ = p.Store.Delete(ctx, origKey)
+		return fmt.Errorf("logo rejected: %s: %w", reason, asynq.SkipRetry)
+	}
 	data, err := p.Store.Download(ctx, origKey)
+	if errors.Is(err, storage.ErrOriginalTooLarge) {
+		return fail(imagingmeta.FailFileTooLarge)
+	}
 	if storage.IsNotFound(err) {
 		return nil // повторная доставка: уже обработан и оригинал удалён
 	}
 	if err != nil {
 		return fmt.Errorf("download logo: %w", err)
-	}
-	fail := func(reason string) error {
-		_ = p.RDB.Set(ctx, tasks.LogoFailKey(payload.LogoID), reason, 10*time.Minute).Err()
-		_ = p.Store.Delete(ctx, origKey)
-		return fmt.Errorf("logo rejected: %s: %w", reason, asynq.SkipRetry)
 	}
 	res, err := imaging.Process(data)
 	var vErr *imaging.ValidationError

@@ -68,6 +68,20 @@ func (p *Processor) HandlePhotoProcess(ctx context.Context, t *asynq.Task) error
 	}
 
 	data, err := p.Store.Download(ctx, storage.OrigKey(photo.ShopID, photo.ID))
+	// PUT-ссылка многоразовая: изменившийся размер отклоняем до декодирования.
+	// shortcut: замена тем же размером неотличима; для фиксации байтов нужен ETag/version при confirm.
+	reason := ""
+	if errors.Is(err, storage.ErrOriginalTooLarge) {
+		reason = imagingmeta.FailFileTooLarge
+	} else if err == nil && int64(len(data)) != photo.OrigSize {
+		reason = string(imaging.FailCorrupt)
+	}
+	if reason != "" {
+		if err := p.failAndRelease(ctx, photo, reason); err != nil {
+			return fmt.Errorf("reject replaced original: %w", err)
+		}
+		return fmt.Errorf("original changed after confirm: %s: %w", reason, asynq.SkipRetry)
+	}
 	if err != nil {
 		return fmt.Errorf("download original: %w", err)
 	}

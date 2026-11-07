@@ -18,7 +18,7 @@ func putLogo(t *testing.T, c *client, shopID string, data []byte) string {
 		LogoID string `json:"logo_id"`
 		URL    string `json:"url"`
 	}
-	c.mustJSON("POST", "/api/v1/shops/"+shopID+"/logo/presign", nil, http.StatusOK, &pre)
+	c.mustJSON("POST", "/api/v1/shops/"+shopID+"/logo/presign", map[string]int{"size": len(data)}, http.StatusOK, &pre)
 	req, _ := http.NewRequest(http.MethodPut, pre.URL, bytes.NewReader(data))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {

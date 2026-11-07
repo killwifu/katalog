@@ -635,6 +635,9 @@ type Complaint struct {
 	ReporterName  string             `json:"reporter_name"`
 	ReporterEmail string             `json:"reporter_email"`
 	ContentUrl    string             `json:"content_url"`
+	TargetType    *string            `json:"target_type"`
+	ReasonCode    *string            `json:"reason_code"`
+	AlbumID       uuid.NullUUID      `json:"album_id"`
 }
 
 type DailyStat struct {

@@ -61,16 +61,21 @@ export function LockedAlbum({ slug, albumId, albumSlug, parentId, head }: Props)
       return
     }
     void (async () => {
-      for (const t of saved) {
-        const album = await loadAlbum(slug, albumId, t)
-        if (!alive) return
-        if (album) {
-          setToken(t)
-          setData(album)
-          break
+      try {
+        for (const t of saved) {
+          const album = await loadAlbum(slug, albumId, t)
+          if (!alive) return
+          if (album) {
+            setToken(t)
+            setData(album)
+            break
+          }
         }
+      } catch {
+        if (alive) setError('Нет связи. Проверьте интернет и попробуйте ещё раз')
+      } finally {
+        if (alive) setState('form')
       }
-      setState('form')
     })()
     return () => {
       alive = false

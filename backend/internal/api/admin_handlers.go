@@ -28,6 +28,8 @@ var complaintStatuses = map[string]db.ComplaintStatus{
 	"rejected":  db.ComplaintStatusRejected,
 }
 
+// TargetType/ReasonCode — у жалобы покупателя с витрины (shop, album, photo
+// и код причины); у жалобы правообладателя — null.
 type adminComplaintResponse struct {
 	ID            string     `json:"id"`
 	ShopID        *string    `json:"shop_id"`
@@ -38,6 +40,8 @@ type adminComplaintResponse struct {
 	ReporterName  string     `json:"reporter_name"`
 	ReporterEmail string     `json:"reporter_email"`
 	ContentURL    string     `json:"content_url"`
+	TargetType    *string    `json:"target_type"`
+	ReasonCode    *string    `json:"reason_code"`
 	Status        string     `json:"status"`
 	CreatedAt     time.Time  `json:"created_at"`
 	ResolvedAt    *time.Time `json:"resolved_at"`
@@ -61,7 +65,11 @@ func (a *API) handleAdminListComplaints(w http.ResponseWriter, r *http.Request) 
 		}
 		status = db.NullComplaintStatus{ComplaintStatus: st, Valid: true}
 	}
-	rows, err := a.Q.ListComplaints(r.Context(), status)
+	page := queryInt(r, "page", 1, 1, 1_000_000)
+	rows, err := a.Q.ListComplaints(r.Context(), db.ListComplaintsParams{
+		Status:     status,
+		OffsetRows: int32((page - 1) * 200),
+	})
 	if err != nil {
 		a.internalError(w, "list complaints", err)
 		return
@@ -78,8 +86,14 @@ func (a *API) handleAdminListComplaints(w http.ResponseWriter, r *http.Request) 
 			ReporterName:  c.ReporterName,
 			ReporterEmail: c.ReporterEmail,
 			ContentURL:    c.ContentUrl,
+			TargetType:    c.TargetType,
+			ReasonCode:    c.ReasonCode,
 			Status:        string(c.Status),
 			CreatedAt:     c.CreatedAt.Time,
+		}
+		// Жалоба на альбом: «Скрыть альбом» модератору нужен и без фото.
+		if resp.PhotoAlbumID == nil {
+			resp.PhotoAlbumID = uuidPtr(c.AlbumID)
 		}
 		if c.ResolvedAt.Valid {
 			resp.ResolvedAt = &c.ResolvedAt.Time

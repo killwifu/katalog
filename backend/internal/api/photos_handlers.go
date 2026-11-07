@@ -22,7 +22,7 @@ const (
 	// 10 МБ на файл — предел из макета кабинета («до 10 МБ на одно фото»).
 	// Снимок с телефона в него укладывается, а всё крупнее — почти всегда
 	// не фотография товара, а исходник из редактора.
-	maxFileSize = 10 << 20
+	maxFileSize = imagingmeta.MaxOriginalBytes
 	presignTTL  = 15 * time.Minute
 )
 
@@ -130,7 +130,7 @@ func (a *API) handlePresign(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "create photo", err)
 		return
 	}
-	url, err := a.Store.PresignPut(r.Context(), storage.OrigKey(shop.ID, photo.ID), presignTTL)
+	url, err := a.Store.PresignPut(r.Context(), storage.OrigKey(shop.ID, photo.ID), req.Size, presignTTL)
 	if err != nil {
 		a.internalError(w, "presign upload", err)
 		return

@@ -122,6 +122,44 @@ func (q *Queries) GetPublicAlbum(ctx context.Context, arg GetPublicAlbumParams) 
 	return i, err
 }
 
+const getPublicPhoto = `-- name: GetPublicPhoto :one
+SELECT id, album_id, shop_id, caption, caption_tsv, status, orig_size, width, height, phash, source, sort_order, created_at, updated_at, flagged, drv_size, fail_reason, deleted_at FROM photos
+WHERE id = $1 AND album_id = $2 AND shop_id = $3
+  AND status = 'ready' AND deleted_at IS NULL
+`
+
+type GetPublicPhotoParams struct {
+	ID      uuid.UUID `json:"id"`
+	AlbumID uuid.UUID `json:"album_id"`
+	ShopID  uuid.UUID `json:"shop_id"`
+}
+
+func (q *Queries) GetPublicPhoto(ctx context.Context, arg GetPublicPhotoParams) (Photo, error) {
+	row := q.db.QueryRow(ctx, getPublicPhoto, arg.ID, arg.AlbumID, arg.ShopID)
+	var i Photo
+	err := row.Scan(
+		&i.ID,
+		&i.AlbumID,
+		&i.ShopID,
+		&i.Caption,
+		&i.CaptionTsv,
+		&i.Status,
+		&i.OrigSize,
+		&i.Width,
+		&i.Height,
+		&i.Phash,
+		&i.Source,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Flagged,
+		&i.DrvSize,
+		&i.FailReason,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const listActiveShopSlugs = `-- name: ListActiveShopSlugs :many
 SELECT slug, updated_at FROM shops
 WHERE status = 'active' AND billing_state != 'suspended'

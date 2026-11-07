@@ -56,7 +56,7 @@ SET email_verified_at = now(), password_hash = NULL, updated_at = now()
 WHERE id = $1;
 
 -- Смена почты по ссылке из письма: новая почта сразу подтверждена.
--- name: UpdateUserEmail :exec
+-- name: UpdateUserEmail :execrows
 UPDATE users
 SET email = $2, email_verified_at = now(), updated_at = now()
-WHERE id = $1;
+WHERE id = $1 AND password_hash IS NOT DISTINCT FROM sqlc.narg('expected_password_hash')::text;

@@ -133,6 +133,9 @@ export type AdminComplaint = {
   reporter_name: string
   reporter_email: string
   content_url: string
+  // Жалоба покупателя с витрины; у жалобы правообладателя — null.
+  target_type: 'shop' | 'album' | 'photo' | null
+  reason_code: 'prohibited' | 'violence' | 'adult' | 'fraud' | 'counterfeit' | 'hate' | 'spam' | 'other' | null
   status: 'open' | 'in_review' | 'resolved' | 'rejected'
   created_at: string
   resolved_at: string | null
@@ -413,7 +416,7 @@ export const api = {
   updateMe: (patch: { phone?: string }) => request<User>('PATCH', '/auth/me', patch),
   deleteAccount: (password: string) => request<void>('DELETE', '/auth/me', { password }),
   resendEmailChange: () => request<void>('POST', '/auth/email/change/resend'),
-  presignLogo: (shopId: string) => request<{ logo_id: string; url: string }>('POST', `/shops/${shopId}/logo/presign`),
+  presignLogo: (shopId: string, size: number) => request<{ logo_id: string; url: string }>('POST', `/shops/${shopId}/logo/presign`, { size }),
   confirmLogo: (shopId: string, logoId: string) =>
     request<void>('POST', `/shops/${shopId}/logo/confirm`, { logo_id: logoId }),
   logoStatus: (shopId: string, logoId: string) =>
@@ -580,8 +583,8 @@ export const api = {
     }>('GET', '/admin/overview'),
   adminListShops: () =>
     request<AdminShop[]>('GET', '/admin/shops'),
-  adminListComplaints: (status?: string) =>
-    request<AdminComplaint[]>('GET', `/admin/complaints${status ? `?status=${status}` : ''}`),
+  adminListComplaints: (status?: string, page = 1) =>
+    request<AdminComplaint[]>('GET', `/admin/complaints?page=${page}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
   adminSetComplaintStatus: (id: string, status: string) =>
     request<{ id: string; status: string }>('PATCH', `/admin/complaints/${id}`, { status }),
   adminBlockPhoto: (photoId: string, complaintId?: string) =>
