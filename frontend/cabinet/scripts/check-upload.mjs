@@ -246,3 +246,20 @@ test('successful confirms clear retry state so a deliberate new upload gets a ne
   assert.equal(h.photos(), 2)
   assert.deepEqual(h.batches.flat(), ['1', '2'])
 })
+
+for (const terminal of [
+  { status: 'failed' },
+  { status: 'error', code: 'not_found' },
+  { status: 'error', code: 'object_not_uploaded' },
+]) {
+  test(`retry replaces unusable upload after ${terminal.code ?? terminal.status}`, async () => {
+    const h = await harness(async (ids, n) => n === 1
+      ? { results: ids.map((photo_id) => ({ photo_id, ...terminal })) }
+      : processing(ids))
+    const first = h.run(1)
+    assert.equal((await first.promise).failed.length, 1)
+    const retried = await h.run(first.files).promise
+    assert.equal(h.photos(), 2, 'unusable photo ID was retried forever')
+    assert.deepEqual([...retried.ok], ['k1'])
+  })
+}

@@ -742,6 +742,7 @@ type Shop struct {
 	MediaRev      int32              `json:"media_rev"`
 	TrialEndsAt   pgtype.Timestamptz `json:"trial_ends_at"`
 	LogoID        uuid.NullUUID      `json:"logo_id"`
+	LogoUploadID  uuid.NullUUID      `json:"logo_upload_id"`
 }
 
 type Subscription struct {

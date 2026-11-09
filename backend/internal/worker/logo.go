@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 
 	"katalog/backend/internal/db"
 	"katalog/backend/internal/imaging"
@@ -33,6 +34,17 @@ func (p *Processor) HandleShopLogo(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("unmarshal payload: %v: %w", err, asynq.SkipRetry)
 	}
 	origKey := storage.OrigKey(payload.ShopID, payload.LogoID)
+	shop, err := p.Q.GetShopByID(ctx, payload.ShopID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("load logo shop: %w", err)
+	}
+	if err == nil && shop.LogoID.Valid && shop.LogoID.UUID == payload.LogoID {
+		return nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) || !shop.LogoUploadID.Valid || shop.LogoUploadID.UUID != payload.LogoID {
+		return p.discardShopLogo(ctx, payload)
+	}
+
 	fail := func(reason string) error {
 		_ = p.RDB.Set(ctx, tasks.LogoFailKey(payload.LogoID), reason, 10*time.Minute).Err()
 		_ = p.Store.Delete(ctx, origKey)
@@ -62,12 +74,26 @@ func (p *Processor) HandleShopLogo(ctx context.Context, t *asynq.Task) error {
 	if err := p.Store.Upload(ctx, storage.DerivativeKey(payload.ShopID, payload.LogoID, logoSize), res.Derivatives[logoSize], "image/webp"); err != nil {
 		return fmt.Errorf("upload logo: %w", err)
 	}
-	shop, err := p.Q.GetShopByID(ctx, payload.ShopID)
+	shop, err = p.Q.GetShopByID(ctx, payload.ShopID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p.discardShopLogo(ctx, payload)
+	}
 	if err != nil {
 		return fmt.Errorf("load shop: %w", err)
 	}
-	if err := p.Q.SetShopLogo(ctx, db.SetShopLogoParams{ID: shop.ID, LogoID: uuid.NullUUID{UUID: payload.LogoID, Valid: true}}); err != nil {
+	applied, err := p.Q.ApplyShopLogoUpload(ctx, db.ApplyShopLogoUploadParams{ID: shop.ID, LogoID: uuid.NullUUID{UUID: payload.LogoID, Valid: true}})
+	if err != nil {
 		return fmt.Errorf("set logo: %w", err)
+	}
+	if applied == 0 {
+		current, err := p.Q.GetShopByID(ctx, payload.ShopID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("reload logo shop: %w", err)
+		}
+		if err == nil && current.LogoID.Valid && current.LogoID.UUID == payload.LogoID {
+			return nil
+		}
+		return p.discardShopLogo(ctx, payload)
 	}
 	if shop.LogoID.Valid && shop.LogoID.UUID != payload.LogoID {
 		if err := p.Store.RemovePhoto(ctx, shop.ID, shop.LogoID.UUID, []int{logoSize}); err != nil {
@@ -79,4 +105,16 @@ func (p *Processor) HandleShopLogo(ctx context.Context, t *asynq.Task) error {
 	}
 	p.Revalidate.Shop(shop.Slug)
 	return nil
+}
+
+// Старые задачи могли принять photo_id за logo_id: оригинал фото удалять нельзя.
+func (p *Processor) discardShopLogo(ctx context.Context, payload tasks.ShopLogoPayload) error {
+	_, err := p.Q.GetPhotoForShop(ctx, db.GetPhotoForShopParams{ID: payload.LogoID, ShopID: payload.ShopID})
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check stale logo target: %w", err)
+	}
+	return p.Store.RemovePhoto(ctx, payload.ShopID, payload.LogoID, []int{logoSize})
 }

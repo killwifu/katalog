@@ -53,6 +53,40 @@ func (q *Queries) AddShopStorageWithinLimit(ctx context.Context, arg AddShopStor
 	return storage_used, err
 }
 
+const applyShopLogoUpload = `-- name: ApplyShopLogoUpload :execrows
+UPDATE shops SET logo_id = $2, logo_upload_id = NULL, updated_at = now()
+WHERE id = $1 AND logo_upload_id = $2
+`
+
+type ApplyShopLogoUploadParams struct {
+	ID     uuid.UUID     `json:"id"`
+	LogoID uuid.NullUUID `json:"logo_id"`
+}
+
+// Запоздалая задача не возвращает удалённый и не заменяет более новый логотип.
+func (q *Queries) ApplyShopLogoUpload(ctx context.Context, arg ApplyShopLogoUploadParams) (int64, error) {
+	result, err := q.db.Exec(ctx, applyShopLogoUpload, arg.ID, arg.LogoID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const beginShopLogoUpload = `-- name: BeginShopLogoUpload :exec
+UPDATE shops SET logo_upload_id = $2 WHERE id = $1
+`
+
+type BeginShopLogoUploadParams struct {
+	ID           uuid.UUID     `json:"id"`
+	LogoUploadID uuid.NullUUID `json:"logo_upload_id"`
+}
+
+// Последний выбранный логотип; действующий остаётся виден до обработки.
+func (q *Queries) BeginShopLogoUpload(ctx context.Context, arg BeginShopLogoUploadParams) error {
+	_, err := q.db.Exec(ctx, beginShopLogoUpload, arg.ID, arg.LogoUploadID)
+	return err
+}
+
 const bumpShopMediaRev = `-- name: BumpShopMediaRev :exec
 UPDATE shops SET media_rev = media_rev + 1 WHERE id = $1
 `
@@ -76,7 +110,7 @@ func (q *Queries) CountShopsByOwner(ctx context.Context, ownerID uuid.UUID) (int
 const createShop = `-- name: CreateShop :one
 INSERT INTO shops (owner_id, slug, name, description, contacts, settings)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id
 `
 
 type CreateShopParams struct {
@@ -117,6 +151,7 @@ func (q *Queries) CreateShop(ctx context.Context, arg CreateShopParams) (Shop, e
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }
@@ -150,7 +185,7 @@ func (q *Queries) DropSlugReservation(ctx context.Context, slug string) error {
 }
 
 const getShopByID = `-- name: GetShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id FROM shops
 WHERE id = $1
 `
 
@@ -176,12 +211,13 @@ func (q *Queries) GetShopByID(ctx context.Context, id uuid.UUID) (Shop, error) {
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }
 
 const getShopForOwner = `-- name: GetShopForOwner :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id FROM shops
 WHERE id = $1 AND owner_id = $2
 `
 
@@ -213,6 +249,7 @@ func (q *Queries) GetShopForOwner(ctx context.Context, arg GetShopForOwnerParams
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }
@@ -240,7 +277,7 @@ func (q *Queries) GetSlugReservation(ctx context.Context, arg GetSlugReservation
 }
 
 const listShopsByOwner = `-- name: ListShopsByOwner :many
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id FROM shops
 WHERE owner_id = $1
 ORDER BY created_at
 `
@@ -274,6 +311,7 @@ func (q *Queries) ListShopsByOwner(ctx context.Context, ownerID uuid.UUID) ([]Sh
 			&i.MediaRev,
 			&i.TrialEndsAt,
 			&i.LogoID,
+			&i.LogoUploadID,
 		); err != nil {
 			return nil, err
 		}
@@ -306,7 +344,7 @@ func (q *Queries) ReserveReleasedSlug(ctx context.Context, arg ReserveReleasedSl
 
 const setShopLogo = `-- name: SetShopLogo :exec
 UPDATE shops
-SET logo_id = $2, updated_at = now()
+SET logo_id = $2, logo_upload_id = NULL, updated_at = now()
 WHERE id = $1
 `
 
@@ -329,7 +367,7 @@ SET name        = $3,
     settings    = $6,
     updated_at  = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id
 `
 
 type UpdateShopParams struct {
@@ -371,6 +409,7 @@ func (q *Queries) UpdateShop(ctx context.Context, arg UpdateShopParams) (Shop, e
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }
@@ -379,7 +418,7 @@ const updateShopSlug = `-- name: UpdateShopSlug :one
 UPDATE shops
 SET slug = $3, slug_changed_at = now(), updated_at = now()
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id
+RETURNING id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id
 `
 
 type UpdateShopSlugParams struct {
@@ -412,6 +451,7 @@ func (q *Queries) UpdateShopSlug(ctx context.Context, arg UpdateShopSlugParams) 
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }

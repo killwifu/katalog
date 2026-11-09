@@ -82,5 +82,14 @@ UPDATE shops SET media_rev = media_rev + 1 WHERE id = $1;
 -- Логотип витрины; NULL — без логотипа.
 -- name: SetShopLogo :exec
 UPDATE shops
-SET logo_id = $2, updated_at = now()
+SET logo_id = $2, logo_upload_id = NULL, updated_at = now()
 WHERE id = $1;
+
+-- Последний выбранный логотип; действующий остаётся виден до обработки.
+-- name: BeginShopLogoUpload :exec
+UPDATE shops SET logo_upload_id = $2 WHERE id = $1;
+
+-- Запоздалая задача не возвращает удалённый и не заменяет более новый логотип.
+-- name: ApplyShopLogoUpload :execrows
+UPDATE shops SET logo_id = $2, logo_upload_id = NULL, updated_at = now()
+WHERE id = $1 AND logo_upload_id = $2;

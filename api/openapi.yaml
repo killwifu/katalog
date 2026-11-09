@@ -623,6 +623,7 @@ paths:
     post:
       operationId: presignShopLogo
       summary: URL для прямой загрузки логотипа витрины в хранилище
+      description: Новый запрос заменяет ожидающую загрузку. Предыдущая задача больше не сможет заменить логотип.
       requestBody:
         required: true
         content:
@@ -655,6 +656,7 @@ paths:
     post:
       operationId: confirmShopLogo
       summary: Логотип загружен — поставить в обработку (те же проверки, что у фото, мин. 200×200)
+      description: Принимается последний выданный этому магазину logo_id; повтор для действующего логотипа идемпотентен. Чужой, отменённый или обычный photo_id — 404.
       requestBody:
         required: true
         content:
@@ -681,6 +683,7 @@ paths:
     get:
       operationId: getShopLogoStatus
       summary: Обработан ли логотип
+      description: Статус только действующего или ожидающего logo_id этого магазина; остальные — 404.
       parameters:
         - { name: logo_id, in: query, required: true, schema: { type: string, format: uuid } }
       responses:
@@ -704,6 +707,7 @@ paths:
     delete:
       operationId: deleteShopLogo
       summary: Убрать логотип — в шапке витрины снова инициалы
+      description: Также отменяет ожидающую обработку, чтобы запоздалая задача не вернула удалённый логотип.
       responses:
         "204": { description: Убран }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -1487,9 +1491,12 @@ paths:
                             Машинный код отказа. quota_exceeded — файл не
                             помещается в тариф; file_too_large — фактически
                             загруженный файл больше лимита на одно фото
-                            (presigned PUT размер не ограничивает), фото
-                            помечается failed, объект удаляется.
-                          enum: [quota_exceeded, file_too_large]
+                            (включая старые ссылки без подписи размера), фото
+                            помечается failed, объект удаляется. not_found — фото
+                            удалено или не принадлежит магазину; object_not_uploaded —
+                            оригинала нет в хранилище. Повторный confirm для processing
+                            восстанавливает отсутствующую задачу без повторного учёта байтов.
+                          enum: [quota_exceeded, file_too_large, not_found, object_not_uploaded]
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
