@@ -42,6 +42,10 @@ func (a *API) handleLogoPresign(w http.ResponseWriter, r *http.Request) {
 		a.internalError(w, "presign logo", err)
 		return
 	}
+	if err := a.Q.BeginShopLogoUpload(r.Context(), db.BeginShopLogoUploadParams{ID: shop.ID, LogoUploadID: uuid.NullUUID{UUID: logoID, Valid: true}}); err != nil {
+		a.internalError(w, "begin logo upload", err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"logo_id": logoID.String(), "url": url})
 }
 
@@ -58,6 +62,14 @@ func (a *API) handleLogoConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	logoID, err := uuid.Parse(req.LogoID)
 	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "logo not found")
+		return
+	}
+	if shop.LogoID.Valid && shop.LogoID.UUID == logoID {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if !shop.LogoUploadID.Valid || shop.LogoUploadID.UUID != logoID {
 		apiError(w, http.StatusNotFound, "not_found", "logo not found")
 		return
 	}
@@ -93,6 +105,10 @@ func (a *API) handleLogoStatus(w http.ResponseWriter, r *http.Request) {
 	shop := shopFromCtx(r)
 	logoID, err := uuid.Parse(r.URL.Query().Get("logo_id"))
 	if err != nil {
+		apiError(w, http.StatusNotFound, "not_found", "logo not found")
+		return
+	}
+	if (!shop.LogoID.Valid || shop.LogoID.UUID != logoID) && (!shop.LogoUploadID.Valid || shop.LogoUploadID.UUID != logoID) {
 		apiError(w, http.StatusNotFound, "not_found", "logo not found")
 		return
 	}

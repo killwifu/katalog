@@ -1,3 +1,4 @@
+import { api } from '../api'
 import { bump } from './inflight'
 import { reportError } from './errorReport'
 import { ALBUM_GONE, createPhotoUppy, QUOTA_REASONS } from './uppy'
@@ -92,6 +93,12 @@ export function uploadToAlbum({ shopId, albumId, files, signal, onProgress, onCo
           ok.push(key)
           pendingConfirm.get(file)?.delete(destination)
         } else {
+          if (result?.status === 'failed' || result?.code === 'not_found' || result?.code === 'object_not_uploaded') {
+            pendingConfirm.get(file)?.delete(destination)
+            if (result.code === 'object_not_uploaded') {
+              try { await api.deletePhoto(photoId) } catch (e) { reportError(e) }
+            }
+          }
           const reason = result?.code && QUOTA_REASONS[result.code]
           if (reason) quota = reason
           failed.push({ key, message: reason || 'Не удалось подтвердить загрузку. Попробуйте ещё раз' })

@@ -47,7 +47,7 @@ func (q *Queries) CreateLeadClick(ctx context.Context, arg CreateLeadClickParams
 }
 
 const getActiveShopByID = `-- name: GetActiveShopByID :one
-SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id FROM shops
+SELECT id, owner_id, slug, name, description, contacts, settings, status, plan, storage_used, created_at, updated_at, billing_state, paid_until, slug_changed_at, media_rev, trial_ends_at, logo_id, logo_upload_id FROM shops
 WHERE id = $1 AND status = 'active' AND billing_state != 'suspended'
 `
 
@@ -73,6 +73,7 @@ func (q *Queries) GetActiveShopByID(ctx context.Context, id uuid.UUID) (Shop, er
 		&i.MediaRev,
 		&i.TrialEndsAt,
 		&i.LogoID,
+		&i.LogoUploadID,
 	)
 	return i, err
 }

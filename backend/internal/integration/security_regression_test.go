@@ -183,7 +183,11 @@ func TestOversizedLogoStopsRetry(t *testing.T) {
 	c := newClient(t)
 	registerUser(c)
 	shop := createShop(c)
-	id := uuid.New()
+	var pre struct {
+		LogoID string `json:"logo_id"`
+	}
+	c.mustJSON("POST", "/api/v1/shops/"+shop.ID+"/logo/presign", map[string]any{"size": 10 << 20}, http.StatusOK, &pre)
+	id := uuid.MustParse(pre.LogoID)
 	key := "orig/" + shop.ID + "/" + id.String()
 	if err := env.store.Upload(t.Context(), key, make([]byte, 11<<20), "application/octet-stream"); err != nil {
 		t.Fatal(err)

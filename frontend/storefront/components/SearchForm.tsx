@@ -13,28 +13,39 @@ const DELAY = 300
 // с главной на /search поле монтируется заново. Флаг возвращает в него
 // фокус и каретку, чтобы набор не прерывался.
 const KEEP_FOCUS = 'search-focus'
+const DRAFT = 'search-draft'
 
 export function SearchForm({ slug, initial, from }: { slug: string; initial?: string; from: string }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
   const timer = useRef<number>()
+  const restoreFocus = useRef(false)
   const action = `/${encodeURIComponent(slug)}/search`
 
   useEffect(() => {
-    let keep = false
+    let keep = restoreFocus.current
     try {
-      keep = sessionStorage.getItem(KEEP_FOCUS) === '1'
+      keep = keep || sessionStorage.getItem(KEEP_FOCUS) === '1'
       sessionStorage.removeItem(KEEP_FOCUS)
     } catch {}
+    restoreFocus.current = keep
     const el = input.current
     if (keep && el) {
       el.focus()
+      try {
+        const draft = JSON.parse(sessionStorage.getItem(DRAFT) ?? 'null') as { slug: string; value: string } | null
+        if (draft?.slug === slug && typeof draft.value === 'string') {
+          el.value = draft.value
+          onInput(draft.value)
+        }
+      } catch {}
       el.setSelectionRange(el.value.length, el.value.length)
     }
     return () => window.clearTimeout(timer.current)
   }, [])
 
   function onInput(value: string) {
+    try { sessionStorage.setItem(DRAFT, JSON.stringify({ slug, value })) } catch {}
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
       const q = value.trim()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
 	"katalog/backend/internal/db"
@@ -280,13 +281,24 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string, slots *alb
 		ShopID: shop.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		res.Status, res.Error = "error", "photo not found"
+		res.Status, res.Error, res.Code = "error", "photo not found", "not_found"
 		return res
 	}
 	if err != nil {
 		a.Log.Error("confirm: load photo failed", "error", err)
 		res.Status, res.Error = "error", "internal error"
 		return res
+	}
+	if photo.DeletedAt.Valid {
+		res.Status, res.Error, res.Code = "error", "photo not found", "not_found"
+		return res
+	}
+	if photo.Status == db.PhotoStatusProcessing {
+		if err := a.enqueueConfirmedPhoto(r.Context(), photo.ID); err != nil {
+			a.Log.Error("confirm: recover queue task failed", "error", err)
+			res.Status, res.Error = "error", "internal error"
+			return res
+		}
 	}
 	if photo.Status != db.PhotoStatusUploading {
 		// Повторный confirm — идемпотентно возвращаем текущий статус.
@@ -301,12 +313,10 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string, slots *alb
 		return res
 	}
 	if !exists {
-		res.Status, res.Error = "error", "object not uploaded"
+		res.Status, res.Error, res.Code = "error", "object not uploaded", "object_not_uploaded"
 		return res
 	}
-	// Presigned PUT размер не ограничивает: presign проверял заявленный
-	// размер, а залить можно любой. Воркер читает оригинал в память целиком —
-	// гигабайтный «снимок» ронял бы его. Проверяем фактический размер.
+	// Проверяем и старые ссылки, выпущенные до подписи размера.
 	if size > maxFileSize {
 		if err := a.Store.Delete(r.Context(), storage.OrigKey(shop.ID, photo.ID)); err != nil {
 			a.Log.Error("confirm: delete oversized original failed", "photo_id", photo.ID, "error", err)
@@ -350,7 +360,12 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string, slots *alb
 		SortOrder: sortOrder,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			res.Status = "processing" // гонка двух confirm — уже переведено
+			if err := a.enqueueConfirmedPhoto(r.Context(), photo.ID); err != nil {
+				a.Log.Error("confirm: recover concurrent task failed", "error", err)
+				res.Status, res.Error = "error", "internal error"
+				return res
+			}
+			res.Status = "processing"
 			return res
 		}
 		a.Log.Error("confirm: set processing failed", "error", err)
@@ -382,19 +397,26 @@ func (a *API) confirmOne(r *http.Request, shop db.Shop, rawID string, slots *alb
 	}
 	slots.placed[photo.AlbumID]++
 
-	task, err := tasks.NewPhotoProcess(photo.ID)
-	if err != nil {
-		a.Log.Error("confirm: build task failed", "error", err)
-		res.Status, res.Error = "error", "internal error"
-		return res
-	}
-	if _, err := a.Tasks.EnqueueContext(r.Context(), task); err != nil {
+	if err := a.enqueueConfirmedPhoto(r.Context(), photo.ID); err != nil {
 		a.Log.Error("confirm: enqueue failed", "error", err)
 		res.Status, res.Error = "error", "internal error"
 		return res
 	}
 	res.Status = "processing"
 	return res
+}
+
+// Повторный confirm восстанавливает потерянную постановку без дубля активной задачи.
+func (a *API) enqueueConfirmedPhoto(ctx context.Context, id uuid.UUID) error {
+	task, err := tasks.NewPhotoProcess(id)
+	if err != nil {
+		return err
+	}
+	_, err = a.Tasks.EnqueueContext(ctx, task, asynq.TaskID("confirm:"+id.String()))
+	if errors.Is(err, asynq.ErrTaskIDConflict) {
+		return nil
+	}
+	return err
 }
 
 func (a *API) handleListPhotos(w http.ResponseWriter, r *http.Request) {
